@@ -1,16 +1,20 @@
 """Authentication dependencies for FastAPI routes."""
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from __future__ import annotations
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 
 from app.core.auth import decode_token
 from app.core.permissions import Permission, role_has_permissions
 from app.core.permissions_store import get_user_overrides
-from app.infrastructure.persistence.sql import UserRepo
-from app.core.database import get_session
-from app.application.services import UserService
-from app.domain import User
 from app.core.settings import settings
+from app.domain.entities.user import User
+from app.infrastructure.persistence.repositories.user_repo import UserRepo
+from app.core.database import get_session
+from app.application.services.user_service import UserService
+
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -21,7 +25,6 @@ def get_current_user(
     db=Depends(get_session),
 ):
     if settings.testing:
-        # Tests that use FastAPI TestClient can bypass auth with a synthetic admin user.
         test_user = User(
             user_id=1,
             email="test-admin@example.com",
@@ -57,33 +60,29 @@ def require_admin(user=Depends(get_current_user)):
 
 
 def require_permissions(*perms: Permission):
-    """Dependency factory enforcing that current user has all required permissions.
+    """Dependency factory enforcing that current user has all required permissions."""
 
-    Usage: dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))]
-    """
     def _checker(user=Depends(get_current_user)):
-        # Admin bypasses fine-grained checks
         if user.role == "admin":
             return user
         required = set(perms)
-        # Per-user overrides take precedence if present
         overrides = get_user_overrides(user.user_id)
         if overrides:
             allowed = overrides
             if not required.issubset(allowed):
-                perm_names = ", ".join(p.value.replace("_", " ").title() for p in required - allowed)
+                missing = ", ".join(p.value for p in (required - allowed))
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, 
-                    detail=f"You don't have permission to access this feature. Missing: {perm_names}. Please contact your administrator."
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Missing permissions: {missing}",
                 )
             return user
-        # Otherwise use role mapping
         if not role_has_permissions(user.role, required):
-            perm_names = ", ".join(p.value.replace("_", " ").title() for p in required)
+            missing = ", ".join(p.value for p in required)
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail=f"Access denied. Your role doesn't have permission for: {perm_names}. Please contact your administrator."
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Missing: {missing}",
             )
         return user
 
     return _checker
+

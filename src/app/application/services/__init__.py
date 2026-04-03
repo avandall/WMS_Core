@@ -1,25 +1,8 @@
-"""Application service exports."""
+"""Application services package.
 
-from app.services.customer_service import CustomerService
-from app.services.document_service import DocumentService
-from app.services.inventory_service import InventoryService
-from app.services.product_service import ProductService
-from app.services.report_service import ReportService
-from app.services.position_service import PositionService
-from app.services.stock_movement_service import StockMovementService
-from app.services.user_service import UserService
-from app.services.warehouse_operations_service import WarehouseOperationsService
-from app.services.warehouse_service import WarehouseService
+Avoid eager imports here to prevent pulling runtime infrastructure/config
+dependencies at import time. Import concrete services from their modules:
+`from app.application.services.product_service import ProductService`.
+"""
 
-__all__ = [
-    "CustomerService",
-    "DocumentService",
-    "InventoryService",
-    "PositionService",
-    "ProductService",
-    "ReportService",
-    "StockMovementService",
-    "UserService",
-    "WarehouseOperationsService",
-    "WarehouseService",
-]
+__all__: list[str] = []

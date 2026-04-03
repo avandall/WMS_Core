@@ -1,0 +1,50 @@
+[
+  {
+    "product_id": 1,
+    "warehouse_id": 1,
+    "quantity": 50,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 1,
+    "warehouse_id": 2,
+    "quantity": 25,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 2,
+    "warehouse_id": 1,
+    "quantity": 100,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 2,
+    "warehouse_id": 2,
+    "quantity": 75,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 3,
+    "warehouse_id": 1,
+    "quantity": 200,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 4,
+    "warehouse_id": 1,
+    "quantity": 150,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 5,
+    "warehouse_id": 1,
+    "quantity": 500,
+    "last_updated": "2024-01-01T00:00:00Z"
+  },
+  {
+    "product_id": 5,
+    "warehouse_id": 3,
+    "quantity": 100,
+    "last_updated": "2024-01-01T00:00:00Z"
+  }
+]

@@ -90,6 +90,9 @@ ENV/
 env.bak/
 venv.bak/
 .env.docker
+.env.dev
+.env.prod
+*.env
 
 # Spyder project settings
 .spyderproject
@@ -121,7 +124,32 @@ Thumbs.db
 
 # Local databases
 *.db
+*.sqlite
+*.sqlite3
 
 # Cloudflare Tunnel credentials
 cloudflare/cert.json
 cloudflare/*.json
+
+# Package managers
+uv.lock
+package-lock.json
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Qodo AI
+.qodo/
+
+# Python version file
+.python-version
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+

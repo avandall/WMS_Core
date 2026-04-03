@@ -1,19 +1,22 @@
-"""
-Application utilities for PMKT.
-Contains use case helpers and application-level utilities.
+"""Application utilities (compatibility).
+
+These helpers were present in `src-old/app/utils/application`.
+They are currently not part of the clean-architecture "core" but are kept as
+small, dependency-free helpers for transitional code.
 """
 
-from typing import Any, Dict, List, TypeVar, Generic
+from __future__ import annotations
+
 from dataclasses import dataclass
-from app.exceptions.business_exceptions import ApplicationError
+from typing import Any, Dict, Generic, List, TypeVar
+
+from app.core.exceptions import ApplicationError
 
 T = TypeVar("T")
 
 
 @dataclass
 class PaginatedResult(Generic[T]):
-    """Generic paginated result container."""
-
     items: List[T]
     total_count: int
     page: int
@@ -30,17 +33,12 @@ class PaginatedResult(Generic[T]):
 
 
 class PaginationUtils:
-    """Utility class for pagination operations."""
-
     @staticmethod
-    def paginate_list(
-        items: List[T], page: int = 1, page_size: int = 10
-    ) -> PaginatedResult[T]:
-        """Paginate a list of items."""
+    def paginate_list(items: List[T], page: int = 1, page_size: int = 10) -> PaginatedResult[T]:
         if page < 1:
-            raise ApplicationError("Page must be greater than 0")
+            raise ApplicationError("Page must be >= 1")
         if page_size < 1:
-            raise ApplicationError("Page size must be greater than 0")
+            raise ApplicationError("Page size must be >= 1")
 
         total_count = len(items)
         total_pages = (total_count + page_size - 1) // page_size
@@ -48,10 +46,8 @@ class PaginationUtils:
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
 
-        paginated_items = items[start_index:end_index]
-
         return PaginatedResult(
-            items=paginated_items,
+            items=items[start_index:end_index],
             total_count=total_count,
             page=page,
             page_size=page_size,
@@ -59,10 +55,7 @@ class PaginationUtils:
         )
 
     @staticmethod
-    def validate_pagination_params(
-        page: int, page_size: int, max_page_size: int = 100
-    ) -> None:
-        """Validate pagination parameters."""
+    def validate_pagination_params(page: int, page_size: int, max_page_size: int = 100) -> None:
         if page < 1:
             raise ApplicationError("Page must be >= 1")
         if page_size < 1 or page_size > max_page_size:
@@ -70,42 +63,26 @@ class PaginationUtils:
 
 
 class SortingUtils:
-    """Utility class for sorting operations."""
-
     @staticmethod
-    def sort_by_field(
-        items: List[Dict[str, Any]], field: str, reverse: bool = False
-    ) -> List[Dict[str, Any]]:
-        """Sort a list of dictionaries by a field."""
+    def sort_by_field(items: List[Dict[str, Any]], field: str, reverse: bool = False) -> List[Dict[str, Any]]:
         return sorted(items, key=lambda x: x.get(field, ""), reverse=reverse)
 
     @staticmethod
-    def sort_by_attribute(
-        items: List[T], attribute: str, reverse: bool = False
-    ) -> List[T]:
-        """Sort a list of objects by an attribute."""
+    def sort_by_attribute(items: List[T], attribute: str, reverse: bool = False) -> List[T]:
         return sorted(items, key=lambda x: getattr(x, attribute, ""), reverse=reverse)
 
 
 class FilterUtils:
-    """Utility class for filtering operations."""
-
     @staticmethod
-    def filter_by_field(
-        items: List[Dict[str, Any]], field: str, value: Any
-    ) -> List[Dict[str, Any]]:
-        """Filter a list of dictionaries by field value."""
+    def filter_by_field(items: List[Dict[str, Any]], field: str, value: Any) -> List[Dict[str, Any]]:
         return [item for item in items if item.get(field) == value]
 
     @staticmethod
     def filter_by_condition(items: List[T], condition_func) -> List[T]:
-        """Filter items using a condition function."""
         return [item for item in items if condition_func(item)]
 
 
 class SearchUtils:
-    """Utility class for search operations."""
-
     @staticmethod
     def search_text(
         items: List[Dict[str, Any]],
@@ -113,11 +90,10 @@ class SearchUtils:
         query: str,
         case_sensitive: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Search for text in a specific field."""
         if not case_sensitive:
             query = query.lower()
 
-        def matches(item):
+        def matches(item: Dict[str, Any]) -> bool:
             value = str(item.get(search_field, ""))
             if not case_sensitive:
                 value = value.lower()
@@ -132,11 +108,10 @@ class SearchUtils:
         query: str,
         case_sensitive: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Search for text across multiple fields."""
         if not case_sensitive:
             query = query.lower()
 
-        def matches(item):
+        def matches(item: Dict[str, Any]) -> bool:
             for field in fields:
                 value = str(item.get(field, ""))
                 if not case_sensitive:

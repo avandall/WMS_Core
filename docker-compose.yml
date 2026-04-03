@@ -12,6 +12,7 @@ services:
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Remove the automatic SQL initialization - we'll handle it in the app
     ports:
       - "5433:5432"
 
@@ -21,18 +22,61 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env.docker
+      - .env.docker  # Always use .env.docker (copied from .env.dev or .env.prod)
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./src:/app/src  # Mount source code for development hot-reload
+    # Auto-run dev data generation in development mode
+    command: >
+      sh -c "
+        echo ' Starting WMS API...'
+        python -m app.main &
+        API_PID=$$
+        
+        # Wait for API to start and create tables
+        echo ' Waiting for API to initialize database...'
+        sleep 20
+        
+        # Check if we should run seed data
+        echo \" Debug: ENVIRONMENT=[$ENVIRONMENT], AUTO_SEED_DATA=[$AUTO_SEED_DATA]\"
+        if [ 'x$ENVIRONMENT' = 'xdevelopment' ] && [ 'x$AUTO_SEED_DATA' = 'xtrue' ]; then
+          echo ' Running seed data generation...'
+          python /app/src/app/data/seed_data/create_login_users.py
+          python /app/src/app/data/seed_data/load_basic_data.py || echo ' Basic data may already exist'
+          python /app/src/app/data/seed_data/load_inventory.py
+          python /app/src/app/data/seed_data/generate_dev_data.py || echo ' Dev data generation skipped'
+          echo ' Seed data generation complete!'
+          echo '✅ Seed data generation complete!'
+        else
+          echo 'ℹ️  Seed data generation skipped (ENVIRONMENT=$ENVIRONMENT, AUTO_SEED_DATA=$AUTO_SEED_DATA)'
+        fi
+        
+        # Wait for API process
+        wait $API_PID
+      "
 
   dashboard:
     image: nginx:alpine
     volumes:
       - ./dashboard:/usr/share/nginx/html:ro
     ports:
-      - "8080:80"
+      - "${DASHBOARD_PORT:-8080}:80"
     depends_on:
-      - api
+      api:
+        condition: service_started # Hoặc service_healthy nếu bạn muốn đợi API sẵn sàng hoàn toàn
+
+  # Development tools (only in development mode)
+  dev-tools:
+    image: adminer:latest
+    ports:
+      - "${ADMINER_PORT:-8090}:8080"
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    # Only start in development mode
+    profiles: ["dev"]
 
   # Cloudflare Tunnel (free / quick tunnel)
   # Enable with: docker compose --profile tunnel up -d

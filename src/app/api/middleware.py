@@ -1,13 +1,17 @@
 """Custom middleware: audit logging and rate limiting glue."""
+
+from __future__ import annotations
+
 import time
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette import status
 
 from app.api.security import rate_limiter
 from app.core.database import SessionLocal
-from app.repositories.sql.models import AuditLogModel
 from app.core.logging import get_logger
+from app.infrastructure.persistence.models import AuditLogModel
 
 logger = get_logger(__name__)
 
@@ -23,7 +27,6 @@ async def audit_middleware(request: Request, call_next):
             latency_ms = int((time.perf_counter() - start) * 1000)
             db = SessionLocal()
             user_id = None
-            # user injected by dependency if present
             user = getattr(request.state, "user", None)
             if user:
                 user_id = getattr(user, "user_id", None)
@@ -38,8 +41,8 @@ async def audit_middleware(request: Request, call_next):
             )
             db.add(log)
             db.commit()
-        except Exception as e:
-            logger.warning(f"Failed to write audit log: {e}")
+        except Exception as exc:
+            logger.warning(f"Failed to write audit log: {exc}")
         finally:
             try:
                 db.close()
@@ -58,3 +61,4 @@ async def rate_limit_middleware(request: Request, call_next):
             content={"detail": "Rate limit exceeded. Try later."},
         )
     return await call_next(request)
+

@@ -1,21 +1,19 @@
-"""
-ID generation utilities for PMKT services.
-Provides stateless ID generation for various entities.
-"""
+"""Thread-safe ID generators used by services and repositories."""
+
+from __future__ import annotations
 
 import threading
 from typing import Callable
 
 
 class IDGenerator:
-    """Thread-safe ID generator for stateless services."""
+    """Thread-safe ID generator registry."""
 
-    _generators = {}
+    _generators: dict[str, "_ThreadSafeCounter"] = {}
     _lock = threading.Lock()
 
     @staticmethod
     def get_generator(name: str, start_id: int = 1) -> Callable[[], int]:
-        """Get or create a named ID generator."""
         with IDGenerator._lock:
             if name not in IDGenerator._generators:
                 IDGenerator._generators[name] = _ThreadSafeCounter(start_id)
@@ -23,14 +21,11 @@ class IDGenerator:
 
     @staticmethod
     def reset_generator(name: str, start_id: int = 1) -> None:
-        """Reset a named generator to start from a specific ID."""
         with IDGenerator._lock:
             IDGenerator._generators[name] = _ThreadSafeCounter(start_id)
 
 
 class _ThreadSafeCounter:
-    """Thread-safe counter for ID generation."""
-
     def __init__(self, start: int = 1):
         self._counter = start - 1
         self._lock = threading.Lock()
@@ -41,17 +36,14 @@ class _ThreadSafeCounter:
             return self._counter
 
 
-# Convenience functions for common generators
 def document_id_generator() -> Callable[[], int]:
-    """Get document ID generator."""
     return IDGenerator.get_generator("document", 1)
 
 
 def warehouse_id_generator() -> Callable[[], int]:
-    """Get warehouse ID generator."""
     return IDGenerator.get_generator("warehouse", 1)
 
 
 def product_id_generator() -> Callable[[], int]:
-    """Get product ID generator."""
     return IDGenerator.get_generator("product", 1)
+

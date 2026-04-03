@@ -1,0 +1,29 @@
+[
+  {
+    "customer_id": 1,
+    "name": "Acme Corporation",
+    "email": "contact@acme.com",
+    "phone": "+1-555-0101",
+    "address": "100 Business Ave, Corporate City",
+    "debt_balance": 0.0,
+    "created_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "customer_id": 2,
+    "name": "Global Industries",
+    "email": "orders@globalind.com",
+    "phone": "+1-555-0102",
+    "address": "200 Industrial Blvd, Manufacturing Town",
+    "debt_balance": 1500.00,
+    "created_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "customer_id": 3,
+    "name": "Small Business LLC",
+    "email": "info@smallbusiness.com",
+    "phone": "+1-555-0103",
+    "address": "300 Main Street, Small Town",
+    "debt_balance": 250.50,
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+]

@@ -1,38 +1,36 @@
-"""
-Database configuration for PMKT Warehouse Management System.
-Provides SQLAlchemy engine, session factory, and base class.
-"""
+"""Database configuration and helpers for the WMS application."""
 
+import time
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
-import time
 from app.core.settings import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Production-grade connection pool configuration
 engine = create_engine(
     settings.database_url,
     future=True,
-    echo=settings.debug,  # Only log SQL in debug mode
-    pool_pre_ping=True,  # Verify connections before using them
-    pool_size=settings.db_pool_size,  # Connection pool size
-    max_overflow=settings.db_max_overflow,  # Additional connections when pool exhausted
-    pool_timeout=settings.db_pool_timeout,  # Wait time for connection
-    pool_recycle=settings.db_pool_recycle,  # Recycle connections after N seconds
-    poolclass=QueuePool,  # Production-grade pool
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
+    pool_recycle=settings.db_pool_recycle,
+    poolclass=QueuePool,
     connect_args={
-        "connect_timeout": 10,  # PostgreSQL connection timeout
-        "options": "-c statement_timeout=30000",  # 30 second query timeout
-    } if "postgresql" in settings.database_url else {},
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=30000",
+    }
+    if "postgresql" in settings.database_url
+    else {},
 )
 
-# Listen for connection events to log pool statistics
 @event.listens_for(engine, "connect")
 def receive_connect(dbapi_conn, connection_record):
     logger.debug("Database connection established")
+
 
 @event.listens_for(engine, "close")
 def receive_close(dbapi_conn, connection_record):
@@ -50,59 +48,47 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
         elapsed_ms = (time.perf_counter() - context._query_start_time) * 1000
         if elapsed_ms > 200:
             logger.warning(f"Slow query ({elapsed_ms:.1f} ms): {statement}")
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
 
 
 def get_session():
-    """Yield a database session scoped to the request."""
     db = SessionLocal()
     try:
         yield db
-        db.commit()  # Ensure any pending changes are committed
+        db.commit()
     except Exception as e:
         logger.error(f"Database session error: {type(e).__name__}: {str(e)}")
         db.rollback()
         raise
     finally:
-        db.expunge_all()  # Detach all objects to prevent DetachedInstanceError
+        db.expunge_all()
         db.close()
 
 
 def init_db() -> None:
-    """Create database tables if they do not exist."""
     try:
-        # Import models to ensure they are registered with SQLAlchemy metadata
-        from app.repositories.sql import models  # noqa: F401
+        from app.infrastructure.persistence import models as persistence_models
 
-        # Gunicorn (multi-worker) can import the app in parallel; serialize schema creation
-        # to avoid DDL races on fresh Postgres databases.
+        persistence_models.import_all_models()
+
         if engine.dialect.name == "postgresql":
-            lock_id = 471999  # arbitrary, but stable within this project
+            lock_id = 471999
             with engine.connect() as conn:
-                conn.execute(
-                    text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id}
-                )
+                conn.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id})
                 try:
                     Base.metadata.create_all(bind=conn)
                     conn.commit()
                 except Exception:
-                    # If any DDL fails, Postgres marks the transaction as aborted; rollback
-                    # so we can reliably release the advisory lock.
                     conn.rollback()
                     raise
                 finally:
                     try:
-                        conn.execute(
-                            text("SELECT pg_advisory_unlock(:lock_id)"),
-                            {"lock_id": lock_id},
-                        )
+                        conn.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
                     except Exception:
                         conn.rollback()
-                        conn.execute(
-                            text("SELECT pg_advisory_unlock(:lock_id)"),
-                            {"lock_id": lock_id},
-                        )
+                        conn.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
         else:
             Base.metadata.create_all(bind=engine)
         logger.info("Database tables initialized successfully")
@@ -112,9 +98,7 @@ def init_db() -> None:
 
 
 def check_db_connection() -> bool:
-    """Check if database connection is healthy."""
     try:
-        from sqlalchemy import text
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True

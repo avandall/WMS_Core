@@ -1,0 +1,26 @@
+[
+  {
+    "warehouse_id": 1,
+    "name": "Main Warehouse",
+    "code": "WH001",
+    "address": "123 Storage Street, Logistics City",
+    "description": "Primary storage facility for all products",
+    "created_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "warehouse_id": 2,
+    "name": "Secondary Warehouse",
+    "code": "WH002",
+    "address": "456 Distribution Ave, Shipping Town",
+    "description": "Secondary storage facility for overflow inventory",
+    "created_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "warehouse_id": 3,
+    "name": "Cold Storage Warehouse",
+    "code": "WH003",
+    "address": "789 Refrigeration Rd, Cold City",
+    "description": "Temperature-controlled storage for perishable goods",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+]

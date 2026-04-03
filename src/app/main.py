@@ -1,16 +1,21 @@
-"""
-Main entry point for PMKT Warehouse Management System.
-Runs the FastAPI web server.
-"""
+from __future__ import annotations
 
 import uvicorn
+
+from app.api import app
 from app.core.settings import settings
 
-if __name__ == "__main__":
+
+def main() -> None:
     uvicorn.run(
         "app.api:app",
         host=settings.host,
         port=settings.port,
-        reload=True,  # Enable reload for development
+        reload=False,
         log_level="info",
     )
+
+
+if __name__ == "__main__":
+    main()
+

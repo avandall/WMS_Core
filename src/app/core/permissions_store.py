@@ -1,6 +1,4 @@
-"""Persistence for per-user permission overrides.
-Stores overrides in a JSON file keyed by user_id.
-"""
+"""Persistence for per-user permission overrides."""
 from __future__ import annotations
 import json
 import os
@@ -41,7 +39,6 @@ def get_user_overrides(user_id: int) -> Set[Permission]:
         try:
             out.add(Permission(p))
         except Exception:
-            # ignore unknown permissions
             pass
     return out
 

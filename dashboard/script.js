@@ -1,6 +1,6 @@
 // WMS Dashboard JavaScript
 // Version: 2026-01-28 - Customer Sales Report Feature
-let API_BASE = 'http://127.0.0.1:8000';
+let API_BASE = 'http://localhost:8000';
 
 // Auth state
 let accessToken = localStorage.getItem('accessToken') || '';
@@ -80,6 +80,35 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTime();
     setInterval(updateTime, 1000);
     setupEventListeners();
+    
+    // Setup edit form listeners (moved from separate DOMContentLoaded)
+    const editProductForm = document.getElementById('edit-product-form');
+    const editWarehouseForm = document.getElementById('edit-warehouse-form');
+    
+    if (editProductForm) {
+        editProductForm.addEventListener('submit', handleEditProduct);
+    }
+    
+    if (editWarehouseForm) {
+        editWarehouseForm.addEventListener('submit', handleEditWarehouse);
+    }
+    
+    // Add global click event listener to debug UI locking issues
+    document.addEventListener('click', function(event) {
+        // Log clicks for debugging
+        if (event.target.tagName === 'BUTTON') {
+            console.log('Button clicked:', event.target.textContent, event.target.disabled);
+        }
+    }, true); // Use capture phase
+    
+    // Add event listener for modal closed events
+    document.addEventListener('modalClosed', function(event) {
+        console.log('Modal closed event received:', event.detail.modalId);
+        // Additional cleanup if needed
+        document.body.style.cursor = '';
+        document.body.style.pointerEvents = '';
+    });
+    
     updateAuthUI();
     const savedApiBase = localStorage.getItem('API_BASE');
     if (savedApiBase) {
@@ -90,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (accessToken) {
         fetchCurrentUser().finally(loadDashboardData);
     } else {
-        openLoginModal();
+        loadDashboardData();
     }
 
     // Auto-refresh settings: keep on by default unless explicitly disabled
@@ -308,12 +337,20 @@ async function apiRequest(endpoint, options = {}) {
             return null; // Return null instead of throwing
         }
         
-        // Handle network errors
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        // Handle network errors with better error messages
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.isNetworkError) {
             console.error('Network error - is the server running?', error);
             const netError = new Error('Server connection failed. Please check if the server is running.');
             netError.isNetworkError = true;
             throw netError;
+        }
+        
+        // Handle CORS errors specifically
+        if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
+            console.error('CORS error - server configuration issue', error);
+            const corsError = new Error('Server configuration error. Please contact administrator.');
+            corsError.isCorsError = true;
+            throw corsError;
         }
         
         console.error('API request failed:', error);
@@ -351,7 +388,7 @@ async function handleLogin(event) {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
+        const res = await fetch('http://localhost:8000/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -403,7 +440,7 @@ function updateAuthUI() {
 }
 
 function openLoginModal() {
-    document.getElementById('login-modal').style.display = 'block';
+    openModal('login-modal');
 }
 
 function logout() {
@@ -1287,6 +1324,7 @@ async function loadCustomers() {
 async function handleCreateProduct(event) {
     event.preventDefault();
 
+    const submitButton = event.target.querySelector('button[type="submit"]');
     const formData = new FormData(event.target);
     const productData = {
         product_id: Date.now(), // Simple ID generation
@@ -1295,43 +1333,58 @@ async function handleCreateProduct(event) {
     };
 
     try {
-        await apiRequest('/api/products', {
+        await apiRequestWithButton('/api/products', {
             method: 'POST',
             body: JSON.stringify(productData)
-        });
+        }, submitButton);
 
         showSuccess('Product created successfully!');
-        closeModal('product-modal');
+        closeModalAndCleanup('product-modal');
         event.target.reset();
         products = []; // Reset cache
         loadProducts();
         loadDashboardData();
     } catch (error) {
-        showError('Failed to create product');
+        // Button state is automatically reset by apiRequestWithButton
+        if (error.isNetworkError) {
+            showError('Server connection failed. Please check your network connection.');
+        } else if (error.isCorsError) {
+            showError('Server configuration error. Please contact administrator.');
+        } else {
+            showError('Failed to create product: ' + (error.message || 'Unknown error'));
+        }
     }
 }
 
 async function handleCreateWarehouse(event) {
     event.preventDefault();
 
+    const submitButton = event.target.querySelector('button[type="submit"]');
     const warehouseData = {
         name: document.getElementById('warehouse-location').value
     };
 
     try {
-        await apiRequest('/api/warehouses', {
+        await apiRequestWithButton('/api/warehouses', {
             method: 'POST',
             body: JSON.stringify(warehouseData)
-        });
+        }, submitButton);
 
         showSuccess('Warehouse created successfully!');
-        closeModal('warehouse-modal');
+        closeModalAndCleanup('warehouse-modal');
         event.target.reset();
         warehouses = []; // Reset cache
         loadWarehouses();
         loadDashboardData();
     } catch (error) {
-        showError('Failed to create warehouse');
+        // Button state is automatically reset by apiRequestWithButton
+        if (error.isNetworkError) {
+            showError('Server connection failed. Please check your network connection.');
+        } else if (error.isCorsError) {
+            showError('Server configuration error. Please contact administrator.');
+        } else {
+            showError('Failed to create warehouse: ' + (error.message || 'Unknown error'));
+        }
     }
 }
 
@@ -1902,7 +1955,7 @@ async function clearUserOverrides() {
 }
 
 function openChangePasswordModal() {
-    document.getElementById('change-password-modal').style.display = 'block';
+    openModal('change-password-modal');
 }
 
 async function handleChangePassword(event) {
@@ -1945,11 +1998,94 @@ function closeAllModals() {
     });
 }
 
+// Helper function to manage button states during API requests
+function setButtonLoading(button, loading = true) {
+    if (!button) return;
+    
+    if (loading) {
+        // Store original text if not already stored
+        if (!button.originalText) {
+            button.originalText = button.textContent;
+        }
+        button.disabled = true;
+        button.classList.add('loading');
+        button.textContent = 'Loading...';
+    } else {
+        button.disabled = false;
+        button.classList.remove('loading');
+        // Restore original text
+        if (button.originalText) {
+            button.textContent = button.originalText;
+            delete button.originalText;
+        }
+    }
+}
+
+// Helper function to handle API requests with proper button management
+async function apiRequestWithButton(endpoint, options = {}, buttonElement = null) {
+    try {
+        if (buttonElement) {
+            setButtonLoading(buttonElement, true);
+        }
+        
+        const response = await apiRequest(endpoint, options);
+        return response;
+    } catch (error) {
+        console.error('API request failed:', error);
+        throw error;
+    } finally {
+        if (buttonElement) {
+            setButtonLoading(buttonElement, false);
+        }
+    }
+}
+
+// Helper function to close modal and clean up state
+function closeModalAndCleanup(modalId) {
+    closeModal(modalId);
+    
+    // Additional cleanup for any global state
+    if (window.activeRequests) {
+        window.activeRequests.forEach(controller => {
+            if (controller && !controller.signal.aborted) {
+                controller.abort();
+            }
+        });
+        window.activeRequests = [];
+    }
+}
+
 function closeModal(modalId) {
     try {
         const modal = document.getElementById(modalId);
         if (modal) {
             console.log(`Closing modal: ${modalId}`);
+            
+            // Remove any active form validation states
+            const forms = modal.querySelectorAll('form');
+            forms.forEach(form => {
+                if (form) {
+                    form.reset();
+                    // Clear any validation error states
+                    const inputs = form.querySelectorAll('input, select, textarea');
+                    inputs.forEach(input => {
+                        input.classList.remove('error');
+                    });
+                }
+            });
+            
+            // Reset all buttons in the modal to enabled state
+            const buttons = modal.querySelectorAll('button');
+            buttons.forEach(button => {
+                button.disabled = false;
+                button.classList.remove('loading');
+                // Remove any loading text/spinners
+                if (button.originalText) {
+                    button.textContent = button.originalText;
+                    delete button.originalText;
+                }
+            });
+            
             // Set all display properties to ensure it's truly hidden
             modal.style.display = 'none';
             modal.style.visibility = 'hidden';
@@ -1957,12 +2093,35 @@ function closeModal(modalId) {
             modal.style.pointerEvents = 'none';
             modal.setAttribute('aria-hidden', 'true');
 
+            // Clear any global state that might interfere
+            if (window.currentEditingItem) {
+                window.currentEditingItem = null;
+            }
+
             if (modalId === 'view-document-modal' && documentAutoRefreshHandle) {
                 clearInterval(documentAutoRefreshHandle);
                 documentAutoRefreshHandle = null;
             }
 
-            console.log(`Modal hidden`);
+            // Clean up any backdrop elements (for custom modal implementation)
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => {
+                backdrop.remove();
+            });
+
+            // Remove any lingering backdrop-related classes from body
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+
+            // Force a small delay to ensure DOM updates are complete
+            setTimeout(() => {
+                console.log(`Modal hidden and DOM updated`);
+                // Trigger a custom event to notify that modal is closed
+                const event = new CustomEvent('modalClosed', { detail: { modalId } });
+                document.dispatchEvent(event);
+            }, 10);
+            
         } else {
             console.warn(`Modal not found: ${modalId}`);
         }
@@ -1977,12 +2136,31 @@ function openModal(modalId) {
         console.log(`Opening modal: ${modalId}`);
         // First close all other modals
         closeAllModals();
+        
+        // Reset any button states in the modal
+        const buttons = modal.querySelectorAll('button');
+        buttons.forEach(button => {
+            button.disabled = false;
+            button.classList.remove('loading');
+        });
+        
         // Then open this one
         modal.style.display = 'block';
         modal.style.visibility = 'visible';
         modal.style.opacity = '1';
         modal.style.pointerEvents = 'auto';
         modal.setAttribute('aria-hidden', 'false');
+        
+        // Add a small delay to ensure the modal is fully rendered
+        setTimeout(() => {
+            // Focus the first input if available
+            const firstInput = modal.querySelector('input, select, textarea, button');
+            if (firstInput && firstInput.tagName !== 'BUTTON') {
+                firstInput.focus();
+            }
+        }, 100);
+    } else {
+        console.error(`Modal not found: ${modalId}`);
     }
 }
 
@@ -2948,7 +3126,7 @@ async function editProduct(id) {
 
     // Store the product ID for the form handler
     document.getElementById('edit-product-form').dataset.productId = id;
-    document.getElementById('edit-product-modal').style.display = 'block';
+    openModal('edit-product-modal');
 }
 
 async function handleEditProduct(event) {
@@ -2985,7 +3163,7 @@ function deleteProduct(id) {
     const product = products.find(p => p.product_id === id);
     document.getElementById('delete-confirmation-message').textContent = 
         `Are you sure you want to delete the product "${product.name}"? This action cannot be undone.`;
-    document.getElementById('delete-confirmation-modal').style.display = 'block';
+    openModal('delete-confirmation-modal');
 }
 
 async function importProductsCsv(event) {
@@ -3036,7 +3214,7 @@ async function editWarehouse(id) {
 
     document.getElementById('edit-warehouse-location').value = (warehouse.name || warehouse.location);
     document.getElementById('edit-warehouse-form').dataset.warehouseId = id;
-    document.getElementById('edit-warehouse-modal').style.display = 'block';
+    openModal('edit-warehouse-modal');
 }
 
 async function handleEditWarehouse(event) {
@@ -3071,7 +3249,7 @@ function deleteWarehouse(id) {
     const warehouse = warehouses.find(w => w.warehouse_id === id);
     document.getElementById('delete-confirmation-message').textContent = 
         `Are you sure you want to delete the warehouse "${warehouse.name || warehouse.location}"? This action cannot be undone.`;
-    document.getElementById('delete-confirmation-modal').style.display = 'block';
+    openModal('delete-confirmation-modal');
 }
 
 async function deleteWarehouseConfirmed(id) {
@@ -3101,7 +3279,7 @@ async function viewWarehouseInventory(warehouseId) {
 
         if (warehouseItems.length === 0) {
             inventoryDiv.innerHTML = '<p>No items in this warehouse</p>';
-            document.getElementById('warehouse-inventory-modal').style.display = 'block';
+            openModal('warehouse-inventory-modal');
             return;
         }
 
@@ -3149,7 +3327,7 @@ async function viewWarehouseInventory(warehouseId) {
         `;
 
         inventoryDiv.innerHTML = tableHTML;
-        document.getElementById('warehouse-inventory-modal').style.display = 'block';
+        openModal('warehouse-inventory-modal');
     } catch (error) {
         showError('Failed to load warehouse inventory');
     }
@@ -3250,7 +3428,7 @@ async function viewDocument(documentId) {
     selectedDocumentId = documentId;
     clearInterval(documentAutoRefreshHandle);
     await loadDocumentDetails(documentId);
-    document.getElementById('view-document-modal').style.display = 'block';
+    openModal('view-document-modal');
 
     documentAutoRefreshHandle = setInterval(() => {
         if (!document.getElementById('view-document-modal')) {
@@ -3296,7 +3474,7 @@ async function deleteDocument(id) {
     const doc = documents.find(d => d.document_id === id);
     document.getElementById('delete-confirmation-message').textContent = 
         `Are you sure you want to delete Document #${id}? This action cannot be undone.`;
-    document.getElementById('delete-confirmation-modal').style.display = 'block';
+    openModal('delete-confirmation-modal');
 }
 
 async function deleteDocumentConfirmed(id) {
@@ -3348,18 +3526,7 @@ function confirmDelete() {
 }
 
 // Setup event listeners for edit forms
-document.addEventListener('DOMContentLoaded', function() {
-    const editProductForm = document.getElementById('edit-product-form');
-    const editWarehouseForm = document.getElementById('edit-warehouse-form');
-    
-    if (editProductForm) {
-        editProductForm.addEventListener('submit', handleEditProduct);
-    }
-    
-    if (editWarehouseForm) {
-        editWarehouseForm.addEventListener('submit', handleEditWarehouse);
-    }
-});
+// Note: Moved to main DOMContentLoaded listener to avoid duplicates
 
 
 // --- AI Chat (LangChain) ---

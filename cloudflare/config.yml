@@ -1,7 +1,0 @@
-tunnel: 2558a06f-905e-4c73-99a4-de18a655092b  # ID của AvanFastAPI
-credentials-file: /etc/cloudflared/cert.json  # Đường dẫn bên TRONG docker
-
-ingress:
-  - hostname: api.yourdomain.com              # Tên miền bạn đã trỏ DNS
-    service: http://web-api:8000              # Trỏ vào tên service của FastAPI
-  - service: http_status:404
