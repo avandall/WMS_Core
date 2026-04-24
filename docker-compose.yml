@@ -22,40 +22,20 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env.docker  # Always use .env.docker (copied from .env.dev or .env.prod)
+      - .env.docker
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
-      - ./src:/app/src  # Mount source code for development hot-reload
-    # Auto-run dev data generation in development mode
+      # Ánh xạ toàn bộ thư mục gốc vào /app để đồng bộ pyproject.toml và src
+      - .:/app  
+    # Ghi đè lệnh chạy để dùng Uvicorn với tính năng --reload
     command: >
       sh -c "
-        echo ' Starting WMS API...'
-        python -m app.main &
-        API_PID=$$
-        
-        # Wait for API to start and create tables
-        echo ' Waiting for API to initialize database...'
-        sleep 20
-        
-        # Check if we should run seed data
-        echo \" Debug: ENVIRONMENT=[$ENVIRONMENT], AUTO_SEED_DATA=[$AUTO_SEED_DATA]\"
-        if [ 'x$ENVIRONMENT' = 'xdevelopment' ] && [ 'x$AUTO_SEED_DATA' = 'xtrue' ]; then
-          echo ' Running seed data generation...'
-          python /app/src/app/data/seed_data/create_login_users.py
-          python /app/src/app/data/seed_data/load_basic_data.py || echo ' Basic data may already exist'
-          python /app/src/app/data/seed_data/load_inventory.py
-          python /app/src/app/data/seed_data/generate_dev_data.py || echo ' Dev data generation skipped'
-          echo ' Seed data generation complete!'
-          echo '✅ Seed data generation complete!'
-        else
-          echo 'ℹ️  Seed data generation skipped (ENVIRONMENT=$ENVIRONMENT, AUTO_SEED_DATA=$AUTO_SEED_DATA)'
-        fi
-        
-        # Wait for API process
-        wait $API_PID
+        echo '🚀 Starting WMS API with Hot-Reload...'
+        # Sử dụng uvicorn trực tiếp để tự động load lại khi bạn sửa code
+        pip install -e . && \
+        python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
       "
-
   dashboard:
     image: nginx:alpine
     volumes:

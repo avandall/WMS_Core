@@ -35,7 +35,7 @@ class User(DomainEntity):
 
     @staticmethod
     def _validate_role(role: str) -> None:
-        allowed = {"admin", "user", "sales", "warehouse", "accountant"}
+        allowed = {"admin", "user", "sales", "warehouse", "accountant", "warehouse_manager", "operator"}
         if role not in allowed:
             raise ValidationError(
                 f"role must be one of: {', '.join(sorted(allowed))}"

@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""
+Safe pytest wrapper that bypasses I/O capture issues
+"""
+
+import sys
+import subprocess
+import os
+
+def main():
+    """Run pytest safely without I/O capture issues."""
+    
+    # Get current directory
+    cwd = os.getcwd()
+    
+    # Determine pytest command based on directory
+    if os.path.exists("tests/unit"):
+        # We're in WMS project - run specific directories
+        cmd = [
+            sys.executable, "-m", "pytest", 
+            "tests/unit/", "tests/sql/", "tests/test_smoke.py",
+            "-v", "--tb=short"
+        ]
+    else:
+        # Default pytest behavior
+        cmd = [sys.executable, "-m", "pytest", "-v", "--tb=short"] + sys.argv[1:]
+    
+    print(f"🧪 Running safe pytest...")
+    print(f"📝 Command: {' '.join(cmd)}")
+    print("=" * 60)
+    
+    try:
+        # Run pytest with specific environment to avoid I/O issues
+        env = os.environ.copy()
+        env["PYTEST_CURRENT_TEST"] = "1"
+        
+        result = subprocess.run(cmd, cwd=cwd, env=env)
+        
+        if result.returncode == 0:
+            print("✅ All tests passed!")
+        else:
+            print(f"❌ Tests failed with exit code: {result.returncode}")
+            
+        return result.returncode
+        
+    except KeyboardInterrupt:
+        print("\n⚠️  Tests interrupted by user")
+        return 130
+    except Exception as e:
+        print(f"❌ Error running pytest: {e}")
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

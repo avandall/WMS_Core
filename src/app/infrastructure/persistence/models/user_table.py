@@ -17,4 +17,4 @@ class UserModel(Base):
     is_active = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
 
-    audit_logs = relationship("AuditLogModel", back_populates="user")
+    audit_logs = relationship("AuditLogModel", back_populates="user", lazy="select")

@@ -9,6 +9,13 @@ from decimal import Decimal
 from sqlalchemy import text
 from fastapi.encoders import jsonable_encoder
 
+from app.core.logging import get_logger
+from app.core.database import engine
+from app.infrastructure.ai.settings import ai_engine_settings
+
+# Initialize logger
+logger = get_logger(__name__)
+
 # Optional advanced validator - import safely with fallback
 try:
     from app.core.advanced_validation import SQLInjectionValidator
@@ -20,12 +27,6 @@ except ImportError:
 
 # Import robust SQL parser
 from app.infrastructure.ai.sql_parser import SQLParserValidator
-
-from app.core.logging import get_logger
-from app.core.database import engine
-from app.infrastructure.ai.settings import ai_engine_settings
-
-logger = get_logger(__name__)
 
 # Enhanced SQL validation patterns (fallback only)
 _DANGEROUS_KEYWORDS = [

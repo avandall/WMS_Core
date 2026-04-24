@@ -18,6 +18,7 @@ from app.application.services.warehouse_operations_service import (
 )
 from app.application.services.warehouse_service import WarehouseService
 from app.core.database import get_session
+from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
 from app.infrastructure.persistence.repositories.audit_event_repo import AuditEventRepo
 from app.infrastructure.persistence.repositories.customer_repo import CustomerRepo
 from app.infrastructure.persistence.repositories.document_repo import DocumentRepo
@@ -122,6 +123,13 @@ def get_customer_service(db: Session = Depends(get_session)) -> CustomerService:
 
 def get_user_service(db: Session = Depends(get_session)) -> UserService:
     return UserService(user_repo=UserRepo(db))
+
+
+
+
+def get_repository_container(db: Session = Depends(get_session)) -> RepositoryContainerImpl:
+    """Get repository container for Unit of Work pattern."""
+    return RepositoryContainerImpl(db)
 
 
 def get_warehouse_operations_service(db: Session = Depends(get_session)) -> WarehouseOperationsService:

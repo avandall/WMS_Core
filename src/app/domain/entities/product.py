@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from decimal import Decimal
 
 from app.domain.exceptions import InvalidIDError, InvalidQuantityError, ValidationError
 from app.domain.interfaces.entity import DomainEntity
@@ -39,7 +40,7 @@ class Product(DomainEntity):
 
     @staticmethod
     def _validate_price(price: float) -> None:
-        if not isinstance(price, (int, float)) or price < 0:
+        if not isinstance(price, (int, float, Decimal)) or price < 0:
             raise InvalidQuantityError("price must be a non-negative number")
 
     def update_price(self, new_price: float) -> None:

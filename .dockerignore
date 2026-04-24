@@ -1,0 +1,6 @@
+.venv
+__pycache__
+.git
+.vscode
+*.db
+vector_db/

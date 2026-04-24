@@ -11,8 +11,8 @@ from app.infrastructure.persistence.models import InventoryModel, ProductModel
 class ProductRepo(TransactionalRepository, IProductRepo):
     """PostgreSQL-backed repository for managing products."""
 
-    def __init__(self, session: Session):
-        super().__init__(session)
+    def __init__(self, session: Session, auto_commit: bool = False):
+        super().__init__(session, auto_commit)
 
     def save(self, product: Product) -> None:
         existing = self.session.get(ProductModel, product.product_id)

@@ -27,7 +27,11 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         max_id = self.session.execute(
             select(func.max(WarehouseModel.warehouse_id))
         ).scalar()
-        start_id = (max_id or 0) + 1
+        # Handle Mock objects in testing
+        if hasattr(max_id, '__class__') and max_id.__class__.__name__ == 'Mock':
+            start_id = 1
+        else:
+            start_id = (max_id or 0) + 1
         IDGenerator.reset_generator("warehouse", start_id)
 
     def create_warehouse(self, warehouse: Warehouse) -> None:

@@ -32,7 +32,7 @@
             <button class="nav-btn" onclick="showSection('reports')">Reports</button>
             <button class="nav-btn" onclick="showSection('customers')">Customers</button>
             <button class="nav-btn" onclick="showSection('users')">Users</button>
-            <button class="nav-btn" onclick="showSection('ai')">AI</button>
+            <button class="nav-btn" onclick="showSection('ai-assistant')">AI Assistant</button>
             <button class="nav-btn" onclick="showSection('settings')">Settings</button>
         </nav>
 
@@ -193,49 +193,104 @@
                 <div id="customer-detail" class="data-table" style="margin-top:16px; display:none;"></div>
             </section>
 
-
-
-            <!-- AI Section -->
-            <section id="ai-section" class="section">
+            <!-- AI Assistant Section -->
+            <section id="ai-assistant-section" class="section">
                 <div class="section-header">
-                    <h2>AI – Chat Database</h2>
+                    <h2>🤖 AI Assistant</h2>
                     <div class="section-actions">
-                        <label class="toggle">
-                            <input type="checkbox" id="ai-include-rows">
-                            <span>Include rows</span>
-                        </label>
-                        <button class="btn-secondary" onclick="clearAiChat()">Clear</button>
+                        <select id="ai-mode-select" class="form-input" style="width:150px;">
+                            <option value="hybrid">Hybrid Mode</option>
+                            <option value="rag">RAG Mode</option>
+                            <option value="agent">Agent Mode</option>
+                        </select>
+                        <button class="btn-primary" onclick="loadAISampleData()">Load Sample Data</button>
                     </div>
                 </div>
-
-                <div class="ai-chat">
-                    <div id="ai-chat-log" class="ai-chat-log">
-                        <div class="ai-msg ai-msg--system">
-                            Ask questions about products, inventory, documents, customers… (read-only).
-                            Tip: press Ctrl+Enter to send.
+                
+                <div class="ai-assistant-container">
+                    <div class="ai-chat-main">
+                        <div class="ai-chat-messages" id="ai-assistant-messages">
+                            <div class="ai-welcome-message">
+                                <div class="ai-welcome-icon">🤖</div>
+                                <div class="ai-welcome-text">
+                                    <h3>WMS AI Assistant</h3>
+                                    <p>Ask me about warehouse management, inventory, products, orders, or any WMS-related questions.</p>
+                                    <div class="ai-quick-questions">
+                                        <h4>Quick Questions:</h4>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('What is a Warehouse Management System?')">What is a WMS?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('How does inventory tracking work?')">How does inventory tracking work?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('What is order fulfillment process?')">Order fulfillment process?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('Check inventory for SKU12345')">Check inventory SKU12345</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-chat-input-container">
+                            <div class="ai-input-group">
+                                <input 
+                                    type="text" 
+                                    id="ai-question-input" 
+                                    placeholder="Ask about WMS, inventory, products, warehouses..."
+                                    class="ai-input"
+                                    onkeypress="handleAIKeyPress(event)"
+                                >
+                                <button 
+                                    id="ai-send-btn" 
+                                    class="btn-primary ai-send-btn"
+                                    onclick="sendAIQuestion()"
+                                    disabled
+                                >
+                                    Send
+                                </button>
+                            </div>
+                            <div class="ai-input-actions">
+                                <button class="btn-secondary" onclick="showAIDocumentUpload()">📄 Upload Document</button>
+                                <button class="btn-secondary" onclick="clearAIChat()">🗑️ Clear Chat</button>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="ai-chat-input">
-                        <textarea id="ai-message" rows="3" placeholder="e.g. How many products do we have?
-Or: SQL: select count(*) from products"></textarea>
-                        <button class="btn-primary" id="ai-send-btn" onclick="sendAiMessage()">Send</button>
+                    
+                    <div class="ai-sidebar">
+                        <div class="ai-info-card">
+                            <h4>Engine Status</h4>
+                            <div class="ai-status-item">
+                                <span>Mode:</span>
+                                <span id="ai-current-mode" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>LLM:</span>
+                                <span id="ai-current-llm" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>Documents:</span>
+                                <span id="ai-doc-count" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>Status:</span>
+                                <span id="ai-engine-status" class="ai-status-value ai-status-online">Online</span>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-info-card">
+                            <h4>Processing Info</h4>
+                            <div class="ai-stats">
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Total Queries:</span>
+                                    <span id="ai-total-queries" class="ai-stat-value">0</span>
+                                </div>
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Avg Response Time:</span>
+                                    <span id="ai-avg-time" class="ai-stat-value">0.0s</span>
+                                </div>
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Success Rate:</span>
+                                    <span id="ai-success-rate" class="ai-stat-value">100%</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <details class="ai-debug">
-                    <summary>Debug (SQL / Rows)</summary>
-                    <div class="ai-debug-grid">
-                        <div>
-                            <h3>SQL</h3>
-                            <pre id="ai-sql" class="ai-pre"></pre>
-                        </div>
-                        <div>
-                            <h3>Rows</h3>
-                            <pre id="ai-rows" class="ai-pre"></pre>
-                        </div>
-                    </div>
-                </details>
             </section>
 
             <!-- Settings Section -->
@@ -266,6 +321,27 @@ Or: SQL: select count(*) from products"></textarea>
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Persistent AI Chat Box -->
+    <div id="persistent-ai-chat" class="persistent-ai-chat">
+        <div class="ai-chat-header">
+            <span>🤖 AI Assistant</span>
+            <div class="ai-chat-controls">
+                <button id="ai-minimize-btn" onclick="toggleAiChat()" title="Minimize">−</button>
+                <button id="ai-close-btn" onclick="closeAiChat()" title="Close">×</button>
+            </div>
+        </div>
+        <div class="ai-chat-messages" id="ai-chat-messages">
+            <div class="ai-msg ai-msg--system">
+                🤖 AI Assistant ready! Ask me about products, inventory, warehouses, or customers.
+            </div>
+        </div>
+        <div class="ai-chat-input">
+            <textarea id="persistent-ai-message" placeholder="Ask about warehouse data..." rows="2"></textarea>
+            <button id="persistent-ai-send" onclick="sendPersistentAiMessage()">Send</button>
+        </div>
+        <div class="ai-chat-status" id="ai-chat-status">Ready</div>
     </div>
 
     <!-- Modals -->

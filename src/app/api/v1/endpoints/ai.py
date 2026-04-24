@@ -17,11 +17,27 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
     dependencies=[Depends(require_permissions(Permission.VIEW_REPORTS))],
 )
 async def chat_db(payload: ChatDBRequest):
+    import time
+    start_time = time.time()
+    
     try:
-        result = await run_in_threadpool(handle_customer_chat_with_db, payload.message)
-        if not payload.include_rows:
-            result["rows"] = None
-        return ChatDBResponse(**result)
+        # Enhanced processing with mode support
+        result = await run_in_threadpool(handle_customer_chat_with_db, payload.message, payload.mode)
+        
+        # Calculate processing time
+        processing_time = time.time() - start_time
+        
+        # Prepare response with enhanced metadata
+        response_data = {
+            "answer": result.get("answer", ""),
+            "sql": result.get("sql", ""),
+            "rows": result.get("rows", None) if payload.include_rows else None,
+            "mode": result.get("mode", "unknown"),
+            "engine_info": result.get("engine_info"),
+            "processing_time": processing_time
+        }
+        
+        return ChatDBResponse(**response_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

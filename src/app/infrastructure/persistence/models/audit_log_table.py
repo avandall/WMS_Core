@@ -19,7 +19,7 @@ class AuditLogModel(Base):
     latency_ms = Column(Integer)
     created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
 
-    user = relationship("UserModel", back_populates="audit_logs")
+    user = relationship("UserModel", back_populates="audit_logs", lazy="select")
 
     __table_args__ = (
         Index("ix_audit_logs_user_path", "user_id", "path"),

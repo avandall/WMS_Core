@@ -40,7 +40,7 @@ case $MODE in
         echo "🌐 Dashboard:   http://localhost:8080"
         echo "🌐 Adminer:     http://localhost:8090"
         echo ""
-        echo "🔧 If no data appears, run: ./fix_seed_data.sh"
+        echo "🔧 Add seed data, run: docker compose exec api python ./scripts/seed.py"
         ;;
         
     "prod"|"production")
@@ -58,20 +58,30 @@ case $MODE in
         
         echo "✅ Production environment and Tunnel started!"
         ;;
-
+        
     "down"|"stop")
-        echo "🛑 Stopping WMS and cleaning up all resources..."
-        # --profile "*" : Tắt sạch mọi service thuộc bất kỳ profile nào (adminer, v.v.)
-        # --remove-orphans : Xóa các container cũ không còn nằm trong file config
-        # -v : Xóa các volume dữ liệu (nếu bạn muốn giữ dữ liệu DB thì bỏ flag -v này)
+        echo "?? Stopping WMS while preserving database volumes..."
+        # --profile "*" : T?t s?y m?i service thu?c b?t k? profile nào (adminer, v.v.)
+        # --remove-orphans : Xóa các container ? không còn n?m trong file config
+        # Không dùng -v : Gi? l?i các volume d? li?u
+        docker compose --env-file .env.docker --profile "*" down --remove-orphans
+        
+        echo "?? System stopped. Database volumes preserved."
+        ;;
+        
+    "down-clean"|"clean"|"reset")
+        echo "?? Stopping WMS and cleaning up ALL resources including database..."
+        # --profile "*" : T?t s?y m?i service thu?c b?t k? profile nào (adminer, v.v.)
+        # --remove-orphans : Xóa các container ? không còn n?m trong file config
+        # -v : Xóa các volume d? li?u (RESET DATABASE)
         docker compose --env-file .env.docker --profile "*" down -v --remove-orphans
         
-        echo "✅ System stopped. All networks and containers cleared."
+        echo "?? System stopped. All networks, containers, and database volumes cleared."
         ;;
         
     *)
         echo "❌ Invalid mode: $MODE"
-        echo "Usage: $0 [dev|prod|down]"
+        echo "Usage: $0 [dev|prod|down|down-clean]"
         exit 1
         ;;
 esac

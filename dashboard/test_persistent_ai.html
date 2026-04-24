@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistent AI Chat Test</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div style="padding: 20px;">
+        <h1>🏭 WMS Dashboard Test</h1>
+        <p>This is a test page to demonstrate the persistent AI chat box.</p>
+        
+        <div style="margin: 20px 0;">
+            <h2>Test Navigation</h2>
+            <button onclick="alert('Switching to Products tab...')">Products</button>
+            <button onclick="alert('Switching to Inventory tab...')">Inventory</button>
+            <button onclick="alert('Switching to Reports tab...')">Reports</button>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <h2>Sample Content</h2>
+            <p>The AI chat box should remain visible in the bottom-right corner regardless of which tab you're on.</p>
+            <p>Try the following:</p>
+            <ul>
+                <li>Click the minimize button (−) to minimize the chat</li>
+                <li>Click the maximize button (+) to restore it</li>
+                <li>Click the close button (×) to hide it</li>
+                <li>After closing, a 🤖 indicator will appear - click it to reopen</li>
+                <li>Type a message and press Enter to chat with AI</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Persistent AI Chat Box -->
+    <div id="persistent-ai-chat" class="persistent-ai-chat">
+        <div class="ai-chat-header">
+            <span>🤖 AI Assistant</span>
+            <div class="ai-chat-controls">
+                <button id="ai-minimize-btn" onclick="toggleAiChat()" title="Minimize">−</button>
+                <button id="ai-close-btn" onclick="closeAiChat()" title="Close">×</button>
+            </div>
+        </div>
+        <div class="ai-chat-messages" id="ai-chat-messages">
+            <div class="ai-msg ai-msg--system">
+                🤖 AI Assistant ready! Ask me about products, inventory, warehouses, or customers.
+            </div>
+        </div>
+        <div class="ai-chat-input">
+            <textarea id="persistent-ai-message" placeholder="Ask about warehouse data..." rows="2"></textarea>
+            <button id="persistent-ai-send" onclick="sendPersistentAiMessage()">Send</button>
+        </div>
+        <div class="ai-chat-status" id="ai-chat-status">Ready</div>
+    </div>
+
+    <script>
+        // Mock API request function for testing
+        async function apiRequest(endpoint, options) {
+            // Simulate API delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Mock response
+            if (endpoint === '/api/ai/chat-db') {
+                return {
+                    answer: "This is a test response from the AI assistant. In the real dashboard, I would help you with warehouse management questions.",
+                    sql: "SELECT * FROM products LIMIT 10",
+                    rows: []
+                };
+            }
+            
+            throw new Error('Unknown endpoint');
+        }
+
+        // Copy the JavaScript functions from the main script
+        let aiChatState = {
+            isOpen: true,
+            isMinimized: false,
+            messageCount: 0
+        };
+
+        function toggleAiChat() {
+            const chatBox = document.getElementById('persistent-ai-chat');
+            const minimizeBtn = document.getElementById('ai-minimize-btn');
+            
+            if (!chatBox) return;
+            
+            aiChatState.isMinimized = !aiChatState.isMinimized;
+            
+            if (aiChatState.isMinimized) {
+                chatBox.classList.add('minimized');
+                minimizeBtn.textContent = '+';
+                minimizeBtn.title = 'Maximize';
+            } else {
+                chatBox.classList.remove('minimized');
+                minimizeBtn.textContent = '−';
+                minimizeBtn.title = 'Minimize';
+                const input = document.getElementById('persistent-ai-message');
+                if (input) input.focus();
+            }
+        }
+
+        function closeAiChat() {
+            const chatBox = document.getElementById('persistent-ai-chat');
+            if (!chatBox) return;
+            
+            aiChatState.isOpen = false;
+            chatBox.classList.add('closed');
+            
+            setTimeout(() => {
+                if (!aiChatState.isOpen) {
+                    showAiChatIndicator();
+                }
+            }, 1000);
+        }
+
+        function showAiChatIndicator() {
+            const existing = document.getElementById('ai-chat-indicator');
+            if (existing) return;
+            
+            const indicator = document.createElement('div');
+            indicator.id = 'ai-chat-indicator';
+            indicator.innerHTML = '🤖';
+            indicator.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 50px;
+                height: 50px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 20px;
+                cursor: pointer;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+                z-index: 9999;
+                transition: all 0.3s ease;
+            `;
+            
+            indicator.onclick = openAiChat;
+            indicator.onmouseover = () => indicator.style.transform = 'scale(1.1)';
+            indicator.onmouseout = () => indicator.style.transform = 'scale(1)';
+            
+            document.body.appendChild(indicator);
+        }
+
+        function openAiChat() {
+            const chatBox = document.getElementById('persistent-ai-chat');
+            const indicator = document.getElementById('ai-chat-indicator');
+            
+            if (!chatBox) return;
+            
+            aiChatState.isOpen = true;
+            aiChatState.isMinimized = false;
+            
+            chatBox.classList.remove('closed', 'minimized');
+            
+            if (indicator) {
+                indicator.remove();
+            }
+            
+            const input = document.getElementById('persistent-ai-message');
+            if (input) input.focus();
+        }
+
+        function addPersistentAiMessage(role, message) {
+            const messagesContainer = document.getElementById('ai-chat-messages');
+            if (!messagesContainer) return;
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `ai-msg ai-msg--${role}`;
+            messageDiv.textContent = message;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            aiChatState.messageCount++;
+            updateAiChatStatus('Message sent');
+        }
+
+        function updateAiChatStatus(status) {
+            const statusEl = document.getElementById('ai-chat-status');
+            if (statusEl) {
+                statusEl.textContent = status;
+                
+                setTimeout(() => {
+                    if (statusEl.textContent === status) {
+                        statusEl.textContent = 'Ready';
+                    }
+                }, 3000);
+            }
+        }
+
+        async function sendPersistentAiMessage() {
+            const input = document.getElementById('persistent-ai-message');
+            const sendBtn = document.getElementById('persistent-ai-send');
+            
+            if (!input || !sendBtn) return;
+            
+            const message = input.value.trim();
+            if (!message) return;
+            
+            input.value = '';
+            sendBtn.disabled = true;
+            
+            addPersistentAiMessage('user', message);
+            updateAiChatStatus('Thinking...');
+            
+            try {
+                const payload = {
+                    message,
+                    include_rows: false
+                };
+                
+                const res = await apiRequest('/api/ai/chat-db', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+                
+                const response = res.answer || 'I apologize, but I couldn\'t process your request.';
+                addPersistentAiMessage('assistant', response);
+                updateAiChatStatus('Response received');
+                
+            } catch (error) {
+                const errorMsg = error && error.message ? error.message : 'Unknown error occurred';
+                addPersistentAiMessage('assistant', `Error: ${errorMsg}`);
+                updateAiChatStatus('Error occurred');
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            const persistentInput = document.getElementById('persistent-ai-message');
+            if (persistentInput) {
+                persistentInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendPersistentAiMessage();
+                    }
+                });
+                
+                persistentInput.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+                });
+            }
+            
+            const chatBox = document.getElementById('persistent-ai-chat');
+            if (chatBox) {
+                aiChatState.isOpen = true;
+                aiChatState.isMinimized = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Production Dockerfile for WMS API
 # Base image
-FROM python:3.13-slim AS base
+FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -20,7 +20,13 @@ COPY pyproject.toml ./pyproject.toml
 COPY README.md ./README.md
 COPY uv.lock ./uv.lock
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . && \
+    find /usr/local -depth \
+    \( \
+        -name __pycache__ \
+        -o -name '*.pyc' \
+        -o -name '*.pyo' \
+    \) -exec rm -rf '{}' +
 
 EXPOSE 8000
 

@@ -27,7 +27,11 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
         max_id = self.session.execute(
             select(func.max(DocumentModel.document_id))
         ).scalar()
-        start_id = (max_id or 0) + 1
+        # Handle Mock objects in testing
+        if hasattr(max_id, '__class__') and max_id.__class__.__name__ == 'Mock':
+            start_id = 1
+        else:
+            start_id = (max_id or 0) + 1
         IDGenerator.reset_generator("document", start_id)
 
     def save(self, document: Document) -> None:

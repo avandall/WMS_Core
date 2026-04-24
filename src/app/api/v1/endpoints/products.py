@@ -6,10 +6,11 @@ import io
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.auth_deps import get_current_user, require_permissions
+from app.api.authorization import ProductAuthorizer
 from app.api.dependencies import get_product_service
 from app.application.dtos.product import ProductCreate, ProductResponse, ProductUpdate
 from app.application.services.product_service import ProductService
-from app.core.permissions import Permission, role_has_permissions
+from app.core.permissions import Permission
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -28,11 +29,15 @@ async def get_all_products(service: ProductService = Depends(get_product_service
     "/",
     response_model=ProductResponse,
     status_code=200,
-    dependencies=[Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
+    dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
 async def create_product(
-    product: ProductCreate, service: ProductService = Depends(get_product_service)
+    product: ProductCreate, 
+    service: ProductService = Depends(get_product_service),
+    user=Depends(get_current_user),
 ):
+    ProductAuthorizer.can_create_product(user.role)
+    
     created_product = service.create_product(
         product_id=product.product_id,
         name=product.name,
@@ -59,12 +64,7 @@ async def update_product(
     service: ProductService = Depends(get_product_service),
     user=Depends(get_current_user),
 ):
-    if product_update.price is not None:
-        if not role_has_permissions(user.role, {Permission.EDIT_PRICES}):
-            raise HTTPException(status_code=403, detail="Insufficient permissions to edit price")
-    if any(v is not None for v in [product_update.name, product_update.description]):
-        if not role_has_permissions(user.role, {Permission.MANAGE_PRODUCTS}):
-            raise HTTPException(status_code=403, detail="Insufficient permissions to edit product")
+    ProductAuthorizer.can_update_product(user.role, product_update)
 
     updated_product = service.update_product(
         product_id=product_id,

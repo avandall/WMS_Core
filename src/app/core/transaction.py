@@ -24,15 +24,19 @@ def transaction_scope(session: Session) -> Generator[Session, None, None]:
 
 
 class TransactionalRepository:
-    def __init__(self, session: Session):
+    """Base repository with optional transaction management following LSP."""
+
+    def __init__(self, session: Session, auto_commit: bool = False):
         self.session = session
-        self._auto_commit = True
+        self._auto_commit = auto_commit
 
     def set_auto_commit(self, enabled: bool) -> None:
+        """Enable or disable auto-commit for this repository."""
         self._auto_commit = enabled
         logger.debug(f"Auto-commit set to: {enabled}")
 
     def _commit_if_auto(self) -> None:
+        """Commit only if auto-commit is enabled - follows LSP by not forcing behavior."""
         if self._auto_commit:
             self.session.commit()
             logger.debug("Auto-committed transaction")
