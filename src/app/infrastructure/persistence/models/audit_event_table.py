@@ -6,7 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
+from app.shared.core.database import Base
 
 
 class AuditEventModel(Base):

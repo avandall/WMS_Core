@@ -29,7 +29,7 @@ except ImportError:
 
 # Import Permission directly since it's just an enum
 try:
-    from app.core.permissions import Permission
+    from app.shared.core.permissions import Permission
 except ImportError:
     # Create a mock Permission enum if the import fails
     from enum import Enum
@@ -47,7 +47,7 @@ except ImportError:
         MANAGE_USERS = "manage_users"
 
 # Create ProductAuthorizer for tests (without FastAPI dependency)
-from app.core.permissions import Permission, role_has_permissions
+from app.shared.core.permissions import Permission, role_has_permissions
 
 class ProductAuthorizer:
     @staticmethod
@@ -72,8 +72,8 @@ class ProductAuthorizer:
 
 # Make app imports conditional
 try:
-    from app.domain.entities.user import User
-    from app.application.services.user_service import UserService
+    from app.modules.users.domain.entities.user import User
+    from app.modules.users.application.services.user_service import UserService
     from app.api.auth_deps import get_current_user, require_permissions
     APP_IMPORTS_AVAILABLE = True
 except ImportError:

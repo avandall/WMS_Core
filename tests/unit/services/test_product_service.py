@@ -7,10 +7,11 @@ import pytest
 from unittest.mock import Mock, MagicMock, call
 from typing import Dict, List
 
-from app.application.services.product_service import ProductService
-from app.domain.entities.product import Product
-from app.domain.exceptions import ValidationError, EntityNotFoundError
-from app.domain.interfaces import IProductRepo, IInventoryRepo
+from app.modules.products.application.services.product_service import ProductService
+from app.modules.products.domain.entities.product import Product
+from app.shared.domain.business_exceptions import ValidationError, EntityNotFoundError
+from app.shared.domain.product_repo import IProductRepo
+from app.shared.domain.inventory_repo import IInventoryRepo
 
 
 class TestProductService:

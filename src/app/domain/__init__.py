@@ -9,7 +9,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from app.domain.exceptions import (  # noqa: F401
+from app.shared.domain.business_exceptions import (  # noqa: F401
     BusinessRuleViolationError,
     DomainError,
     EntityAlreadyExistsError,

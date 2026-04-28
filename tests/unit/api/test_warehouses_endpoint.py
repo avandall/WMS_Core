@@ -18,8 +18,8 @@ except ImportError:
     TestClient = mock.Mock
 
 try:
-    from app.api.v1.endpoints.warehouses import router
-    from app.core.permissions import Permission
+    from app.api.v1.endpoints.warehouses.warehouses import router
+    from app.shared.core.permissions import Permission
     from app.application.dtos.warehouse import (
         WarehouseCreate,
         WarehouseResponse,
@@ -28,9 +28,9 @@ try:
         WarehouseStats
     )
     from app.application.dtos.product import TransferInventoryRequest
-    from app.application.services.warehouse_service import WarehouseService
-    from app.domain.entities.warehouse import Warehouse
-    from app.domain.entities.inventory import InventoryItem
+    from app.modules.warehouses.application.services.warehouse_service import WarehouseService
+    from app.modules.warehouses.domain.entities.warehouse import Warehouse
+    from app.modules.inventory.domain.entities.inventory import InventoryItem
     API_IMPORTS_AVAILABLE = True
 except ImportError:
     API_IMPORTS_AVAILABLE = False
@@ -117,11 +117,11 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_all_warehouses.return_value = [sample_warehouse]
         mock_warehouse_service.get_warehouse_inventory.return_value = [sample_inventory_item]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
             # Import the endpoint function
-            from app.api.v1.endpoints.warehouses import get_all_warehouses
+            from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses
             
             # Call the endpoint
             result = await get_all_warehouses(mock_warehouse_service)
@@ -145,10 +145,10 @@ class TestWarehousesEndpoint:
         # mock.Mock service to return empty list
         mock_warehouse_service.get_all_warehouses.return_value = []
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_all_warehouses
+            from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses
             
             result = await get_all_warehouses(mock_warehouse_service)
             
@@ -166,10 +166,10 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_all_warehouses.return_value = [warehouse1, warehouse2]
         mock_warehouse_service.get_warehouse_inventory.return_value = [sample_inventory_item]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_all_warehouses
+            from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses
             
             result = await get_all_warehouses(mock_warehouse_service)
             
@@ -186,10 +186,10 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_all_warehouses.return_value = [sample_warehouse]
         mock_warehouse_service.get_warehouse_inventory.return_value = []
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_all_warehouses
+            from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses
             
             result = await get_all_warehouses(mock_warehouse_service)
             
@@ -207,11 +207,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to return created warehouse
         mock_warehouse_service.create_warehouse.return_value = sample_warehouse
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import create_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import create_warehouse
             
             result = await create_warehouse(sample_warehouse_create, mock_warehouse_service)
             
@@ -233,11 +233,11 @@ class TestWarehousesEndpoint:
         unicode_warehouse = Warehouse(warehouse_id=1, location="Tëst Wäréhøüse")
         mock_warehouse_service.create_warehouse.return_value = unicode_warehouse
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import create_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import create_warehouse
             
             result = await create_warehouse(warehouse_create, mock_warehouse_service)
             
@@ -257,11 +257,11 @@ class TestWarehousesEndpoint:
         special_warehouse = Warehouse(warehouse_id=1, location="Warehouse-123_@#$%")
         mock_warehouse_service.create_warehouse.return_value = special_warehouse
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import create_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import create_warehouse
             
             result = await create_warehouse(warehouse_create, mock_warehouse_service)
             
@@ -273,10 +273,10 @@ class TestWarehousesEndpoint:
         """Test create_warehouse endpoint with permission denied"""
         # Note: Permission decorators are applied at FastAPI level
         # This test verifies the service method exists and can be called
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import create_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import create_warehouse
             
             # Test that the function exists and can be called (permissions handled by FastAPI)
             mock_warehouse_service.create_warehouse.return_value = Warehouse(warehouse_id=1, location="Test")
@@ -296,10 +296,10 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_warehouse.return_value = sample_warehouse
         mock_warehouse_service.get_warehouse_inventory.return_value = [sample_inventory_item]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse
             
             result = await get_warehouse(1, mock_warehouse_service)
             
@@ -321,10 +321,10 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise exception
         mock_warehouse_service.get_warehouse.side_effect = Exception("Warehouse not found")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse
             
             with pytest.raises(Exception, match="Warehouse not found"):
                 await get_warehouse(1, mock_warehouse_service)
@@ -336,10 +336,10 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_warehouse.return_value = sample_warehouse
         mock_warehouse_service.get_warehouse_inventory.return_value = []
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse
             
             result = await get_warehouse(1, mock_warehouse_service)
             
@@ -356,11 +356,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service
         mock_warehouse_service.delete_warehouse.return_value = None
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import delete_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import delete_warehouse
             
             result = await delete_warehouse(1, mock_warehouse_service)
             
@@ -376,11 +376,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise exception
         mock_warehouse_service.delete_warehouse.side_effect = Exception("Warehouse not found")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import delete_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import delete_warehouse
             
             with pytest.raises(Exception, match="Warehouse not found"):
                 await delete_warehouse(1, mock_warehouse_service)
@@ -390,10 +390,10 @@ class TestWarehousesEndpoint:
         """Test delete_warehouse endpoint with permission denied"""
         # Note: Permission decorators are applied at FastAPI level
         # This test verifies the service method exists and can be called
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import delete_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import delete_warehouse
             
             # Test that the function exists and can be called (permissions handled by FastAPI)
             mock_warehouse_service.delete_warehouse.return_value = None
@@ -412,11 +412,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to return transferred items
         mock_warehouse_service.transfer_all_inventory.return_value = [sample_inventory_item]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import transfer_all_inventory
             
             result = await transfer_all_inventory(1, sample_transfer_request, mock_warehouse_service)
             
@@ -437,11 +437,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to return empty list
         mock_warehouse_service.transfer_all_inventory.return_value = []
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import transfer_all_inventory
             
             result = await transfer_all_inventory(1, sample_transfer_request, mock_warehouse_service)
             
@@ -459,11 +459,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to return transferred items
         mock_warehouse_service.transfer_all_inventory.return_value = [item1, item2]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import transfer_all_inventory
             
             result = await transfer_all_inventory(1, sample_transfer_request, mock_warehouse_service)
             
@@ -482,11 +482,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise exception
         mock_warehouse_service.transfer_all_inventory.side_effect = Exception("Cannot transfer to same warehouse")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import transfer_all_inventory
             
             with pytest.raises(Exception, match="Cannot transfer to same warehouse"):
                 await transfer_all_inventory(1, transfer_request, mock_warehouse_service)
@@ -496,10 +496,10 @@ class TestWarehousesEndpoint:
         """Test transfer_all_inventory endpoint with permission denied"""
         # Note: Permission decorators are applied at FastAPI level
         # This test verifies the service method exists and can be called
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import transfer_all_inventory
             
             # Test that the function exists and can be called (permissions handled by FastAPI)
             mock_warehouse_service.transfer_all_inventory.return_value = []
@@ -514,11 +514,11 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise exception
         mock_warehouse_service.transfer_all_inventory.side_effect = Exception("Warehouse not found")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import transfer_all_inventory
             
             with pytest.raises(Exception, match="Warehouse not found"):
                 await transfer_all_inventory(1, sample_transfer_request, mock_warehouse_service)
@@ -555,10 +555,10 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise exception
         mock_warehouse_service.get_all_warehouses.side_effect = Exception("Service error")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_all_warehouses
+            from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses
             
             with pytest.raises(Exception, match="Service error"):
                 await get_all_warehouses(mock_warehouse_service)
@@ -567,7 +567,7 @@ class TestWarehousesEndpoint:
     async def test_dependency_injection_failure(self):
         """Test behavior when dependency injection fails"""
         # This would be tested in integration tests, but we can verify the structure
-        from app.api.v1.endpoints.warehouses import get_all_warehouses
+        from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses
         
         # Verify function signature expects service parameter
         import inspect
@@ -586,11 +586,11 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_warehouse.return_value = sample_warehouse
         mock_warehouse_service.get_warehouse_inventory.return_value = [sample_inventory_item]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import create_warehouse, get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import create_warehouse, get_warehouse
             
             # Create warehouse
             created = await create_warehouse(sample_warehouse_create, mock_warehouse_service)
@@ -610,11 +610,11 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_warehouse_inventory.return_value = [sample_inventory_item]
         mock_warehouse_service.delete_warehouse.return_value = None
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse, delete_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse, delete_warehouse
             
             # Get warehouse
             retrieved = await get_warehouse(1, mock_warehouse_service)
@@ -634,11 +634,11 @@ class TestWarehousesEndpoint:
         mock_warehouse_service.get_warehouse_inventory.return_value = [sample_inventory_item]
         mock_warehouse_service.transfer_all_inventory.return_value = [sample_inventory_item]
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.require_permissions'), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.require_permissions'), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_all_warehouses, transfer_all_inventory
+            from app.api.v1.endpoints.warehouses.warehouses import get_all_warehouses, transfer_all_inventory
             
             # Get all warehouses
             warehouses = await get_all_warehouses(mock_warehouse_service)
@@ -663,10 +663,10 @@ class TestWarehousesEndpoint:
         # mock.Mock service
         mock_warehouse_service.get_warehouse.return_value = None
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse
             
             # This should not raise an exception for large ID
             try:
@@ -683,10 +683,10 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise validation exception
         mock_warehouse_service.get_warehouse.side_effect = Exception("Invalid warehouse ID")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse
             
             with pytest.raises(Exception, match="Invalid warehouse ID"):
                 await get_warehouse(negative_warehouse_id, mock_warehouse_service)
@@ -699,10 +699,10 @@ class TestWarehousesEndpoint:
         # mock.Mock service to raise validation exception
         mock_warehouse_service.get_warehouse.side_effect = Exception("Invalid warehouse ID")
         
-        with patch('app.api.v1.endpoints.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
-             patch('app.api.v1.endpoints.warehouses.get_current_user'):
+        with patch('app.api.v1.endpoints.warehouses.warehouses.get_warehouse_service', return_value=mock_warehouse_service), \
+             patch('app.api.v1.endpoints.warehouses.warehouses.get_current_user'):
             
-            from app.api.v1.endpoints.warehouses import get_warehouse
+            from app.api.v1.endpoints.warehouses.warehouses import get_warehouse
             
             with pytest.raises(Exception, match="Invalid warehouse ID"):
                 await get_warehouse(zero_warehouse_id, mock_warehouse_service)

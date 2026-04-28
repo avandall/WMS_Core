@@ -5,17 +5,15 @@ from typing import Generator, Protocol
 
 from sqlalchemy.orm import Session
 
-from app.core.logging import get_logger
-from app.domain.interfaces import (
-    IAuditEventRepo,
-    ICustomerRepo,
-    IDocumentRepo,
-    IInventoryRepo,
-    IPositionRepo,
-    IProductRepo,
-    IUserRepo,
-    IWarehouseRepo,
-)
+from app.shared.core.logging import get_logger
+from app.shared.domain.audit_event_repo import IAuditEventRepo
+from app.shared.domain.customer_repo import ICustomerRepo
+from app.shared.domain.document_repo import IDocumentRepo
+from app.shared.domain.inventory_repo import IInventoryRepo
+from app.shared.domain.position_repo import IPositionRepo
+from app.shared.domain.product_repo import IProductRepo
+from app.shared.domain.user_repo import IUserRepo
+from app.shared.domain.warehouse_repo import IWarehouseRepo
 
 logger = get_logger(__name__)
 

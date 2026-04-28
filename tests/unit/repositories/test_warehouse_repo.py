@@ -8,10 +8,10 @@ from unittest.mock import Mock, MagicMock, call, patch
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
-from app.infrastructure.persistence.repositories.warehouse_repo import WarehouseRepo
-from app.domain.entities.warehouse import Warehouse
-from app.domain.entities.inventory import InventoryItem
-from app.domain.exceptions import (
+from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
+from app.modules.warehouses.domain.entities.warehouse import Warehouse
+from app.modules.inventory.domain.entities.inventory import InventoryItem
+from app.shared.domain.business_exceptions import (
     InsufficientStockError,
     ValidationError,
     WarehouseNotFoundError,
@@ -57,7 +57,7 @@ class TestWarehouseRepo:
     def warehouse_repo(self, mock_session):
         """WarehouseRepo instance with mocked session"""
         # Mock the IDGenerator to avoid actual database calls during initialization
-        with patch('app.infrastructure.persistence.repositories.warehouse_repo.IDGenerator') as mock_id_generator:
+        with patch('app.modules.warehouses.infrastructure.repositories.warehouse_repo.IDGenerator') as mock_id_generator:
             mock_id_generator.reset_generator = Mock()
             return WarehouseRepo(session=mock_session)
 
@@ -88,7 +88,7 @@ class TestWarehouseRepo:
         assert repo.session == mock_session
         assert repo._auto_commit is False
 
-    @patch('app.infrastructure.persistence.repositories.warehouse_repo.IDGenerator')
+    @patch('app.modules.warehouses.infrastructure.repositories.warehouse_repo.IDGenerator')
     def test_sync_id_generator_with_existing_warehouse(self, mock_id_generator, warehouse_repo, mock_session):
         """Test _sync_id_generator with existing warehouse"""
         # Mock session.execute to return max_id
@@ -102,7 +102,7 @@ class TestWarehouseRepo:
         # Verify IDGenerator was called with correct start_id
         mock_id_generator.reset_generator.assert_called_once_with("warehouse", 101)
 
-    @patch('app.infrastructure.persistence.repositories.warehouse_repo.IDGenerator')
+    @patch('app.modules.warehouses.infrastructure.repositories.warehouse_repo.IDGenerator')
     def test_sync_id_generator_no_existing_warehouse(self, mock_id_generator, warehouse_repo, mock_session):
         """Test _sync_id_generator with no existing warehouse"""
         # Mock session.execute to return None (scalar returns None)

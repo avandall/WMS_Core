@@ -17,8 +17,8 @@ except ImportError:
 # Make app imports conditional
 try:
     from app.api import app
-    from app.application.services.warehouse_service import WarehouseService
-    from app.infrastructure.persistence.repositories.warehouse_repo import WarehouseRepo
+    from app.modules.warehouses.application.services.warehouse_service import WarehouseService
+    from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
     from app.infrastructure.persistence.models import WarehouseModel, WarehouseInventoryModel
     APP_IMPORTS_AVAILABLE = True
 except ImportError:

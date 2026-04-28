@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints.ai import router as ai_router
 from app.api.v1.endpoints.audit_events import router as audit_events_router
 from app.api.v1.endpoints.auth import router as auth_router
-from app.api.v1.endpoints.customers import router as customers_router
-from app.api.v1.endpoints.documents import router as documents_router
-from app.api.v1.endpoints.inventory import router as inventory_router
-from app.api.v1.endpoints.positions import router as positions_router
-from app.api.v1.endpoints.products import router as products_router
+from app.api.v1.endpoints.customers.customers import router as customers_router
+from app.api.v1.endpoints.documents.documents import router as documents_router
+from app.api.v1.endpoints.inventory.inventory import router as inventory_router
+from app.api.v1.endpoints.positions.positions import router as positions_router
+from app.api.v1.endpoints.products.products import router as products_router
 from app.api.v1.endpoints.reports import router as reports_router
-from app.api.v1.endpoints.users import router as users_router
-from app.api.v1.endpoints.warehouse_operations import (
+from app.api.v1.endpoints.users.users import router as users_router
+from app.api.v1.endpoints.warehouses.warehouse_operations import (
     router as warehouse_operations_router,
 )
-from app.api.v1.endpoints.warehouses import router as warehouses_router
+from app.api.v1.endpoints.warehouses.warehouses import router as warehouses_router
+from app.integrations.ai.ai import router as ai_router
 
 
 router = APIRouter()

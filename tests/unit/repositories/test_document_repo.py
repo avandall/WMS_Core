@@ -8,14 +8,14 @@ from unittest.mock import Mock, MagicMock, call, patch
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from app.infrastructure.persistence.repositories.document_repo import DocumentRepo
-from app.domain.entities.document import (
+from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
+from app.modules.documents.domain.entities.document import (
     Document,
     DocumentProduct,
     DocumentStatus,
     DocumentType
 )
-from app.domain.exceptions import DocumentNotFoundError
+from app.shared.domain.business_exceptions import DocumentNotFoundError
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
     from app.infrastructure.persistence.models import DocumentModel, DocumentItemModel
@@ -102,7 +102,7 @@ class TestDocumentRepo:
         assert repo.session == mock_session
         assert repo._auto_commit is False
 
-    @patch('app.infrastructure.persistence.repositories.document_repo.IDGenerator')
+    @patch('app.modules.documents.infrastructure.repositories.document_repo.IDGenerator')
     def test_sync_id_generator_with_existing_document(self, mock_id_generator, document_repo, mock_session):
         """Test _sync_id_generator with existing document"""
         # Mock session.execute to return max_id
@@ -116,7 +116,7 @@ class TestDocumentRepo:
         # Verify IDGenerator was called with correct start_id
         mock_id_generator.reset_generator.assert_called_once_with("document", 101)
 
-    @patch('app.infrastructure.persistence.repositories.document_repo.IDGenerator')
+    @patch('app.modules.documents.infrastructure.repositories.document_repo.IDGenerator')
     def test_sync_id_generator_no_existing_document(self, mock_id_generator, document_repo, mock_session):
         """Test _sync_id_generator with no existing document"""
         # Mock session.execute to return None
@@ -156,7 +156,7 @@ class TestDocumentRepo:
         mock_session.get.return_value = sample_document_model
         
         # Patch DocumentItemModel to avoid AuditLogModel relationship issues
-        with patch('app.infrastructure.persistence.repositories.document_repo.DocumentItemModel') as mock_item_model:
+        with patch('app.modules.documents.infrastructure.repositories.document_repo.DocumentItemModel') as mock_item_model:
             mock_item_model.return_value = Mock()
             
             document_repo.save(sample_document)

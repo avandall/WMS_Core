@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException
 
-from app.core.permissions import Permission, role_has_permissions
+from app.shared.core.permissions import Permission, role_has_permissions
 from app.application.dtos.product import ProductUpdate
 
 

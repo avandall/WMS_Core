@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from app.application.services.product_service import ProductService
+from app.modules.products.application.services.product_service import ProductService
 from app.application.unit_of_work.unit_of_work import UnitOfWork
 from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
 

@@ -6,7 +6,7 @@ import pytest
 import time
 from unittest.mock import patch, MagicMock
 from app.application.dtos.ai import ChatDBRequest
-from app.infrastructure.ai.chains import handle_customer_chat_with_db, is_relevant_query, _validate_table_access
+from app.integrations.ai.chains import handle_customer_chat_with_db, is_relevant_query, _validate_table_access
 
 
 class TestAIEdgeCases:
@@ -33,8 +33,8 @@ class TestAIEdgeCases:
         # Create a very long message (1,000 characters - more reasonable for testing)
         long_message = "tell me about " + "products " * 50
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -61,8 +61,8 @@ class TestAIEdgeCases:
         ]
         
         for message in special_messages:
-            with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                 patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+            with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                 patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
                 
                 mock_engine = MagicMock()
                 mock_get_engine.return_value = mock_engine
@@ -97,10 +97,10 @@ class TestAIEdgeCases:
         for injection in injection_attempts:
             # Test in SQL mode with proper mocking
             try:
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=injection), \
-                     patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=injection), \
+                     patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
                     
                     result = handle_customer_chat_with_db(injection, mode="sql")
                     # Should be blocked by validation
@@ -112,11 +112,11 @@ class TestAIEdgeCases:
             
             # Test in auto mode with proper mocking
             try:
-                with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None), \
-                     patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=injection), \
-                     patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
+                with patch('app.integrations.ai.chains.get_rag_engine', return_value=None), \
+                     patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=injection), \
+                     patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
                     
                     result = handle_customer_chat_with_db(injection, mode="auto")
                     # Should fall back to SQL and be blocked
@@ -174,9 +174,9 @@ class TestAIEdgeCases:
         ]
         
         for mode_input, expected_behavior in edge_cases:
-            with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                 patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-                 patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+            with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                 patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+                 patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
                 
                 mock_engine = MagicMock()
                 mock_get_engine.return_value = mock_engine
@@ -201,19 +201,19 @@ class TestAIEdgeCases:
         def worker(mode):
             if mode == "sql":
                 # SQL mode needs different mocking
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                     patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
-                     patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found 1 product'):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                     patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
+                     patch('app.integrations.ai.chains.summarize_rows', return_value='Found 1 product'):
                     
                     result = handle_customer_chat_with_db("test message", mode=mode)
                     results.append((mode, result["mode"]))
             else:
                 # RAG-based modes
-                with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                     patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-                     patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+                with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                     patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+                     patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
                     
                     mock_engine = MagicMock()
                     mock_get_engine.return_value = mock_engine
@@ -258,11 +258,11 @@ class TestAIEdgeCases:
         large_result = [{'id': i, 'name': f'Product {i}', 'description': 'A' * 1000} 
                        for i in range(1000)]
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=large_result), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Large result processed'):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=large_result), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Large result processed'):
             
             result = handle_customer_chat_with_db("show me all products", mode="sql")
             
@@ -281,8 +281,8 @@ class TestAIEdgeCases:
                 "mode": "rag"
             }
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking', side_effect=slow_hybrid_search):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking', side_effect=slow_hybrid_search):
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -298,14 +298,14 @@ class TestAIEdgeCases:
         # Test SQL with None values
         sql_with_nulls = "SELECT * FROM products WHERE name IS NULL"
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=sql_with_nulls), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value=sql_with_nulls), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value=sql_with_nulls), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value=sql_with_nulls), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[
                  {'id': 1, 'name': None, 'description': 'Valid product'},
                  {'id': 2, 'name': 'Product 2', 'description': None}
              ]), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found products with null values'):
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Found products with null values'):
             
             result = handle_customer_chat_with_db("show products with null names", mode="sql")
             
@@ -316,10 +316,10 @@ class TestAIEdgeCases:
         """Test graceful handling of database connection failures"""
         
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=Exception("Connection failed")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=Exception("Connection failed")):
                 
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 

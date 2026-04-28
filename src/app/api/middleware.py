@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 from starlette import status
 
 from app.api.security import rate_limiter
-from app.core.database import SessionLocal
-from app.core.logging import get_logger
+from app.shared.core.database import SessionLocal
+from app.shared.core.logging import get_logger
 from app.infrastructure.persistence.models import AuditLogModel
 
 logger = get_logger(__name__)

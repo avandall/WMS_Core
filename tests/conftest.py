@@ -90,7 +90,7 @@ def lazy_load_app():
 def test_engine():
     """Create a fresh test database engine for each test."""
     from sqlalchemy import create_engine
-    from app.core.database import Base
+    from app.shared.core.database import Base
 
     # Use environment variable for test database or default to in-memory SQLite
     TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite:///:memory:")
@@ -152,10 +152,10 @@ def reset_db_for_integration_tests(request):
         return
 
     # Import only when needed for integration tests
-    from app.core.settings import settings
+    from app.shared.core.settings import settings
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.core.database import Base
+    from app.shared.core.database import Base
     from app.infrastructure.persistence.models import WarehouseModel, ProductModel
     from app.infrastructure.persistence.models import import_all_models
 
@@ -234,7 +234,7 @@ def client() -> Any:
 @pytest.fixture
 def sample_product():
     """Fixture for a sample product."""
-    from app.domain.entities.product import Product
+    from app.modules.products.domain.entities.product import Product
 
     return Product(
         product_id=1,
@@ -247,8 +247,8 @@ def sample_product():
 @pytest.fixture
 def sample_warehouse():
     """Fixture for a sample warehouse."""
-    from app.domain.entities.inventory import InventoryItem
-    from app.domain.entities.warehouse import Warehouse
+    from app.modules.inventory.domain.entities.inventory import InventoryItem
+    from app.modules.warehouses.domain.entities.warehouse import Warehouse
 
     return Warehouse(
         warehouse_id=1,
@@ -263,7 +263,7 @@ def sample_warehouse():
 @pytest.fixture
 def sample_document():
     """Fixture for a sample inventory document."""
-    from app.domain.entities.document import Document, DocumentProduct, DocumentType
+    from app.modules.documents.domain.entities.document import Document, DocumentProduct, DocumentType
 
     items = [
         DocumentProduct(product_id=1, quantity=10, unit_price=99.99),
@@ -291,9 +291,9 @@ from app.application.commands.product_commands import CreateProductCommand, Upda
 from app.application.queries.product_queries import GetProductQuery, GetAllProductsQuery
 from app.application.validation.product_validators import ProductValidator
 from app.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
-from app.domain.entities.product import Product
-from app.domain.interfaces.product_repo import IProductRepo
-from app.domain.interfaces.inventory_repo import IInventoryRepo
+from app.modules.products.domain.entities.product import Product
+from app.shared.domain.product_repo import IProductRepo
+from app.shared.domain.inventory_repo import IInventoryRepo
 from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
 # Import ProductAuthorizer conditionally to avoid FastAPI dependency issues
 try:

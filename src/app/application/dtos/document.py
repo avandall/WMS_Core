@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.domain.entities.document import DocumentStatus, DocumentType
+from app.modules.documents.domain.entities.document import DocumentStatus, DocumentType
 
 
 class DocumentItemCreate(BaseModel):

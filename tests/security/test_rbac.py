@@ -17,7 +17,7 @@ except ImportError:
 
 # Import Permission and role_has_permissions directly since they're just functions/enums
 try:
-    from app.core.permissions import Permission, role_has_permissions
+    from app.shared.core.permissions import Permission, role_has_permissions
 except ImportError:
     # Create a mock Permission enum if the import fails
     from enum import Enum
@@ -36,7 +36,7 @@ except ImportError:
 
 # Import role_has_permissions and create ProductAuthorizer for testing
 try:
-    from app.core.permissions import role_has_permissions
+    from app.shared.core.permissions import role_has_permissions
 except ImportError:
     # Create fallback role_has_permissions
     def role_has_permissions(role, permissions):

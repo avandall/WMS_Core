@@ -4,8 +4,8 @@ Covers all User entity methods, validation, edge cases, and business rules
 """
 
 import pytest
-from app.domain.entities.user import User
-from app.domain.exceptions import ValidationError
+from app.modules.users.domain.entities.user import User
+from app.shared.domain.business_exceptions import ValidationError
 
 
 class TestUserEntity:

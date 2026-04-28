@@ -5,28 +5,28 @@ from __future__ import annotations
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.application.services.customer_service import CustomerService
-from app.application.services.document_service import DocumentService
-from app.application.services.inventory_service import InventoryService
-from app.application.services.position_service import PositionService
-from app.application.services.product_service import ProductService
+from app.modules.customers.application.services.customer_service import CustomerService
+from app.modules.documents.application.services.document_service import DocumentService
+from app.modules.inventory.application.services.inventory_service import InventoryService
+from app.modules.positions.application.services.position_service import PositionService
+from app.modules.products.application.services.product_service import ProductService
 from app.application.services.report_service import ReportService
-from app.application.services.stock_movement_service import StockMovementService
-from app.application.services.user_service import UserService
-from app.application.services.warehouse_operations_service import (
+from app.modules.inventory.application.services.stock_movement_service import StockMovementService
+from app.modules.users.application.services.user_service import UserService
+from app.modules.warehouses.application.services.warehouse_operations_service import (
     WarehouseOperationsService,
 )
-from app.application.services.warehouse_service import WarehouseService
-from app.core.database import get_session
+from app.modules.warehouses.application.services.warehouse_service import WarehouseService
+from app.shared.core.database import get_session
 from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
 from app.infrastructure.persistence.repositories.audit_event_repo import AuditEventRepo
-from app.infrastructure.persistence.repositories.customer_repo import CustomerRepo
-from app.infrastructure.persistence.repositories.document_repo import DocumentRepo
-from app.infrastructure.persistence.repositories.inventory_repo import InventoryRepo
-from app.infrastructure.persistence.repositories.position_repo import PositionRepo
-from app.infrastructure.persistence.repositories.product_repo import ProductRepo
-from app.infrastructure.persistence.repositories.user_repo import UserRepo
-from app.infrastructure.persistence.repositories.warehouse_repo import WarehouseRepo
+from app.modules.customers.infrastructure.repositories.customer_repo import CustomerRepo
+from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
+from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+from app.modules.positions.infrastructure.repositories.position_repo import PositionRepo
+from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
+from app.modules.users.infrastructure.repositories.user_repo import UserRepo
+from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
 
 
 def get_product_repo(db: Session = Depends(get_session)) -> ProductRepo:

@@ -4,7 +4,7 @@ Tests that the AI chat endpoint properly blocks SQL injection attempts
 """
 
 import pytest
-from app.infrastructure.ai.chains import is_relevant_query, generate_sql_from_question, _validate_table_access
+from app.integrations.ai.chains import is_relevant_query, generate_sql_from_question, _validate_table_access
 
 
 class TestAISQLInjectionPrevention:

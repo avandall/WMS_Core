@@ -9,8 +9,8 @@ from typing import Dict, Optional
 
 from fastapi import HTTPException, status
 
-from app.core.logging import get_logger
-from app.core.settings import settings
+from app.shared.core.logging import get_logger
+from app.shared.core.settings import settings
 
 logger = get_logger(__name__)
 

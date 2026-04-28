@@ -2,9 +2,9 @@
 
 from typing import List
 
-from app.domain.entities.product import Product
-from app.domain.exceptions import EntityNotFoundError
-from app.domain.interfaces import IProductRepo
+from app.modules.products.domain.entities.product import Product
+from app.shared.domain.business_exceptions import EntityNotFoundError
+from app.shared.domain.product_repo import IProductRepo
 from .product_queries import GetProductQuery, GetAllProductsQuery
 
 

@@ -2,14 +2,15 @@
 
 from typing import Dict, Optional
 
-from app.core.logging import get_logger
-from app.domain.entities.product import Product
-from app.domain.exceptions import (
+from app.shared.core.logging import get_logger
+from app.modules.products.domain.entities.product import Product
+from app.shared.domain.business_exceptions import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
     ValidationError,
 )
-from app.domain.interfaces import IInventoryRepo, IProductRepo
+from app.shared.domain.inventory_repo import IInventoryRepo
+from app.shared.domain.product_repo import IProductRepo
 from .product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
 
 logger = get_logger(__name__)

@@ -5,7 +5,7 @@ Comprehensive security edge case tests for AI functionality
 import pytest
 from unittest.mock import patch, MagicMock
 from app.application.dtos.ai import ChatDBRequest
-from app.infrastructure.ai.chains import handle_customer_chat_with_db, is_relevant_query, _validate_table_access
+from app.integrations.ai.chains import handle_customer_chat_with_db, is_relevant_query, _validate_table_access
 
 
 class TestAISecurityEdgeCases:
@@ -55,10 +55,10 @@ class TestAISecurityEdgeCases:
         for injection in advanced_injections:
             # Test in SQL mode with proper mocking
             try:
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=injection), \
-                     patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=injection), \
+                     patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
                     
                     result = handle_customer_chat_with_db(injection, mode="sql")
                     # Should be blocked by validation
@@ -69,11 +69,11 @@ class TestAISecurityEdgeCases:
             
             # Test in auto mode with proper mocking
             try:
-                with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None), \
-                     patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=injection), \
-                     patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
+                with patch('app.integrations.ai.chains.get_rag_engine', return_value=None), \
+                     patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=injection), \
+                     patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("SQL injection blocked")), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("SQL injection blocked")):
                     
                     result = handle_customer_chat_with_db(injection, mode="auto")
                     # Should be blocked by validation
@@ -118,9 +118,9 @@ class TestAISecurityEdgeCases:
             try:
                 result = _validate_table_access(attempt)
                 # If no exception is raised, check if the SQL is actually blocked at execution
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=attempt), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("System table access blocked")):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=attempt), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("System table access blocked")):
                     
                     result = handle_customer_chat_with_db(attempt, mode="sql")
                     # Should be blocked by SQL execution
@@ -169,9 +169,9 @@ class TestAISecurityEdgeCases:
             try:
                 result = _validate_table_access(attempt)
                 # If no exception is raised, check if the SQL is actually blocked at execution
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=attempt), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("Obfuscated table access blocked")):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=attempt), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("Obfuscated table access blocked")):
                     
                     result = handle_customer_chat_with_db(attempt, mode="sql")
                     # Should be blocked by SQL execution
@@ -217,8 +217,8 @@ class TestAISecurityEdgeCases:
         ]
         
         for injection in prompt_injections:
-            with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                 patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+            with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                 patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
                 
                 mock_engine = MagicMock()
                 mock_get_engine.return_value = mock_engine
@@ -269,9 +269,9 @@ class TestAISecurityEdgeCases:
             try:
                 result = _validate_table_access(attempt)
                 # If no exception is raised, check if the SQL is actually blocked at execution
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=attempt), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("Data exfiltration blocked")):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=attempt), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("Data exfiltration blocked")):
                     
                     result = handle_customer_chat_with_db(attempt, mode="sql")
                     # Should be blocked by SQL execution
@@ -310,9 +310,9 @@ class TestAISecurityEdgeCases:
             try:
                 result = _validate_table_access(attempt)
                 # If no exception is raised, check if the SQL is actually blocked at execution
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=attempt), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("Privilege escalation blocked")):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=attempt), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("Privilege escalation blocked")):
                     
                     result = handle_customer_chat_with_db(attempt, mode="sql")
                     # Should be blocked by SQL execution
@@ -357,8 +357,8 @@ class TestAISecurityEdgeCases:
         
         for attempt in bypass_attempts:
             try:
-                with patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
-                    from app.infrastructure.ai.chains import _validate_table_access
+                with patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
+                    from app.integrations.ai.chains import _validate_table_access
                     result = _validate_table_access(attempt)
                     # Should raise ValueError for bypass attempts
                     assert False, f"Bypass attempt should be blocked: {attempt}"
@@ -385,8 +385,8 @@ class TestAISecurityEdgeCases:
         
         for attack in timing_attacks:
             try:
-                with patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
-                    from app.infrastructure.ai.chains import _validate_table_access
+                with patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
+                    from app.integrations.ai.chains import _validate_table_access
                     result = _validate_table_access(attack)
                     # Should raise ValueError for timing attacks
                     assert False, f"Timing attack should be blocked: {attack}"
@@ -403,8 +403,8 @@ class TestAISecurityEdgeCases:
         
         def attack_worker(attack_sql):
             try:
-                with patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
-                    from app.infrastructure.ai.chains import _validate_table_access
+                with patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
+                    from app.integrations.ai.chains import _validate_table_access
                     result = _validate_table_access(attack_sql)
                     attack_results.append(("success", attack_sql))
             except ValueError as e:
@@ -487,8 +487,8 @@ class TestAISecurityEdgeCases:
         
         for attack in encoding_attacks:
             try:
-                with patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
-                    from app.infrastructure.ai.chains import _validate_table_access
+                with patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("Table access forbidden")):
+                    from app.integrations.ai.chains import _validate_table_access
                     result = _validate_table_access(attack)
                     # Should handle encoding attacks
                     assert False, f"Encoding attack should be blocked: {attack}"

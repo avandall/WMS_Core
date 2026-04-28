@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.application.unit_of_work.unit_of_work import RepositoryContainer
 from app.infrastructure.persistence.repositories.audit_event_repo import AuditEventRepo
-from app.infrastructure.persistence.repositories.customer_repo import CustomerRepo
-from app.infrastructure.persistence.repositories.document_repo import DocumentRepo
-from app.infrastructure.persistence.repositories.inventory_repo import InventoryRepo
-from app.infrastructure.persistence.repositories.position_repo import PositionRepo
-from app.infrastructure.persistence.repositories.product_repo import ProductRepo
-from app.infrastructure.persistence.repositories.user_repo import UserRepo
-from app.infrastructure.persistence.repositories.warehouse_repo import WarehouseRepo
+from app.modules.customers.infrastructure.repositories.customer_repo import CustomerRepo
+from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
+from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+from app.modules.positions.infrastructure.repositories.position_repo import PositionRepo
+from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
+from app.modules.users.infrastructure.repositories.user_repo import UserRepo
+from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
 
 
 class RepositoryContainerImpl(RepositoryContainer):

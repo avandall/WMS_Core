@@ -5,7 +5,7 @@ Tests for AI chat endpoint mode functionality
 import pytest
 from unittest.mock import patch, MagicMock
 from app.application.dtos.ai import ChatDBRequest
-from app.infrastructure.ai.chains import handle_customer_chat_with_db
+from app.integrations.ai.chains import handle_customer_chat_with_db
 
 
 class TestAIModeFunctionality:
@@ -15,11 +15,11 @@ class TestAIModeFunctionality:
         """Test that mode='sql' forces SQL processing"""
         
         # Mock the SQL-related functions
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found 1 product'):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Found 1 product'):
             
             result = handle_customer_chat_with_db("show me products", mode="sql")
             
@@ -30,7 +30,7 @@ class TestAIModeFunctionality:
     def test_sql_mode_blocks_irrelevant_queries(self):
         """Test that mode='sql' blocks irrelevant queries"""
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
             
             result = handle_customer_chat_with_db("what is the weather", mode="sql")
             
@@ -41,8 +41,8 @@ class TestAIModeFunctionality:
     def test_rag_mode_forces_rag_processing(self):
         """Test that mode='rag' forces RAG processing"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             # Mock successful RAG engine
             mock_engine = MagicMock()
@@ -64,7 +64,7 @@ class TestAIModeFunctionality:
     def test_rag_mode_handles_unavailable_engine(self):
         """Test that mode='rag' handles unavailable RAG engine"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None):
+        with patch('app.integrations.ai.chains.get_rag_engine', return_value=None):
             
             result = handle_customer_chat_with_db("tell me about products", mode="rag")
             
@@ -74,8 +74,8 @@ class TestAIModeFunctionality:
     def test_hybrid_mode_with_rag_success(self):
         """Test that mode='hybrid' uses RAG when successful"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             # Mock successful RAG engine
             mock_engine = MagicMock()
@@ -96,13 +96,13 @@ class TestAIModeFunctionality:
     def test_hybrid_mode_falls_back_to_sql(self):
         """Test that mode='hybrid' falls back to SQL when RAG is insufficient"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found 1 product'):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+             patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Found 1 product'):
             
             # Mock RAG engine
             mock_engine = MagicMock()
@@ -124,9 +124,9 @@ class TestAIModeFunctionality:
     def test_auto_mode_behavior(self):
         """Test that auto mode (default) behaves as expected"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+             patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
             
             # Mock successful RAG engine
             mock_engine = MagicMock()
@@ -148,11 +148,11 @@ class TestAIModeFunctionality:
     def test_mode_case_insensitivity(self):
         """Test that mode parameter is case insensitive"""
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found 1 product'):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'name': 'Test Product'}]), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Found 1 product'):
             
             # Test uppercase mode
             result = handle_customer_chat_with_db("show me products", mode="SQL")
@@ -165,9 +165,9 @@ class TestAIModeFunctionality:
     def test_invalid_mode_defaults_to_auto(self):
         """Test that invalid mode defaults to auto behavior"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+             patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
             
             # Mock successful RAG engine
             mock_engine = MagicMock()

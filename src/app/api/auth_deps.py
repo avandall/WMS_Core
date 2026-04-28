@@ -6,14 +6,14 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 
-from app.core.auth import decode_token
-from app.core.permissions import Permission, role_has_permissions
-from app.core.permissions_store import get_user_overrides
-from app.core.settings import settings
-from app.domain.entities.user import User
-from app.infrastructure.persistence.repositories.user_repo import UserRepo
-from app.core.database import get_session
-from app.application.services.user_service import UserService
+from app.shared.core.auth import decode_token
+from app.shared.core.permissions import Permission, role_has_permissions
+from app.shared.core.permissions_store import get_user_overrides
+from app.shared.core.settings import settings
+from app.modules.users.domain.entities.user import User
+from app.modules.users.infrastructure.repositories.user_repo import UserRepo
+from app.shared.core.database import get_session
+from app.modules.users.application.services.user_service import UserService
 
 
 bearer_scheme = HTTPBearer(auto_error=False)

@@ -5,8 +5,8 @@ Covers all Product entity methods, validation, edge cases, and business rules
 
 import pytest
 from decimal import Decimal
-from app.domain.entities.product import Product
-from app.domain.exceptions import InvalidIDError, InvalidQuantityError, ValidationError
+from app.modules.products.domain.entities.product import Product
+from app.shared.domain.business_exceptions import InvalidIDError, InvalidQuantityError, ValidationError
 
 
 class TestProductEntity:

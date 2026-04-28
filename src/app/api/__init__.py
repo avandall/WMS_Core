@@ -9,7 +9,7 @@ import uuid
 from typing import Any, Optional
 
 
-from app.core.logging import get_logger
+from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -34,10 +34,10 @@ def create_app() -> FastAPI:
 
     from app.api.middleware import audit_middleware, rate_limit_middleware
     from app.api.v1.router import router as v1_router
-    from app.core.database import check_db_connection, init_db
-    from app.core.logging import clear_request_id, set_request_id, setup_logging
-    from app.core.settings import settings
-    from app.domain.exceptions import DomainError, EntityNotFoundError, ValidationError
+    from app.shared.core.database import check_db_connection, init_db
+    from app.shared.core.logging import clear_request_id, set_request_id, setup_logging
+    from app.shared.core.settings import settings
+    from app.shared.domain.business_exceptions import DomainError, EntityNotFoundError, ValidationError
 
     setup_logging(level="INFO")
 

@@ -18,7 +18,7 @@ except ImportError:
 # Make app imports conditional
 try:
     from app.api import app
-    from app.application.services.product_service import ProductService
+    from app.modules.products.application.services.product_service import ProductService
     APP_IMPORTS_AVAILABLE = True
 except ImportError:
     APP_IMPORTS_AVAILABLE = False

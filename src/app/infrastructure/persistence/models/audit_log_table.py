@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Index, String
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
+from app.shared.core.database import Base
 
 
 class AuditLogModel(Base):

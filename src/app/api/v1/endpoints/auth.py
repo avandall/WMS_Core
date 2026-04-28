@@ -11,9 +11,9 @@ from app.application.dtos.auth import (
     UserCreate,
     UserResponse,
 )
-from app.application.services.user_service import UserService
-from app.core.auth import create_token, decode_token
-from app.core.settings import settings
+from app.modules.users.application.services.user_service import UserService
+from app.shared.core.auth import create_token, decode_token
+from app.shared.core.settings import settings
 
 router = APIRouter()
 

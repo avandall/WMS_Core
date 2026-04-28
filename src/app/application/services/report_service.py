@@ -3,15 +3,13 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from app.domain.entities.document import Document, DocumentStatus, DocumentType
-from app.domain.interfaces import (
-    ICustomerRepo,
-    IDocumentRepo,
-    IInventoryRepo,
-    IProductRepo,
-    IWarehouseRepo,
-)
-from app.core.exceptions import (
+from app.modules.documents.domain.entities.document import Document, DocumentStatus, DocumentType
+from app.shared.domain.customer_repo import ICustomerRepo
+from app.shared.domain.document_repo import IDocumentRepo
+from app.shared.domain.inventory_repo import IInventoryRepo
+from app.shared.domain.product_repo import IProductRepo
+from app.shared.domain.warehouse_repo import IWarehouseRepo
+from app.shared.core.exceptions import (
     InvalidReportParametersError,
     ReportGenerationError,
 )

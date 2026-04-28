@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../'))
 
 try:
-    from app.core.settings import settings
+    from app.shared.core.settings import settings
 except ImportError:
     print("Error: Could not import WMS settings.")
     sys.exit(1)

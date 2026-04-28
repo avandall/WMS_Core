@@ -7,11 +7,11 @@ import pytest
 from unittest.mock import Mock, MagicMock, call
 from typing import Dict, List, Any
 
-from app.application.services.warehouse_service import WarehouseService
-from app.domain.entities.inventory import InventoryItem
-from app.domain.entities.product import Product
-from app.domain.entities.warehouse import Warehouse
-from app.domain.exceptions import (
+from app.modules.warehouses.application.services.warehouse_service import WarehouseService
+from app.modules.inventory.domain.entities.inventory import InventoryItem
+from app.modules.products.domain.entities.product import Product
+from app.modules.warehouses.domain.entities.warehouse import Warehouse
+from app.shared.domain.business_exceptions import (
     EntityAlreadyExistsError,
     InsufficientStockError,
     InvalidQuantityError,
@@ -19,7 +19,9 @@ from app.domain.exceptions import (
     ValidationError,
     WarehouseNotFoundError,
 )
-from app.domain.interfaces import IInventoryRepo, IProductRepo, IWarehouseRepo
+from app.shared.domain.inventory_repo import IInventoryRepo
+from app.shared.domain.product_repo import IProductRepo
+from app.shared.domain.warehouse_repo import IWarehouseRepo
 
 
 class TestWarehouseService:

@@ -10,8 +10,8 @@ from dataclasses import is_dataclass
 from app.application.commands.product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
 from app.application.queries.product_queries import GetProductQuery, GetAllProductsQuery
 from app.application.validation.product_validators import ProductValidator
-from app.domain.entities.product import Product
-from app.application.services.product_service import ProductService
+from app.modules.products.domain.entities.product import Product
+from app.modules.products.application.services.product_service import ProductService
 
 
 class TestCommandPatternContinuous:

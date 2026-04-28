@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from app.api.auth_deps import get_current_user, require_permissions
 from app.api.dependencies import get_report_service
 from app.application.services.report_service import ReportService
-from app.core.permissions import Permission
+from app.shared.core.permissions import Permission
 
 router = APIRouter(
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))]

@@ -5,8 +5,8 @@ Comprehensive error handling and failure scenario tests for AI functionality
 import pytest
 from unittest.mock import patch, MagicMock
 from app.application.dtos.ai import ChatDBRequest
-from app.infrastructure.ai.chains import handle_customer_chat_with_db, get_rag_engine
-from app.infrastructure.ai.sql_exec import execute_readonly_sql
+from app.integrations.ai.chains import handle_customer_chat_with_db, get_rag_engine
+from app.integrations.ai.sql_exec import execute_readonly_sql
 
 
 class TestAIErrorHandling:
@@ -15,7 +15,7 @@ class TestAIErrorHandling:
     def test_rag_engine_initialization_failure(self):
         """Test handling when RAG engine fails to initialize"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine:
             # Mock initialization failure
             mock_get_engine.return_value = None
             
@@ -27,8 +27,8 @@ class TestAIErrorHandling:
     def test_rag_engine_runtime_exception(self):
         """Test handling when RAG engine throws runtime exception"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -45,7 +45,7 @@ class TestAIErrorHandling:
         """Test handling of SQL generation failures"""
         
         try:
-            with patch('app.infrastructure.ai.chains.generate_sql_from_question', side_effect=Exception("SQL generation failed")):
+            with patch('app.integrations.ai.chains.generate_sql_from_question', side_effect=Exception("SQL generation failed")):
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 
                 # Should handle exception gracefully
@@ -59,10 +59,10 @@ class TestAIErrorHandling:
         """Test handling when SQL validation fails"""
         
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM forbidden_table'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', side_effect=ValueError("Access to forbidden tables not allowed")), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=ValueError("Access to forbidden tables not allowed")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM forbidden_table'), \
+                 patch('app.integrations.ai.chains._validate_table_access', side_effect=ValueError("Access to forbidden tables not allowed")), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=ValueError("Access to forbidden tables not allowed")):
                 
                 result = handle_customer_chat_with_db("show me forbidden data", mode="sql")
                 
@@ -77,10 +77,10 @@ class TestAIErrorHandling:
         """Test handling when SQL execution times out"""
         
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=Exception("Query timeout")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=Exception("Query timeout")):
                 
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 
@@ -95,11 +95,11 @@ class TestAIErrorHandling:
         """Test handling when SQL result summarization fails"""
         
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'name': 'Product 1'}]), \
-                 patch('app.infrastructure.ai.chains.summarize_rows', side_effect=Exception("Summarization failed")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'name': 'Product 1'}]), \
+                 patch('app.integrations.ai.chains.summarize_rows', side_effect=Exception("Summarization failed")):
                 
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 
@@ -113,7 +113,7 @@ class TestAIErrorHandling:
     def test_hybrid_mode_rag_unavailable(self):
         """Test hybrid mode when RAG engine is unavailable"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None):
+        with patch('app.integrations.ai.chains.get_rag_engine', return_value=None):
             
             result = handle_customer_chat_with_db("tell me about products", mode="hybrid")
             
@@ -123,13 +123,13 @@ class TestAIErrorHandling:
     def test_hybrid_mode_rag_failure_with_sql_fallback(self):
         """Test hybrid mode when RAG fails and falls back to SQL"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'name': 'Product 1'}]), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found 1 product'):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+             patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'name': 'Product 1'}]), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Found 1 product'):
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -151,8 +151,8 @@ class TestAIErrorHandling:
     def test_auto_mode_complete_failure(self):
         """Test auto mode when both RAG and SQL fail"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None), \
-             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+        with patch('app.integrations.ai.chains.get_rag_engine', return_value=None), \
+             patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
             
             result = handle_customer_chat_with_db("tell me about products", mode="auto")
             
@@ -165,10 +165,10 @@ class TestAIErrorHandling:
         """Test handling when database connection pool is exhausted"""
         
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=Exception("Connection pool exhausted")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=Exception("Connection pool exhausted")):
                 
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 
@@ -194,9 +194,9 @@ class TestAIErrorHandling:
         ]
         
         for query in malformed_queries:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=query), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value=query):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value=query), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value=query):
                 
                 try:
                     result = handle_customer_chat_with_db(query, mode="sql")
@@ -211,10 +211,10 @@ class TestAIErrorHandling:
         
         # Mock memory exhaustion during SQL execution
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=MemoryError("Out of memory")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=MemoryError("Out of memory")):
                 
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 
@@ -228,8 +228,8 @@ class TestAIErrorHandling:
     def test_network_connectivity_issues(self):
         """Test handling of network connectivity issues"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -245,8 +245,8 @@ class TestAIErrorHandling:
     def test_api_key_authentication_failures(self):
         """Test handling of API key authentication failures"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -269,11 +269,11 @@ class TestAIErrorHandling:
             {'id': {'nested': 'dict'}, 'name': [1, 2, 3]},
         ]
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=corrupted_data), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Processed corrupted data'):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=corrupted_data), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Processed corrupted data'):
             
             result = handle_customer_chat_with_db("show me products", mode="sql")
             
@@ -289,7 +289,7 @@ class TestAIErrorHandling:
         results = []
         
         def failing_worker():
-            with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None):
+            with patch('app.integrations.ai.chains.get_rag_engine', return_value=None):
                 result = handle_customer_chat_with_db("test message", mode="rag")
                 results.append(result["mode"])
         
@@ -313,10 +313,10 @@ class TestAIErrorHandling:
         
         # Mock memory exhaustion during SQL execution
         try:
-            with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-                 patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=MemoryError("Out of memory")):
+            with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+                 patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=MemoryError("Out of memory")):
                 
                 result = handle_customer_chat_with_db("show me products", mode="sql")
                 
@@ -330,8 +330,8 @@ class TestAIErrorHandling:
     def test_network_connectivity_issues(self):
         """Test handling of network connectivity issues"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -347,8 +347,8 @@ class TestAIErrorHandling:
     def test_api_key_authentication_failures(self):
         """Test handling of API key authentication failures"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -371,11 +371,11 @@ class TestAIErrorHandling:
             {'id': {'nested': 'dict'}, 'name': [1, 2, 3]},
         ]
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=corrupted_data), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Processed corrupted data'):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', return_value=corrupted_data), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Processed corrupted data'):
             
             result = handle_customer_chat_with_db("show me products", mode="sql")
             
@@ -391,7 +391,7 @@ class TestAIErrorHandling:
         results = []
         
         def failing_worker():
-            with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None):
+            with patch('app.integrations.ai.chains.get_rag_engine', return_value=None):
                 result = handle_customer_chat_with_db("test message", mode="rag")
                 results.append(result["mode"])
         
@@ -415,9 +415,9 @@ class TestAIErrorHandling:
         
         # Scenario: RAG fails, SQL fails, everything fails
         try:
-            with patch('app.infrastructure.ai.chains.get_rag_engine', return_value=None), \
-                 patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                 patch('app.infrastructure.ai.chains.generate_sql_from_question', side_effect=Exception("SQL generation failed")):
+            with patch('app.integrations.ai.chains.get_rag_engine', return_value=None), \
+                 patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                 patch('app.integrations.ai.chains.generate_sql_from_question', side_effect=Exception("SQL generation failed")):
                 
                 result = handle_customer_chat_with_db("tell me about products", mode="auto")
                 
@@ -431,8 +431,8 @@ class TestAIErrorHandling:
     def test_resource_cleanup_on_failure(self):
         """Test proper resource cleanup when operations fail"""
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine

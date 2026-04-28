@@ -8,14 +8,14 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime
 
-from app.domain.entities.warehouse import Warehouse
-from app.domain.entities.inventory import InventoryItem
-from app.domain.entities.product import Product
-from app.domain.entities.document import Document, DocumentProduct, DocumentType, DocumentStatus
-from app.application.services.warehouse_service import WarehouseService
-from app.application.services.inventory_service import InventoryService
-from app.application.services.document_service import DocumentService
-from app.application.services.product_service import ProductService
+from app.modules.warehouses.domain.entities.warehouse import Warehouse
+from app.modules.inventory.domain.entities.inventory import InventoryItem
+from app.modules.products.domain.entities.product import Product
+from app.modules.documents.domain.entities.document import Document, DocumentProduct, DocumentType, DocumentStatus
+from app.modules.warehouses.application.services.warehouse_service import WarehouseService
+from app.modules.inventory.application.services.inventory_service import InventoryService
+from app.modules.documents.application.services.document_service import DocumentService
+from app.modules.products.application.services.product_service import ProductService
 
 
 class TestWarehouseOperationsFunctional:

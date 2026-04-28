@@ -8,7 +8,7 @@ import time
 import concurrent.futures
 from unittest.mock import patch, MagicMock
 from app.application.dtos.ai import ChatDBRequest
-from app.infrastructure.ai.chains import handle_customer_chat_with_db, get_rag_engine
+from app.integrations.ai.chains import handle_customer_chat_with_db, get_rag_engine
 
 
 class TestAIPerformance:
@@ -22,11 +22,11 @@ class TestAIPerformance:
         
         def sql_worker(request_id):
             try:
-                with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                     patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
-                     patch('app.infrastructure.ai.chains._validate_table_access', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
-                     patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'id': request_id, 'name': f'Product {request_id}'}]), \
-                     patch('app.infrastructure.ai.chains.summarize_rows', return_value=f'Found product {request_id}'):
+                with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                     patch('app.integrations.ai.chains.generate_sql_from_question', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
+                     patch('app.integrations.ai.chains._validate_table_access', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
+                     patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'id': request_id, 'name': f'Product {request_id}'}]), \
+                     patch('app.integrations.ai.chains.summarize_rows', return_value=f'Found product {request_id}'):
                     
                     result = handle_customer_chat_with_db(f"show product {request_id}", mode="sql")
                     results.append((request_id, result["mode"], result["sql"]))
@@ -61,8 +61,8 @@ class TestAIPerformance:
         
         def rag_worker(request_id):
             try:
-                with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                     patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+                with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                     patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
                     
                     mock_engine = MagicMock()
                     mock_get_engine.return_value = mock_engine
@@ -108,19 +108,19 @@ class TestAIPerformance:
                 mode = {"sql": "sql", "rag": "rag", "hybrid": "hybrid", "auto": "auto"}[mode_suffix]
                 
                 if mode == "sql":
-                    with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-                         patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
-                         patch('app.infrastructure.ai.chains._validate_table_access', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
-                         patch('app.infrastructure.ai.chains.execute_readonly_sql', return_value=[{'id': request_id}]), \
-                         patch('app.infrastructure.ai.chains.summarize_rows', return_value=f'SQL result {request_id}'):
+                    with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+                         patch('app.integrations.ai.chains.generate_sql_from_question', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
+                         patch('app.integrations.ai.chains._validate_table_access', return_value=f'SELECT * FROM products WHERE id = {request_id}'), \
+                         patch('app.integrations.ai.chains.execute_readonly_sql', return_value=[{'id': request_id}]), \
+                         patch('app.integrations.ai.chains.summarize_rows', return_value=f'SQL result {request_id}'):
                         
                         result = handle_customer_chat_with_db(f"show product {request_id}", mode=mode)
                         results.append((mode_suffix, request_id, result["mode"]))
                         
                 elif mode in ["rag", "hybrid", "auto"]:
-                    with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                         patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
-                         patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
+                    with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                         patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+                         patch('app.integrations.ai.chains.is_relevant_query', return_value=False):
                         
                         mock_engine = MagicMock()
                         mock_get_engine.return_value = mock_engine
@@ -186,8 +186,8 @@ class TestAIPerformance:
                     engine_instance = MagicMock()
             return engine_instance
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine', side_effect=mock_get_engine), \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+        with patch('app.integrations.ai.chains.get_rag_engine', side_effect=mock_get_engine), \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
             
             mock_hybrid.return_value = {
                 "success": True,
@@ -227,8 +227,8 @@ class TestAIPerformance:
         
         def load_worker(worker_id):
             try:
-                with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                     patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+                with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                     patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
                     
                     mock_engine = MagicMock()
                     mock_get_engine.return_value = mock_engine
@@ -281,8 +281,8 @@ class TestAIPerformance:
             initial_memory = 0
         
         def memory_worker(worker_id):
-            with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-                 patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+            with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+                 patch('app.integrations.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
                 
                 mock_engine = MagicMock()
                 mock_get_engine.return_value = mock_engine
@@ -325,11 +325,11 @@ class TestAIPerformance:
             connection_count -= 1
             return [{'id': 1, 'name': 'Test Product'}]
         
-        with patch('app.infrastructure.ai.chains.is_relevant_query', return_value=True), \
-             patch('app.infrastructure.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
-             patch('app.infrastructure.ai.chains.execute_readonly_sql', side_effect=mock_execute_sql), \
-             patch('app.infrastructure.ai.chains.summarize_rows', return_value='Found products'):
+        with patch('app.integrations.ai.chains.is_relevant_query', return_value=True), \
+             patch('app.integrations.ai.chains.generate_sql_from_question', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains._validate_table_access', return_value='SELECT * FROM products'), \
+             patch('app.integrations.ai.chains.execute_readonly_sql', side_effect=mock_execute_sql), \
+             patch('app.integrations.ai.chains.summarize_rows', return_value='Found products'):
             
             results = []
             
@@ -367,8 +367,8 @@ class TestAIPerformance:
         start_time = time.time()
         results = []
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking', side_effect=slow_hybrid_search):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking', side_effect=slow_hybrid_search):
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -414,8 +414,8 @@ class TestAIPerformance:
             finally:
                 cleanup_tracker["count"] += 1
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking', side_effect=mock_hybrid_search):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking', side_effect=mock_hybrid_search):
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine
@@ -447,8 +447,8 @@ class TestAIPerformance:
                     "mode": "rag"
                 }
         
-        with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking', side_effect=flaky_hybrid_search):
+        with patch('app.integrations.ai.chains.get_rag_engine') as mock_get_engine, \
+             patch('app.integrations.ai.chains.hybrid_search_with_reranking', side_effect=flaky_hybrid_search):
             
             mock_engine = MagicMock()
             mock_get_engine.return_value = mock_engine

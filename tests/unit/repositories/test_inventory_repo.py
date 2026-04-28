@@ -8,9 +8,9 @@ from unittest.mock import Mock, MagicMock, call, patch
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.infrastructure.persistence.repositories.inventory_repo import InventoryRepo
-from app.domain.entities.inventory import InventoryItem
-from app.domain.exceptions import InvalidQuantityError, InsufficientStockError
+from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+from app.modules.inventory.domain.entities.inventory import InventoryItem
+from app.shared.domain.business_exceptions import InvalidQuantityError, InsufficientStockError
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
     from app.infrastructure.persistence.models import InventoryModel

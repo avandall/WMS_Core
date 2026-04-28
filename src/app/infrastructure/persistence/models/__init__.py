@@ -10,22 +10,22 @@ from importlib import import_module
 from typing import Any
 
 
-from app.core.database import Base
+from app.shared.core.database import Base
 
 _LAZY_EXPORTS: dict[str, str] = {
-    "UserModel": "app.infrastructure.persistence.models.user_table",
-    "ProductModel": "app.infrastructure.persistence.models.product_table",
-    "InventoryModel": "app.infrastructure.persistence.models.inventory_table",
-    "WarehouseModel": "app.infrastructure.persistence.models.warehouse_table",
-    "WarehouseInventoryModel": "app.infrastructure.persistence.models.warehouse_table",
-    "DocumentModel": "app.infrastructure.persistence.models.document_table",
-    "DocumentItemModel": "app.infrastructure.persistence.models.document_item_table",
-    "CustomerModel": "app.infrastructure.persistence.models.customer_table",
-    "CustomerPurchaseModel": "app.infrastructure.persistence.models.customer_purchase_table",
+    "UserModel": "app.modules.users.infrastructure.models.user_table",
+    "ProductModel": "app.modules.products.infrastructure.models.product_table",
+    "InventoryModel": "app.modules.inventory.infrastructure.models.inventory_table",
+    "WarehouseModel": "app.modules.warehouses.infrastructure.models.warehouse_table",
+    "WarehouseInventoryModel": "app.modules.warehouses.infrastructure.models.warehouse_table",
+    "DocumentModel": "app.modules.documents.infrastructure.models.document_table",
+    "DocumentItemModel": "app.modules.documents.infrastructure.models.document_item_table",
+    "CustomerModel": "app.modules.customers.infrastructure.models.customer_table",
+    "CustomerPurchaseModel": "app.modules.customers.infrastructure.models.customer_purchase_table",
     "AuditLogModel": "app.infrastructure.persistence.models.audit_log_table",
     "AuditEventModel": "app.infrastructure.persistence.models.audit_event_table",
-    "PositionModel": "app.infrastructure.persistence.models.position_table",
-    "PositionInventoryModel": "app.infrastructure.persistence.models.position_inventory_table",
+    "PositionModel": "app.modules.positions.infrastructure.models.position_table",
+    "PositionInventoryModel": "app.modules.inventory.infrastructure.models.position_inventory_table",
 }
 
 _MODEL_MODULES: list[str] = sorted(set(_LAZY_EXPORTS.values()))

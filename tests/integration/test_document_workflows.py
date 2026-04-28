@@ -25,17 +25,17 @@ except ImportError:
 
 # Make app imports conditional
 try:
-    from app.domain.entities.document import (
+    from app.modules.documents.domain.entities.document import (
         Document,
         DocumentProduct,
         DocumentType,
         DocumentStatus
     )
-    from app.application.services.document_service import DocumentService
-    from app.infrastructure.persistence.repositories.document_repo import DocumentRepo
-    from app.infrastructure.persistence.repositories.warehouse_repo import WarehouseRepo
-    from app.infrastructure.persistence.repositories.product_repo import ProductRepo
-    from app.infrastructure.persistence.repositories.inventory_repo import InventoryRepo
+    from app.modules.documents.application.services.document_service import DocumentService
+    from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
+    from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
+    from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
     from app.infrastructure.persistence.models import DocumentModel, DocumentItemModel, WarehouseModel, ProductModel
     APP_IMPORTS_AVAILABLE = True
 except ImportError:

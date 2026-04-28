@@ -2,7 +2,7 @@
 
 from typing import Dict, List
 
-from app.domain.exceptions import ValidationError
+from app.shared.domain.business_exceptions import ValidationError
 
 
 class ProductValidator:

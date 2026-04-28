@@ -8,8 +8,8 @@ from unittest.mock import Mock, MagicMock, call, patch
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
-from app.infrastructure.persistence.repositories.product_repo import ProductRepo
-from app.domain.entities.product import Product
+from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
+from app.modules.products.domain.entities.product import Product
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
     from app.infrastructure.persistence.models import ProductModel, InventoryModel
@@ -520,7 +520,7 @@ class TestProductRepo:
         mock_session.get.return_value = product_model  # Return the saved product model
         
         # Delete product
-        with patch('app.infrastructure.persistence.repositories.product_repo.InventoryModel') as mock_inventory_model:
+        with patch('app.modules.products.infrastructure.repositories.product_repo.InventoryModel') as mock_inventory_model:
             mock_inventory_model.return_value = Mock()
             product_repo.delete(1)
         

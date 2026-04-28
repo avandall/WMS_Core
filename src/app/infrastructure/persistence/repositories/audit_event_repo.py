@@ -6,8 +6,8 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.logging import get_logger, request_id_ctx
-from app.core.transaction import TransactionalRepository
+from app.shared.core.logging import get_logger, request_id_ctx
+from app.shared.core.transaction import TransactionalRepository
 from app.infrastructure.persistence.models import AuditEventModel
 
 logger = get_logger(__name__)
