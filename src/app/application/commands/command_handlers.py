@@ -9,8 +9,8 @@ from app.shared.domain.business_exceptions import (
     EntityNotFoundError,
     ValidationError,
 )
-from app.shared.domain.inventory_repo import IInventoryRepo
-from app.shared.domain.product_repo import IProductRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from .product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
 
 logger = get_logger(__name__)

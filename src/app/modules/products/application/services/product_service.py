@@ -5,8 +5,8 @@ from typing import Dict, List, Optional
 from app.shared.core.logging import get_logger
 from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import ValidationError
-from app.shared.domain.inventory_repo import IInventoryRepo
-from app.shared.domain.product_repo import IProductRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.application.commands import (
     CreateProductCommand,
     DeleteProductCommand,

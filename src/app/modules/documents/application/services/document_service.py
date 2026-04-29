@@ -19,12 +19,12 @@ from app.shared.domain.business_exceptions import (
     WarehouseNotFoundError,
 )
 from app.shared.domain.audit_event_repo import IAuditEventRepo
-from app.shared.domain.customer_repo import ICustomerRepo
-from app.shared.domain.document_repo import IDocumentRepo
-from app.shared.domain.inventory_repo import IInventoryRepo
-from app.shared.domain.position_repo import IPositionRepo
-from app.shared.domain.product_repo import IProductRepo
-from app.shared.domain.warehouse_repo import IWarehouseRepo
+from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo
+from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+from app.modules.positions.domain.interfaces.position_repo import IPositionRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
+from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
 from app.shared.domain.business_exceptions import DocumentNotFoundError
 from app.shared.utils.infrastructure import document_id_generator
 

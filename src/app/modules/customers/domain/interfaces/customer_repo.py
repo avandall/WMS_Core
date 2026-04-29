@@ -3,6 +3,8 @@ from typing import List
 
 
 class ICustomerRepo(ABC):
+    """Interface for customer repository operations"""
+    
     @abstractmethod
     def create(self, data: dict):
         pass
@@ -30,3 +32,7 @@ class ICustomerRepo(ABC):
     @abstractmethod
     def update(self, customer_id: int, data: dict) -> None:
         pass
+
+
+# Alias for backward compatibility
+CustomerRepo = ICustomerRepo

@@ -292,8 +292,8 @@ from app.application.queries.product_queries import GetProductQuery, GetAllProdu
 from app.application.validation.product_validators import ProductValidator
 from app.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
 from app.modules.products.domain.entities.product import Product
-from app.shared.domain.product_repo import IProductRepo
-from app.shared.domain.inventory_repo import IInventoryRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
 # Import ProductAuthorizer conditionally to avoid FastAPI dependency issues
 try:

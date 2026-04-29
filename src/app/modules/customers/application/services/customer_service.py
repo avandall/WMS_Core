@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from app.shared.domain.customer_repo import ICustomerRepo
+from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo
 
 
 def _get_field(obj: Any, key: str, default: Any = None) -> Any:

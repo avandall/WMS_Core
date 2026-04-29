@@ -25,3 +25,7 @@ class IUserRepo(ABC):
     @abstractmethod
     def delete(self, user_id: int) -> None:
         pass
+
+
+# Alias for backward compatibility
+UserRepo = IUserRepo

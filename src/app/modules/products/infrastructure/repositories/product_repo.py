@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.modules.products.domain.entities.product import Product
 from app.shared.core.transaction import TransactionalRepository
-from app.shared.domain.product_repo import IProductRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.infrastructure.persistence.models import InventoryModel, ProductModel
 
 

@@ -10,8 +10,8 @@ from typing import Dict, List
 from app.modules.products.application.services.product_service import ProductService
 from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import ValidationError, EntityNotFoundError
-from app.shared.domain.product_repo import IProductRepo
-from app.shared.domain.inventory_repo import IInventoryRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 
 
 class TestProductService:

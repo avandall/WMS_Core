@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from app.modules.inventorys.domain.entities.inventory import InventoryItem
+    from app.modules.inventory.domain.entities.inventory import InventoryItem
 
 
 class IInventoryRepo(ABC):
@@ -29,3 +29,7 @@ class IInventoryRepo(ABC):
     @abstractmethod
     def remove_quantity(self, product_id: int, quantity: int) -> None:
         pass
+
+
+# Alias for backward compatibility
+InventoryRepo = IInventoryRepo

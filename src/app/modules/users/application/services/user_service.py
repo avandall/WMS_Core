@@ -6,7 +6,7 @@ from app.shared.core.auth import create_token, hash_password, verify_password
 from app.shared.core.settings import settings
 from app.modules.users.domain.entities.user import User
 from app.shared.domain.business_exceptions import EntityNotFoundError, ValidationError
-from app.shared.domain.user_repo import IUserRepo
+from app.modules.users.domain.interfaces.user_repo import IUserRepo
 
 
 class UserService:

@@ -25,3 +25,7 @@ class IDocumentRepo(ABC):
     @abstractmethod
     def delete(self, document_id: int) -> None:
         pass
+
+
+# Alias for backward compatibility
+DocumentRepo = IDocumentRepo

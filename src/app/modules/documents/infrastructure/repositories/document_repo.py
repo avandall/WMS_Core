@@ -12,7 +12,7 @@ from app.modules.documents.domain.entities.document import (
 )
 from app.shared.utils.infrastructure.id_generator import IDGenerator
 from app.shared.core.transaction import TransactionalRepository
-from app.shared.domain.document_repo import IDocumentRepo
+from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
 from app.infrastructure.persistence.models import DocumentItemModel, DocumentModel
 
 

@@ -25,3 +25,7 @@ class IProductRepo(ABC):
     @abstractmethod
     def delete(self, product_id: int) -> None:
         pass
+
+
+# Alias for backward compatibility
+ProductRepo = IProductRepo

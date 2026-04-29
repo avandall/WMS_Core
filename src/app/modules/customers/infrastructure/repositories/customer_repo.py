@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.shared.domain.customer_repo import ICustomerRepo
+from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo
 from app.infrastructure.persistence.models import CustomerModel, CustomerPurchaseModel
 
 

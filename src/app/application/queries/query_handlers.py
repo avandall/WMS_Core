@@ -4,7 +4,7 @@ from typing import List
 
 from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import EntityNotFoundError
-from app.shared.domain.product_repo import IProductRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from .product_queries import GetProductQuery, GetAllProductsQuery
 
 

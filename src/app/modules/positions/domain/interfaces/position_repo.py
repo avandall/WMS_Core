@@ -62,3 +62,7 @@ class IPositionRepo(ABC):
         preferred_position_codes: Optional[List[str]] = None,
     ):
         pass
+
+
+# Alias for backward compatibility
+PositionRepo = IPositionRepo

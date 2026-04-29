@@ -13,9 +13,9 @@ from app.shared.domain.business_exceptions import (
     ValidationError,
     WarehouseNotFoundError,
 )
-from app.shared.domain.inventory_repo import IInventoryRepo
-from app.shared.domain.product_repo import IProductRepo
-from app.shared.domain.warehouse_repo import IWarehouseRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
+from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
 from app.shared.utils.infrastructure import warehouse_id_generator
 
 logger = get_logger(__name__)

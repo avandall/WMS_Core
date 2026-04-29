@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.shared.domain.document_repo import IDocumentRepo
-from app.shared.domain.inventory_repo import IInventoryRepo
-from app.shared.domain.product_repo import IProductRepo
-from app.shared.domain.warehouse_repo import IWarehouseRepo
+from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
+from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+from app.modules.products.domain.interfaces.product_repo import IProductRepo
+from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
 
 
 class WarehouseOperationsService:
