@@ -3,7 +3,7 @@
 from fastapi import HTTPException
 
 from app.shared.core.permissions import Permission, role_has_permissions
-from app.application.dtos.product import ProductUpdate
+from app.modules.products.application.dtos.product import ProductUpdate
 
 
 class ProductAuthorizer:

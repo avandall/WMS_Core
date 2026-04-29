@@ -15,11 +15,9 @@ from app.shared.domain.business_exceptions import (
     WarehouseNotFoundError,
 )
 from app.modules.positions.domain.entities.position import Position, PositionInventoryItem
-from app.infrastructure.persistence.models import (
-    PositionInventoryModel,
-    PositionModel,
-    WarehouseModel,
-)
+from app.modules.positions.infrastructure.models.position import PositionModel
+from app.modules.inventory.infrastructure.models.position_inventory import PositionInventoryModel
+from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
 
 logger = get_logger(__name__)
 

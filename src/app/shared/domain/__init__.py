@@ -1,8 +1,4 @@
-"""Domain exceptions module.
-
-This module contains all exceptions related to business logic, validation,
-and domain entity operations.
-"""
+"""Shared domain layer with base classes and common exceptions."""
 
 from .business_exceptions import (
     DomainError,
@@ -12,36 +8,29 @@ from .business_exceptions import (
     EntityNotFoundError,
     EntityAlreadyExistsError,
     BusinessRuleViolationError,
-    InvalidDocumentStatusError,
     InsufficientStockError,
-    ProductNotFoundError,
-    WarehouseNotFoundError,
-    DocumentNotFoundError,
-    DuplicateWarehouseError,
-    DuplicateProductError,
-    DuplicateDocumentError,
     create_validation_error,
     create_business_rule_error,
     create_entity_not_found_error,
 )
+from .entity import DomainEntity
 
 __all__ = [
+    # Base classes
     "DomainError",
     "ValidationError",
     "InvalidIDError",
-    "InvalidQuantityError", 
+    "InvalidQuantityError",
+    # Entity errors
     "EntityNotFoundError",
     "EntityAlreadyExistsError",
+    # Business rule violations
     "BusinessRuleViolationError",
-    "InvalidDocumentStatusError",
     "InsufficientStockError",
-    "ProductNotFoundError",
-    "WarehouseNotFoundError",
-    "DocumentNotFoundError",
-    "DuplicateWarehouseError",
-    "DuplicateProductError",
-    "DuplicateDocumentError",
+    # Factory functions
     "create_validation_error",
     "create_business_rule_error",
     "create_entity_not_found_error",
+    # Base entity
+    "DomainEntity",
 ]

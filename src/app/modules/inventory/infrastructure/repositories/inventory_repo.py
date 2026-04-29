@@ -10,7 +10,7 @@ from app.shared.domain.business_exceptions import (
 from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
-from app.infrastructure.persistence.models import InventoryModel
+from app.modules.inventory.infrastructure.models.inventory import InventoryModel
 
 
 class InventoryRepo(TransactionalRepository, IInventoryRepo):

@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_warehouse_operations_service
+from app.api.api_deps import get_warehouse_operations_service
 from app.modules.warehouses.application.services.warehouse_operations_service import WarehouseOperationsService
 from app.shared.core.permissions import Permission
 

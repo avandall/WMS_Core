@@ -12,20 +12,19 @@ from app.modules.documents.domain.entities.document import (
 )
 from app.shared.domain.business_exceptions import (
     InsufficientStockError,
-    InvalidDocumentStatusError,
     InvalidQuantityError,
-    ProductNotFoundError,
     ValidationError,
-    WarehouseNotFoundError,
 )
-from app.shared.domain.audit_event_repo import IAuditEventRepo
+from app.modules.documents.domain.exceptions import InvalidDocumentStatusError, DocumentNotFoundError
+from app.modules.products.domain.exceptions import ProductNotFoundError
+from app.modules.warehouses.domain.exceptions import WarehouseNotFoundError
+from app.modules.audit.domain.interfaces.audit_event_repo import IAuditEventRepo
 from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.positions.domain.interfaces.position_repo import IPositionRepo
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
-from app.shared.domain.business_exceptions import DocumentNotFoundError
 from app.shared.utils.infrastructure import document_id_generator
 
 logger = get_logger(__name__)
@@ -76,6 +75,30 @@ class DocumentService:
         )
         self.document_repo.save(document)
         return document
+
+    def get_documents(
+        self,
+        doc_type: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> List[Document]:
+        all_docs = self.document_repo.get_all()
+        if doc_type:
+            doc_type_enum = DocumentType(doc_type.upper())
+            filtered_docs = [doc for doc in all_docs if doc.doc_type == doc_type_enum]
+        else:
+            filtered_docs = all_docs
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        return filtered_docs[start_idx:end_idx]
+
+    def delete_document(self, document_id: int) -> None:
+        document = self.get_document(document_id)
+        if document.status.value.upper() != "DRAFT":
+            raise InvalidDocumentStatusError(
+                f"Cannot delete document with status {document.status.value}. Only DRAFT documents can be deleted."
+            )
+        self.document_repo.delete(document_id)
 
     def create_export_document(
         self,

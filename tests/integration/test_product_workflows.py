@@ -19,7 +19,7 @@ try:
     from app.api import app
     from app.modules.products.application.services.product_service import ProductService
     from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
-    from app.infrastructure.persistence.models import ProductModel
+    from app.modules.products.infrastructure.models.product import ProductModel
     APP_IMPORTS_AVAILABLE = True
 except ImportError:
     APP_IMPORTS_AVAILABLE = False

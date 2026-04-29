@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 from typing import Dict, List, Optional
 
 from app.shared.core.logging import get_logger
@@ -7,18 +9,18 @@ from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import ValidationError
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
-from app.application.commands import (
+from app.modules.products.application.commands import (
     CreateProductCommand,
     DeleteProductCommand,
     ProductCommandHandler,
     UpdateProductCommand,
 )
-from app.application.queries import (
+from app.modules.products.application.queries import (
     GetAllProductsQuery,
     GetProductQuery,
     ProductQueryHandler,
 )
-from app.application.validation import ProductValidator
+from app.modules.products.application.validation import ProductValidator
 
 logger = get_logger(__name__)
 
@@ -142,3 +144,16 @@ class ProductService:
                 created += 1
                 
         return {"created": created, "updated": updated}
+
+    def import_products_from_csv(self, content: bytes) -> Dict:
+        """Parse CSV content and import products."""
+        decoded = content.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(decoded))
+        required = {"product_id", "name", "price"}
+        rows = []
+        for row in reader:
+            if not required.issubset(row.keys()):
+                raise ValidationError("CSV must include product_id,name,price")
+            rows.append(row)
+        result = self.import_products(rows)
+        return {"summary": result, "count": len(rows)}

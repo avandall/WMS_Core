@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import csv
-import io
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.auth_deps import get_current_user, require_permissions
 from app.api.authorization.product_authorizers import ProductAuthorizer
-from app.api.dependencies import get_product_service
-from app.application.dtos.product import ProductCreate, ProductResponse, ProductUpdate
+from app.api.api_deps import get_product_service
+from app.modules.products.application.dtos.product import ProductCreate, ProductResponse, ProductUpdate
 from app.modules.products.application.services.product_service import ProductService
 from app.shared.core.permissions import Permission
 
@@ -95,14 +92,6 @@ async def import_products_csv(
     if file.content_type not in {"text/csv", "application/vnd.ms-excel", "application/csv"}:
         raise HTTPException(status_code=400, detail="CSV file required")
     content = await file.read()
-    decoded = content.decode("utf-8")
-    reader = csv.DictReader(io.StringIO(decoded))
-    required = {"product_id", "name", "price"}
-    rows = []
-    for row in reader:
-        if not required.issubset(row.keys()):
-            raise HTTPException(status_code=400, detail="CSV must include product_id,name,price")
-        rows.append(row)
-    result = service.import_products(rows)
-    return {"summary": result, "count": len(rows)}
+    result = service.import_products_from_csv(content)
+    return result
 

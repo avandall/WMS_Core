@@ -7,9 +7,9 @@ import pytest
 from unittest.mock import Mock
 from dataclasses import is_dataclass
 
-from app.application.commands.product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
-from app.application.queries.product_queries import GetProductQuery, GetAllProductsQuery
-from app.application.validation.product_validators import ProductValidator
+from app.modules.products.application.commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
+from app.modules.products.application.queries import GetProductQuery, GetAllProductsQuery
+from app.modules.products.application.validation import ProductValidator
 from app.modules.products.domain.entities.product import Product
 from app.modules.products.application.services.product_service import ProductService
 

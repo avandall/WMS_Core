@@ -67,11 +67,25 @@ def get_session():
         db.close()
 
 
+def import_all_models():
+    """Import all SQLAlchemy models from all modules for database initialization."""
+    # Import module-specific models
+    from app.modules.audit.infrastructure.models.audit_event import AuditEventModel
+    from app.modules.customers.infrastructure.models.customer import CustomerModel
+    from app.modules.customers.infrastructure.models.customer_purchase import CustomerPurchaseModel
+    from app.modules.documents.infrastructure.models.document import DocumentModel
+    from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
+    from app.modules.inventory.infrastructure.models.inventory import InventoryModel
+    from app.modules.inventory.infrastructure.models.position_inventory import PositionInventoryModel
+    from app.modules.positions.infrastructure.models.position import PositionModel
+    from app.modules.products.infrastructure.models.product import ProductModel
+    from app.modules.users.infrastructure.models.user import UserModel
+    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
+
+
 def init_db() -> None:
     try:
-        from app.infrastructure.persistence import models as persistence_models
-
-        persistence_models.import_all_models()
+        import_all_models()
 
         if engine.dialect.name == "postgresql":
             lock_id = 471999

@@ -6,23 +6,9 @@ Tests JWT token generation, validation, and security
 import pytest
 import time
 
-# Make JWT import conditional
-try:
-    import jwt
-    JWT_AVAILABLE = True
-except ImportError:
-    JWT_AVAILABLE = False
-    jwt = None
-
-# Make FastAPI imports conditional
-try:
-    from fastapi.testclient import TestClient
-    from app.api import app
-    FASTAPI_AVAILABLE = True
-except ImportError:
-    FASTAPI_AVAILABLE = False
-    TestClient = None
-    app = None
+import jwt
+from fastapi.testclient import TestClient
+from app.api import app
 
 
 class TestJWTSecurity:
@@ -34,7 +20,6 @@ class TestJWTSecurity:
 
 
 
-@pytest.mark.skipif(not JWT_AVAILABLE, reason="JWT library not available")
 class TestJWTValidation:
     """Test JWT token validation and security"""
 
@@ -254,7 +239,6 @@ class TestJWTValidation:
             except Exception:
                 pass
 
-    @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
     def test_jwt_in_api_authentication(self):
         """Test JWT in API authentication"""
         client = TestClient(app)
@@ -279,7 +263,6 @@ class TestJWTValidation:
         except Exception:
             pass
 
-    @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
     def test_jwt_missing_in_api(self):
         """Test API without JWT token"""
         client = TestClient(app)
@@ -293,7 +276,6 @@ class TestJWTValidation:
         except Exception:
             pass
 
-    @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
     def test_jwt_invalid_in_api(self):
         """Test API with invalid JWT token"""
         client = TestClient(app)
@@ -315,7 +297,6 @@ class TestJWTValidation:
             except Exception:
                 pass
 
-    @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
     def test_jwt_expired_in_api(self):
         """Test API with expired JWT token"""
         client = TestClient(app)
@@ -366,7 +347,6 @@ class TestJWTValidation:
         except Exception:
             pass
 
-    @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
     def test_jwt_logout(self):
         """Test JWT logout mechanism"""
         client = TestClient(app)
@@ -391,7 +371,6 @@ class TestJWTValidation:
         except Exception:
             pass
 
-    @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
     def test_jwt_security_headers(self):
         """Test JWT security headers"""
         client = TestClient(app)

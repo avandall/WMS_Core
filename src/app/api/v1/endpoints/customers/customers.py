@@ -5,8 +5,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_customer_service
-from app.application.dtos.customer import (
+from app.api.api_deps import get_customer_service
+from app.modules.customers.application.dtos.customer import (
     CustomerCreate,
     CustomerDetailResponse,
     CustomerResponse,

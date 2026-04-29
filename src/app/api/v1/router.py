@@ -15,7 +15,6 @@ from app.api.v1.endpoints.warehouses.warehouse_operations import (
     router as warehouse_operations_router,
 )
 from app.api.v1.endpoints.warehouses.warehouses import router as warehouses_router
-from app.integrations.ai.ai import router as ai_router
 
 
 router = APIRouter()
@@ -27,7 +26,6 @@ router.include_router(reports_router, prefix="/reports", tags=["reports"])
 router.include_router(customers_router, prefix="/customers", tags=["customers"])
 router.include_router(users_router, prefix="/users", tags=["users"])
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
-router.include_router(ai_router, tags=["ai"])
 router.include_router(positions_router, tags=["positions"])
 router.include_router(audit_events_router, prefix="/audit-events", tags=["audit-events"])
 router.include_router(

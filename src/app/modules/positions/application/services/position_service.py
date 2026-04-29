@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from app.shared.core.logging import get_logger
 from app.modules.positions.domain.entities.position import Position, PositionInventoryItem
-from app.shared.domain.audit_event_repo import IAuditEventRepo
+from app.modules.audit.domain.interfaces.audit_event_repo import IAuditEventRepo
 from app.modules.positions.domain.interfaces.position_repo import IPositionRepo
 
 logger = get_logger(__name__)

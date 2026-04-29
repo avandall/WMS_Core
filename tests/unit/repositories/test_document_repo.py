@@ -15,10 +15,14 @@ from app.modules.documents.domain.entities.document import (
     DocumentStatus,
     DocumentType
 )
-from app.shared.domain.business_exceptions import DocumentNotFoundError
+from app.modules.documents.domain.exceptions.exceptions import DocumentNotFoundError
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
-    from app.infrastructure.persistence.models import DocumentModel, DocumentItemModel
+    # Import all models using the centralized import function to avoid SQLAlchemy mapper errors
+    from app.shared.core.database import import_all_models
+    import_all_models()
+    from app.modules.documents.infrastructure.models.document import DocumentModel
+    from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
     REAL_MODELS_AVAILABLE = True
 except ImportError:
     from tests.mocks.models import MockDocumentModel as DocumentModel

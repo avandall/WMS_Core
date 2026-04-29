@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../'))
 try:
     from app.shared.core.settings import settings
     from app.shared.core.database import Base
-    from app.infrastructure.persistence.models import import_all_models
+    from app.shared.core.database import import_all_models
 except ImportError:
     print("Error: Could not import WMS modules. Make sure you're in the correct directory.")
     sys.exit(1)

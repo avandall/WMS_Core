@@ -6,8 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_report_service
-from app.application.services.report_service import ReportService
+from app.api.api_deps import get_report_service
+from app.shared.application.services.report_orchestrator import ReportOrchestrator
 from app.shared.core.permissions import Permission
 
 router = APIRouter(
@@ -19,7 +19,7 @@ router = APIRouter(
 async def get_inventory_report(
     warehouse_id: Optional[int] = None,
     low_stock_threshold: int = 10,
-    service: ReportService = Depends(get_report_service),
+    service: ReportOrchestrator = Depends(get_report_service),
 ):
     return service.generate_inventory_report(
         warehouse_id=warehouse_id, low_stock_threshold=low_stock_threshold
@@ -27,7 +27,7 @@ async def get_inventory_report(
 
 
 @router.get("/inventory/list")
-async def get_inventory_list(service: ReportService = Depends(get_report_service)):
+async def get_inventory_list(service: ReportOrchestrator = Depends(get_report_service)):
     return service.list_inventory_by_warehouse()
 
 
@@ -36,7 +36,7 @@ async def get_warehouse_report(
     warehouse_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    service: ReportService = Depends(get_report_service),
+    service: ReportOrchestrator = Depends(get_report_service),
 ):
     start = date.fromisoformat(start_date) if start_date else None
     end = date.fromisoformat(end_date) if end_date else None
@@ -49,7 +49,7 @@ async def get_warehouse_report(
 async def get_document_report(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    service: ReportService = Depends(get_report_service),
+    service: ReportOrchestrator = Depends(get_report_service),
 ):
     start = date.fromisoformat(start_date) if start_date else None
     end = date.fromisoformat(end_date) if end_date else None
@@ -61,7 +61,7 @@ async def get_product_report(
     product_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    service: ReportService = Depends(get_report_service),
+    service: ReportOrchestrator = Depends(get_report_service),
 ):
     start = date.fromisoformat(start_date) if start_date else None
     end = date.fromisoformat(end_date) if end_date else None
@@ -74,7 +74,7 @@ async def get_sales_report(
     end_date: Optional[str] = None,
     customer_id: Optional[int] = None,
     salesperson: Optional[str] = None,
-    service: ReportService = Depends(get_report_service),
+    service: ReportOrchestrator = Depends(get_report_service),
 ):
     start = date.fromisoformat(start_date) if start_date else None
     end = date.fromisoformat(end_date) if end_date else None

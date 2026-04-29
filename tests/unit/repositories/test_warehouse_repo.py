@@ -18,7 +18,10 @@ from app.shared.domain.business_exceptions import (
 )
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
-    from app.infrastructure.persistence.models import WarehouseModel, WarehouseInventoryModel
+    # Import all models using the centralized import function to avoid SQLAlchemy mapper errors
+    from app.shared.core.database import import_all_models
+    import_all_models()
+    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel, WarehouseInventoryModel
     REAL_MODELS_AVAILABLE = True
 except ImportError:
     from tests.mocks.models import MockWarehouseModel as WarehouseModel, MockWarehouseInventoryModel as WarehouseInventoryModel

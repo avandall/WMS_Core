@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_warehouse_service
-from app.application.dtos.product import (
+from app.api.api_deps import get_warehouse_service
+from app.modules.products.application.dtos.product import (
     InventoryItemResponse,
     TransferInventoryRequest,
     WarehouseCreate,

@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 import jwt
 
-from app.api.dependencies import get_user_service
-from app.application.dtos.auth import (
+from app.api.api_deps import get_user_service
+from app.modules.users.application.dtos.auth import (
     LoginRequest,
     RefreshRequest,
     TokenResponse,

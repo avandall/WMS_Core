@@ -6,10 +6,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_audit_event_repo
-from app.application.dtos.audit_event import AuditEventResponse
+from app.api.api_deps import get_audit_event_repo
+from app.modules.audit.application.dtos.audit_event import AuditEventResponse
 from app.shared.core.permissions import Permission
-from app.infrastructure.persistence.repositories.audit_event_repo import AuditEventRepo
+from app.modules.audit.infrastructure.repositories.audit_event_repo import AuditEventRepo
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 

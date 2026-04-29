@@ -12,7 +12,11 @@ from app.modules.products.infrastructure.repositories.product_repo import Produc
 from app.modules.products.domain.entities.product import Product
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
-    from app.infrastructure.persistence.models import ProductModel, InventoryModel
+    # Import all models using the centralized import function to avoid SQLAlchemy mapper errors
+    from app.shared.core.database import import_all_models
+    import_all_models()
+    from app.modules.products.infrastructure.models.product import ProductModel
+    from app.modules.inventory.infrastructure.models.inventory import InventoryModel
     REAL_MODELS_AVAILABLE = True
 except ImportError:
     from tests.mocks.models import MockProductModel as ProductModel, MockInventoryModel as InventoryModel

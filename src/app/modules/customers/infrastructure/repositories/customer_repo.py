@@ -2,7 +2,8 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo
-from app.infrastructure.persistence.models import CustomerModel, CustomerPurchaseModel
+from app.modules.customers.infrastructure.models.customer import CustomerModel
+from app.modules.customers.infrastructure.models.customer_purchase import CustomerPurchaseModel
 
 
 class CustomerRepo(ICustomerRepo):

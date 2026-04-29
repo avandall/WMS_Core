@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_document_service
+from app.api.api_deps import get_document_service
 from app.api.security import validate_id_parameter, validate_pagination_params
-from app.application.dtos.product import DocumentCreate, DocumentPost, DocumentResponse
+from app.modules.products.application.dtos.product import DocumentCreate, DocumentPost, DocumentResponse
 from app.modules.documents.application.services.document_service import DocumentService
 from app.shared.core.permissions import Permission
-from app.modules.documents.domain.entities.document import DocumentType
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -132,16 +131,12 @@ async def get_documents(
     service: DocumentService = Depends(get_document_service),
 ):
     validate_pagination_params(page, page_size)
-    all_docs = service.document_repo.get_all()
-    if doc_type:
-        doc_type_enum = DocumentType(doc_type.upper())
-        filtered_docs = [doc for doc in all_docs if doc.doc_type == doc_type_enum]
-    else:
-        filtered_docs = all_docs
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    paginated_docs = filtered_docs[start_idx:end_idx]
-    return [DocumentResponse.from_domain(doc) for doc in paginated_docs]
+    documents = service.get_documents(
+        doc_type=doc_type,
+        page=page,
+        page_size=page_size,
+    )
+    return [DocumentResponse.from_domain(doc) for doc in documents]
 
 
 @router.delete(
@@ -150,12 +145,6 @@ async def get_documents(
 )
 async def delete_document(document_id: int, service: DocumentService = Depends(get_document_service)):
     validate_id_parameter(document_id, "Document")
-    document = service.get_document(document_id)
-    if document.status.value.upper() != "DRAFT":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot delete document with status {document.status.value}. Only DRAFT documents can be deleted.",
-        )
-    service.document_repo.delete(document_id)
+    service.delete_document(document_id)
     return {"message": f"Document {document_id} deleted successfully"}
 

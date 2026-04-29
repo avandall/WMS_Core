@@ -19,7 +19,7 @@ try:
     from app.api import app
     from app.modules.warehouses.application.services.warehouse_service import WarehouseService
     from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
-    from app.infrastructure.persistence.models import WarehouseModel, WarehouseInventoryModel
+    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel, WarehouseInventoryModel
     APP_IMPORTS_AVAILABLE = True
 except ImportError:
     APP_IMPORTS_AVAILABLE = False

@@ -102,7 +102,7 @@ def test_engine():
     )
 
     # Import all models before creating tables
-    from app.infrastructure.persistence.models import import_all_models
+    from app.shared.core.database import import_all_models
     import_all_models()
     
     # Drop all tables first to ensure clean state
@@ -155,9 +155,9 @@ def reset_db_for_integration_tests(request):
     from app.shared.core.settings import settings
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from app.shared.core.database import Base
-    from app.infrastructure.persistence.models import WarehouseModel, ProductModel
-    from app.infrastructure.persistence.models import import_all_models
+    from app.shared.core.database import Base, import_all_models
+    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
+    from app.modules.products.infrastructure.models.product import ProductModel
 
     # Create engine for integration test cleanup
     # Use environment variable or default to SQLite for testing to avoid PostgreSQL dependency
@@ -287,14 +287,13 @@ from unittest.mock import Mock, MagicMock
 from sqlalchemy.orm import Session
 from typing import Any, Dict
 
-from app.application.commands.product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
-from app.application.queries.product_queries import GetProductQuery, GetAllProductsQuery
-from app.application.validation.product_validators import ProductValidator
-from app.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
+from app.modules.products.application.commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
+from app.modules.products.application.queries import GetProductQuery, GetAllProductsQuery
+from app.modules.products.application.validation import ProductValidator
+from app.shared.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
 from app.modules.products.domain.entities.product import Product
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
-from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
 # Import ProductAuthorizer conditionally to avoid FastAPI dependency issues
 try:
     from app.api.authorization.product_authorizers import ProductAuthorizer

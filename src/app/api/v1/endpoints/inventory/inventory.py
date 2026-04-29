@@ -5,8 +5,8 @@ from typing import List
 from fastapi import APIRouter, Depends
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_inventory_service
-from app.application.dtos.product import InventoryItemResponse, WarehouseInventoryRowResponse
+from app.api.api_deps import get_inventory_service
+from app.modules.products.application.dtos.product import InventoryItemResponse, WarehouseInventoryRowResponse
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.shared.core.permissions import Permission
 

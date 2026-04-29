@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.shared.domain.business_exceptions import DocumentNotFoundError
+from app.modules.documents.domain.exceptions import DocumentNotFoundError
 from app.modules.documents.domain.entities.document import (
     Document,
     DocumentProduct,
@@ -13,7 +13,8 @@ from app.modules.documents.domain.entities.document import (
 from app.shared.utils.infrastructure.id_generator import IDGenerator
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
-from app.infrastructure.persistence.models import DocumentItemModel, DocumentModel
+from app.modules.documents.infrastructure.models.document import DocumentModel
+from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
 
 
 class DocumentRepo(TransactionalRepository, IDocumentRepo):

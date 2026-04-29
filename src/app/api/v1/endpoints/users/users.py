@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.auth_deps import get_current_user, require_permissions
-from app.api.dependencies import get_user_repo, get_user_service
-from app.application.dtos.auth import UserCreate, UserResponse
+from app.api.api_deps import get_user_repo, get_user_service
+from app.modules.users.application.dtos.auth import UserCreate, UserResponse
 from app.modules.users.application.services.user_service import UserService
 from app.shared.core.auth import hash_password
 from app.shared.core.permissions import Permission, ROLE_PERMISSIONS

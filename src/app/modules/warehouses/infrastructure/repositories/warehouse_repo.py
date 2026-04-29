@@ -13,7 +13,7 @@ from app.modules.warehouses.domain.entities.warehouse import Warehouse
 from app.shared.utils.infrastructure.id_generator import IDGenerator
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
-from app.infrastructure.persistence.models import WarehouseInventoryModel, WarehouseModel
+from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel, WarehouseInventoryModel
 
 
 class WarehouseRepo(TransactionalRepository, IWarehouseRepo):

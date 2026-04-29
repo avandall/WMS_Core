@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.modules.users.domain.entities.user import User
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.users.domain.interfaces.user_repo import IUserRepo
-from app.infrastructure.persistence.models import UserModel
+from app.modules.users.infrastructure.models.user import UserModel
 
 
 class UserRepo(TransactionalRepository, IUserRepo):

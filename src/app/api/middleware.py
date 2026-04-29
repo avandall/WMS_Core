@@ -11,7 +11,7 @@ from starlette import status
 from app.api.security import rate_limiter
 from app.shared.core.database import SessionLocal
 from app.shared.core.logging import get_logger
-from app.infrastructure.persistence.models import AuditLogModel
+from app.modules.audit.infrastructure.models.audit_event import AuditEventModel
 
 logger = get_logger(__name__)
 
@@ -30,14 +30,19 @@ async def audit_middleware(request: Request, call_next):
             user = getattr(request.state, "user", None)
             if user:
                 user_id = getattr(user, "user_id", None)
-            log = AuditLogModel(
+            log = AuditEventModel(
                 user_id=user_id,
-                path=request.url.path,
-                method=request.method,
-                status_code=response.status_code if response else 500,
-                client_ip=request.client.host if request.client else None,
-                user_agent=request.headers.get("user-agent"),
-                latency_ms=latency_ms,
+                action=f"{request.method} {request.url.path}",
+                entity_type="api_request",
+                entity_id=str(response.status_code) if response else "500",
+                payload={
+                    "path": request.url.path,
+                    "method": request.method,
+                    "status_code": response.status_code if response else 500,
+                    "client_ip": request.client.host if request.client else None,
+                    "user_agent": request.headers.get("user-agent"),
+                    "latency_ms": latency_ms,
+                }
             )
             db.add(log)
             db.commit()

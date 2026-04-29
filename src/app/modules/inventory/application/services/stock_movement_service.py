@@ -9,7 +9,7 @@ from app.shared.domain.business_exceptions import (
     InvalidQuantityError,
     ValidationError,
 )
-from app.shared.domain.audit_event_repo import IAuditEventRepo
+from app.modules.audit.domain.interfaces.audit_event_repo import IAuditEventRepo
 from app.modules.positions.domain.interfaces.position_repo import IPositionRepo
 from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
 

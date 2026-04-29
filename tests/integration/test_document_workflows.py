@@ -36,7 +36,10 @@ try:
     from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
     from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
     from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
-    from app.infrastructure.persistence.models import DocumentModel, DocumentItemModel, WarehouseModel, ProductModel
+    from app.modules.documents.infrastructure.models.document import DocumentModel
+    from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
+    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
+    from app.modules.products.infrastructure.models.product import ProductModel
     APP_IMPORTS_AVAILABLE = True
 except ImportError:
     APP_IMPORTS_AVAILABLE = False

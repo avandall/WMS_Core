@@ -13,7 +13,10 @@ from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.domain.business_exceptions import InvalidQuantityError, InsufficientStockError
 # Use mock models to avoid SQLAlchemy dependency issues
 try:
-    from app.infrastructure.persistence.models import InventoryModel
+    # Import all models using the centralized import function to avoid SQLAlchemy mapper errors
+    from app.shared.core.database import import_all_models
+    import_all_models()
+    from app.modules.inventory.infrastructure.models.inventory import InventoryModel
     REAL_MODELS_AVAILABLE = True
 except ImportError:
     from tests.mocks.models import MockInventoryModel as InventoryModel
