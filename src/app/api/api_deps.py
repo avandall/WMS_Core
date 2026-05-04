@@ -20,13 +20,13 @@ from app.modules.warehouses.application.services.warehouse_service import Wareho
 from app.shared.core.database import get_session
 from app.api.dependencies.service_factory import RepositoryContainerImpl
 from app.modules.audit.infrastructure.repositories.audit_event_repo import AuditEventRepo
-from app.modules.customers.domain.interfaces.customer_repo import CustomerRepo
-from app.modules.documents.domain.interfaces.document_repo import DocumentRepo
-from app.modules.inventory.domain.interfaces.inventory_repo import InventoryRepo
-from app.modules.positions.domain.interfaces.position_repo import PositionRepo
-from app.modules.products.domain.interfaces.product_repo import ProductRepo
-from app.modules.users.domain.interfaces.user_repo import UserRepo
-from app.modules.warehouses.domain.interfaces.warehouse_repo import WarehouseRepo
+from app.modules.customers.infrastructure.repositories.customer_repo import CustomerRepo
+from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
+from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+from app.modules.positions.infrastructure.repositories.position_repo import PositionRepo
+from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
+from app.modules.users.infrastructure.repositories.user_repo import UserRepo
+from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
 
 
 def get_product_repo(db: Session = Depends(get_session)) -> ProductRepo:

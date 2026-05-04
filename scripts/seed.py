@@ -3,23 +3,21 @@ import random
 from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.core.database import SessionLocal
-from app.core.auth import hash_password
-from app.core.database import Base, engine
+from app.shared.core.database import SessionLocal
+from app.shared.core.auth import hash_password
+from app.shared.core.database import Base, engine
 
-# Import các model chính xác từ project của bạn
-from app.infrastructure.persistence.models.user_table import UserModel
-from app.infrastructure.persistence.models.warehouse_table import WarehouseModel, WarehouseInventoryModel
-from app.infrastructure.persistence.models.product_table import ProductModel
-from app.infrastructure.persistence.models.customer_table import CustomerModel
-from app.infrastructure.persistence.models.document_table import DocumentModel
-from app.infrastructure.persistence.models.document_item_table import DocumentItemModel
-from app.infrastructure.persistence.models.position_table import PositionModel
-from app.infrastructure.persistence.models.position_inventory_table import PositionInventoryModel
-from app.infrastructure.persistence.models.inventory_table import InventoryModel
-from app.infrastructure.persistence.models.audit_log_table import AuditLogModel
-from app.infrastructure.persistence.models.audit_event_table import AuditEventModel
-from app.infrastructure.persistence.models import *
+# Import models from correct paths
+from app.modules.users.infrastructure.models.user import UserModel
+from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel, WarehouseInventoryModel
+from app.modules.products.infrastructure.models.product import ProductModel
+from app.modules.customers.infrastructure.models.customer import CustomerModel
+from app.modules.documents.infrastructure.models.document import DocumentModel
+from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
+from app.modules.positions.infrastructure.models.position import PositionModel
+from app.modules.inventory.infrastructure.models.position_inventory import PositionInventoryModel
+from app.modules.inventory.infrastructure.models.inventory import InventoryModel
+from app.modules.audit.infrastructure.models.audit_event import AuditEventModel
 
 from faker import Faker
 fake = Faker(['vi_VN'])
@@ -27,7 +25,7 @@ fake = Faker(['vi_VN'])
 async def run_seed():
     # 1. Đảm bảo bảng tồn tại (Sử dụng engine đồng bộ)
     print("🏗️  Đang khởi tạo cấu trúc bảng (Schema)...")
-    from app.core.database import engine, Base
+    from app.shared.core.database import engine, Base
     
     # Quan trọng: Lệnh này sẽ tạo tất cả các bảng đã được import ở trên
     Base.metadata.create_all(bind=engine) 
@@ -39,7 +37,7 @@ async def run_seed():
         tables = [
             "position_inventory", "warehouse_inventory", "document_items", 
             "documents", "inventory", "positions", "products", 
-            "customer_purchases", "customers", "warehouses", "users", "audit_logs", "audit_events"
+            "customers", "warehouses", "users", "audit_events"
         ]
         db.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
         db.commit()
