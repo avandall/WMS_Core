@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from app.shared.core.logging import get_logger
+from app.shared.core.pubsub import EventPublisher
 from app.shared.domain.business_exceptions import (
     BusinessRuleViolationError,
     InsufficientStockError,
@@ -119,6 +121,25 @@ class StockMovementService:
                 )
 
             self.session.commit()
+            
+            # Publish inventory update event (fire-and-forget)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    EventPublisher.publish_inventory_update(
+                        product_id=product_id,
+                        warehouse_id=warehouse_id,
+                        quantity=quantity,
+                        operation=action.lower(),
+                        user_id=user_id,
+                        source="stock_movement_service",
+                        critical=True,
+                    )
+                )
+            except RuntimeError:
+                # No event loop running, skip event publishing
+                logger.debug("No event loop for publishing inventory update event")
+            
             return {
                 "warehouse_id": warehouse_id,
                 "product_id": product_id,
@@ -214,6 +235,26 @@ class StockMovementService:
                 )
 
             self.session.commit()
+            
+            # Publish inventory update event (fire-and-forget)
+            # Safely create task if event loop is running
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    EventPublisher.publish_inventory_update(
+                        product_id=product_id,
+                        warehouse_id=from_warehouse_id,
+                        quantity=quantity,
+                        operation="transfer",
+                        user_id=user_id,
+                        source="stock_movement_service",
+                        critical=True  # Warehouse transfers are critical operations
+                    )
+                )
+            except RuntimeError:
+                # No event loop running, skip event publishing
+                logger.debug("No event loop for publishing inventory update event")
+            
             return {
                 "product_id": product_id,
                 "quantity": quantity,

@@ -173,6 +173,7 @@ class TestStockMovementService:
     # MOVE WITHIN WAREHOUSE TESTS
     # ============================================================================
 
+    
     def test_move_within_warehouse_success(self, stock_movement_service, mock_position_repo, mock_from_position, mock_to_position):
         """Test move_within_warehouse success"""
         mock_position_repo.get_position_model.side_effect = [mock_from_position, mock_to_position]
@@ -189,9 +190,13 @@ class TestStockMovementService:
         assert result["warehouse_id"] == 1
         assert result["product_id"] == 1
         assert result["quantity"] == 50
+        assert result["from_position"] == "RECEIVING"
+        assert result["to_position"] == "STORAGE"
+
         mock_position_repo.adjust_position_stock.assert_any_call(position_id=1, product_id=1, delta=-50)
         mock_position_repo.adjust_position_stock.assert_any_call(position_id=2, product_id=1, delta=50)
 
+    
     def test_move_within_warehouse_invalid_quantity(self, stock_movement_service):
         """Test move_within_warehouse with invalid quantity"""
         with pytest.raises(InvalidQuantityError, match="Quantity must be positive"):
@@ -203,6 +208,7 @@ class TestStockMovementService:
                 to_position_code="STORAGE"
             )
 
+    
     def test_move_within_warehouse_negative_quantity(self, stock_movement_service):
         """Test move_within_warehouse with negative quantity"""
         with pytest.raises(InvalidQuantityError, match="Quantity must be positive"):
@@ -214,6 +220,7 @@ class TestStockMovementService:
                 to_position_code="STORAGE"
             )
 
+    
     def test_move_within_warehouse_same_position(self, stock_movement_service):
         """Test move_within_warehouse with same from and to position"""
         with pytest.raises(BusinessRuleViolationError, match="from_position and to_position must differ"):
@@ -225,6 +232,7 @@ class TestStockMovementService:
                 to_position_code="STORAGE"
             )
 
+    
     def test_move_within_warehouse_insufficient_stock(self, stock_movement_service, mock_position_repo, mock_from_position, mock_to_position, mock_session):
         """Test move_within_warehouse with insufficient stock"""
         mock_position_repo.get_position_model.side_effect = [mock_from_position, mock_to_position]
@@ -241,6 +249,7 @@ class TestStockMovementService:
 
         mock_session.rollback.assert_called_once()
 
+    
     def test_move_within_warehouse_generic_error(self, stock_movement_service, mock_position_repo, mock_from_position, mock_to_position, mock_session):
         """Test move_within_warehouse with generic error"""
         mock_position_repo.get_position_model.side_effect = [mock_from_position, mock_to_position]
@@ -261,6 +270,7 @@ class TestStockMovementService:
     # TRANSFER BETWEEN WAREHOUSES TESTS
     # ============================================================================
 
+    
     def test_transfer_between_warehouses_success(self, stock_movement_service, mock_position_repo, mock_warehouse_repo, mock_to_position):
         """Test transfer_between_warehouses success"""
         mock_position_repo.get_position_model.return_value = mock_to_position
@@ -282,6 +292,7 @@ class TestStockMovementService:
         assert result["from"]["warehouse_id"] == 1
         assert result["to"]["warehouse_id"] == 2
 
+    
     def test_transfer_between_warehouses_invalid_quantity(self, stock_movement_service):
         """Test transfer_between_warehouses with invalid quantity"""
         with pytest.raises(InvalidQuantityError, match="Quantity must be positive"):
@@ -294,6 +305,7 @@ class TestStockMovementService:
                 to_position_code="RECEIVING"
             )
 
+    
     def test_transfer_between_warehouses_same_warehouse(self, stock_movement_service):
         """Test transfer_between_warehouses with same warehouse"""
         with pytest.raises(ValidationError, match="Cannot transfer within the same warehouse"):
@@ -306,6 +318,7 @@ class TestStockMovementService:
                 to_position_code="RECEIVING"
             )
 
+    
     def test_transfer_between_warehouses_insufficient_stock(self, stock_movement_service, mock_position_repo, mock_to_position, mock_session):
         """Test transfer_between_warehouses with insufficient stock"""
         mock_position_repo.get_position_model.return_value = mock_to_position
@@ -325,6 +338,7 @@ class TestStockMovementService:
     # ENSURE DEFAULTS AND BALANCE TESTS
     # ============================================================================
 
+    
     def test_ensure_defaults_and_balance_no_diff(self, stock_movement_service, mock_position_repo, mock_warehouse_repo):
         """Test _ensure_defaults_and_balance when warehouse and position totals match"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = [Mock(product_id=1, quantity=100)]
@@ -334,6 +348,7 @@ class TestStockMovementService:
 
         mock_position_repo.adjust_position_stock.assert_not_called()
 
+    
     def test_ensure_defaults_and_balance_positive_diff(self, stock_movement_service, mock_position_repo, mock_warehouse_repo):
         """Test _ensure_defaults_and_balance when warehouse has more stock"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = [Mock(product_id=1, quantity=100)]
@@ -346,6 +361,7 @@ class TestStockMovementService:
 
         mock_position_repo.adjust_position_stock.assert_called_once_with(position_id=1, product_id=1, delta=20)
 
+    
     def test_ensure_defaults_and_balance_negative_diff(self, stock_movement_service, mock_position_repo, mock_warehouse_repo):
         """Test _ensure_defaults_and_balance when positions have more stock"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = [Mock(product_id=1, quantity=80)]
@@ -358,6 +374,7 @@ class TestStockMovementService:
 
         mock_position_repo.adjust_position_stock.assert_called_once_with(position_id=1, product_id=1, delta=-20)
 
+    
     def test_ensure_defaults_and_balance_negative_diff_insufficient(self, stock_movement_service, mock_position_repo, mock_warehouse_repo):
         """Test _ensure_defaults_and_balance when position stock exceeds and insufficient to adjust"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = [Mock(product_id=1, quantity=80)]
@@ -374,6 +391,7 @@ class TestStockMovementService:
     # GET WAREHOUSE PRODUCT QUANTITY TESTS
     # ============================================================================
 
+    
     def test_get_warehouse_product_quantity_found(self, stock_movement_service, mock_warehouse_repo):
         """Test _get_warehouse_product_quantity when product found"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = [
@@ -385,6 +403,7 @@ class TestStockMovementService:
 
         assert result == 100
 
+    
     def test_get_warehouse_product_quantity_not_found(self, stock_movement_service, mock_warehouse_repo):
         """Test _get_warehouse_product_quantity when product not found"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = [
@@ -395,6 +414,7 @@ class TestStockMovementService:
 
         assert result == 0
 
+    
     def test_get_warehouse_product_quantity_empty(self, stock_movement_service, mock_warehouse_repo):
         """Test _get_warehouse_product_quantity with empty inventory"""
         mock_warehouse_repo.get_warehouse_inventory.return_value = []
@@ -407,6 +427,7 @@ class TestStockMovementService:
     # SET REPOS AUTO COMMIT TESTS
     # ============================================================================
 
+    
     def test_set_repos_auto_commit_enabled(self, stock_movement_service, mock_position_repo, mock_warehouse_repo, mock_audit_repo):
         """Test _set_repos_auto_commit with enabled=True"""
         mock_position_repo.set_auto_commit = Mock()
@@ -419,6 +440,7 @@ class TestStockMovementService:
         mock_warehouse_repo.set_auto_commit.assert_called_once_with(True)
         mock_audit_repo.set_auto_commit.assert_called_once_with(True)
 
+    
     def test_set_repos_auto_commit_disabled(self, stock_movement_service, mock_position_repo, mock_warehouse_repo, mock_audit_repo):
         """Test _set_repos_auto_commit with enabled=False"""
         mock_position_repo.set_auto_commit = Mock()
@@ -431,6 +453,7 @@ class TestStockMovementService:
         mock_warehouse_repo.set_auto_commit.assert_called_once_with(False)
         mock_audit_repo.set_auto_commit.assert_called_once_with(False)
 
+    
     def test_set_repos_auto_commit_none_repo(self, mock_position_repo, mock_warehouse_repo, mock_session):
         """Test _set_repos_auto_commit with None repo"""
         service = StockMovementService(

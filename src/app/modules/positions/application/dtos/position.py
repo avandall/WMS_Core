@@ -9,6 +9,8 @@ class PositionCreate(BaseModel):
     code: str = Field(..., min_length=1, max_length=50)
     type: str = Field("STORAGE", min_length=1, max_length=20)
     description: Optional[str] = Field(None, max_length=255)
+    capacity: Optional[int] = Field(None, gt=0)
+    zone: Optional[str] = Field(None, max_length=50)
 
 
 class PositionResponse(BaseModel):

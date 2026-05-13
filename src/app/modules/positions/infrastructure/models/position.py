@@ -25,6 +25,8 @@ class PositionModel(Base):
     code = Column(String(50), nullable=False)
     type = Column(String(20), nullable=False, default="STORAGE", index=True)
     description = Column(String(255))
+    capacity = Column(Integer)
+    zone = Column(String(50))
     is_active = Column(Integer, nullable=False, default=1, index=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
 

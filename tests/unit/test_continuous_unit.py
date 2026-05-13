@@ -129,7 +129,8 @@ class TestProductServiceContinuous:
         
         assert service is not None
 
-    def test_service_create_product_basic(self):
+    @pytest.mark.asyncio
+    async def test_service_create_product_basic(self):
         """Test ProductService create_product basic functionality"""
         mock_product_repo = Mock()
         mock_inventory_repo = Mock()
@@ -141,7 +142,7 @@ class TestProductServiceContinuous:
         
         # Test basic create (may fail due to validation, but should not crash)
         try:
-            result = service.create_product(name="Test", price=10.0)
+            result = await service.create_product(name="Test", price=10.0)
             assert result is not None
         except Exception:
             # Expected if validation fails

@@ -168,7 +168,8 @@ class TestDocumentWorkflows:
     # COMPLETE DOCUMENT LIFECYCLE WORKFLOW TESTS
     # ============================================================================
 
-    def test_complete_document_lifecycle_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_document_model, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_complete_document_lifecycle_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_document_model, sample_warehouse_model, sample_product_model):
         """Test complete document lifecycle: Create -> Post -> Cancel"""
         
         # CREATE IMPORT DOCUMENT: Mock database operations
@@ -182,7 +183,7 @@ class TestDocumentWorkflows:
                     
                     # Create import document
                     items_data = [{"product_id": 1, "quantity": 10, "unit_price": 99.99}]
-                    created_document = document_service.create_import_document(
+                    created_document = await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=items_data,
                         created_by="admin",
@@ -218,7 +219,8 @@ class TestDocumentWorkflows:
             # Expected behavior - cannot cancel posted document
             pass
 
-    def test_import_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_import_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test complete import document workflow with inventory updates"""
         
         # Setup mocks
@@ -232,7 +234,7 @@ class TestDocumentWorkflows:
                     
                     # Create import document
                     items_data = [{"product_id": 1, "quantity": 50, "unit_price": 99.99}]
-                    document = document_service.create_import_document(
+                    document = await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=items_data,
                         created_by="admin"
@@ -251,7 +253,8 @@ class TestDocumentWorkflows:
         assert posted_document.status == DocumentStatus.POSTED
         # Verify inventory was added (through service calls)
 
-    def test_export_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_export_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test complete export document workflow with inventory updates"""
         
         # Setup mocks
@@ -265,7 +268,7 @@ class TestDocumentWorkflows:
                     
                     # Create export document
                     items_data = [{"product_id": 1, "quantity": 20, "unit_price": 99.99}]
-                    document = document_service.create_export_document(
+                    document = await document_service.create_export_document(
                         from_warehouse_id=1,
                         items=items_data,
                         created_by="admin"
@@ -290,7 +293,8 @@ class TestDocumentWorkflows:
         assert posted_document.status == DocumentStatus.POSTED
         # Verify inventory was removed (through service calls)
 
-    def test_transfer_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_transfer_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test complete transfer document workflow"""
         
         # Setup source and target warehouses
@@ -309,7 +313,7 @@ class TestDocumentWorkflows:
                     
                     # Create transfer document
                     items_data = [{"product_id": 1, "quantity": 25, "unit_price": 99.99}]
-                    document = document_service.create_transfer_document(
+                    document = await document_service.create_transfer_document(
                         from_warehouse_id=1,
                         to_warehouse_id=2,
                         items=items_data,
@@ -339,7 +343,8 @@ class TestDocumentWorkflows:
         assert posted_document.from_warehouse_id == 1
         assert posted_document.to_warehouse_id == 2
 
-    def test_sale_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_sale_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test complete sale document workflow with customer tracking"""
         
         # Setup mocks
@@ -353,7 +358,7 @@ class TestDocumentWorkflows:
                     
                     # Create sale document
                     items_data = [{"product_id": 1, "quantity": 5, "unit_price": 99.99}]
-                    document = document_service.create_sale_document(
+                    document = await document_service.create_sale_document(
                         from_warehouse_id=1,
                         items=items_data,
                         created_by="admin",
@@ -385,7 +390,8 @@ class TestDocumentWorkflows:
     # ERROR HANDLING WORKFLOW TESTS
     # ============================================================================
 
-    def test_document_not_found_workflow(self, document_service, document_repo, mock_session):
+    @pytest.mark.asyncio
+    async def test_document_not_found_workflow(self, document_service, document_repo, mock_session):
         """Test workflow when document is not found"""
         
         # Mock database to return None
@@ -395,7 +401,8 @@ class TestDocumentWorkflows:
         with pytest.raises(Exception):  # Should raise appropriate exception
             document_service.get_document(999)
 
-    def test_insufficient_stock_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_insufficient_stock_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test workflow with insufficient stock for export"""
         
         # Setup mocks
@@ -409,7 +416,7 @@ class TestDocumentWorkflows:
                     
                     # Create export document
                     items_data = [{"product_id": 1, "quantity": 100, "unit_price": 99.99}]  # Large quantity
-                    document = document_service.create_export_document(
+                    document = await document_service.create_export_document(
                         from_warehouse_id=1,
                         items=items_data,
                         created_by="admin"
@@ -427,7 +434,8 @@ class TestDocumentWorkflows:
         with pytest.raises(Exception):  # Should raise insufficient stock exception
             document_service.post_document(1, "manager")
 
-    def test_warehouse_not_found_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_warehouse_not_found_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_product_model):
         """Test workflow when warehouse is not found"""
         
         # Mock database to return None for warehouse
@@ -435,13 +443,14 @@ class TestDocumentWorkflows:
         
         # Try to create document with non-existent warehouse
         with pytest.raises(Exception):  # Should raise warehouse not found exception
-            document_service.create_import_document(
+            await document_service.create_import_document(
                 to_warehouse_id=999,
                 items=[{"product_id": 1, "quantity": 10, "unit_price": 99.99}],
                 created_by="admin"
             )
 
-    def test_product_not_found_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model):
+    @pytest.mark.asyncio
+    async def test_product_not_found_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model):
         """Test workflow when product is not found"""
         
         # Mock database to return None for product
@@ -449,13 +458,14 @@ class TestDocumentWorkflows:
         
         # Try to create document with non-existent product
         with pytest.raises(Exception):  # Should raise product not found exception
-            document_service.create_import_document(
+            await document_service.create_import_document(
                 to_warehouse_id=1,
                 items=[{"product_id": 999, "quantity": 10, "unit_price": 99.99}],
                 created_by="admin"
             )
 
-    def test_post_already_posted_document_workflow(self, document_service, document_repo, mock_session, sample_document_model):
+    @pytest.mark.asyncio
+    async def test_post_already_posted_document_workflow(self, document_service, document_repo, mock_session, sample_document_model):
         """Test workflow when trying to post already posted document"""
         
         # Create posted document
@@ -477,7 +487,8 @@ class TestDocumentWorkflows:
         with pytest.raises(Exception):  # Should raise invalid status exception
             document_service.post_document(1, "manager")
 
-    def test_cancel_already_cancelled_document_workflow(self, document_service, document_repo, mock_session, sample_document_model):
+    @pytest.mark.asyncio
+    async def test_cancel_already_cancelled_document_workflow(self, document_service, document_repo, mock_session, sample_document_model):
         """Test workflow when trying to cancel already cancelled document"""
         
         # Create cancelled document
@@ -503,7 +514,8 @@ class TestDocumentWorkflows:
     # TRANSACTION WORKFLOW TESTS
     # ============================================================================
 
-    def test_document_creation_transaction_rollback_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session):
+    @pytest.mark.asyncio
+    async def test_document_creation_transaction_rollback_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session):
         """Test transaction rollback on document creation failure"""
         
         # Mock database operations to fail
@@ -511,13 +523,14 @@ class TestDocumentWorkflows:
         
         # Try to create document - should trigger rollback
         with pytest.raises(Exception, match="Database error"):
-            document_service.create_import_document(
+            await document_service.create_import_document(
                 to_warehouse_id=1,
                 items=[{"product_id": 1, "quantity": 10, "unit_price": 99.99}],
                 created_by="admin"
             )
 
-    def test_document_posting_transaction_rollback_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_document_model, sample_warehouse_model):
+    @pytest.mark.asyncio
+    async def test_document_posting_transaction_rollback_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_document_model, sample_warehouse_model):
         """Test transaction rollback on document posting failure"""
         
         # Setup document
@@ -555,7 +568,8 @@ class TestDocumentWorkflows:
     # PERFORMANCE WORKFLOW TESTS
     # ============================================================================
 
-    def test_large_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_large_document_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test workflow with large document (many items)"""
         
         # Create document with many items
@@ -577,7 +591,7 @@ class TestDocumentWorkflows:
                     mock_session.add.return_value = None
                     
                     # Create large document
-                    document = document_service.create_import_document(
+                    document = await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=items_data,
                         created_by="admin"
@@ -588,7 +602,8 @@ class TestDocumentWorkflows:
         assert document.items[0].product_id == 1  # First item has product_id 1
         assert document.items[999].product_id == 1000  # Last item has product_id 1000
 
-    def test_bulk_document_operations_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_bulk_document_operations_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test workflow with bulk document operations"""
         
         # Create multiple documents
@@ -603,7 +618,7 @@ class TestDocumentWorkflows:
                     
                     for i in range(100):
                         items_data = [{"product_id": 1, "quantity": 10, "unit_price": 99.99}]
-                        document = document_service.create_import_document(
+                        document = await document_service.create_import_document(
                             to_warehouse_id=1,
                             items=items_data,
                             created_by=f"user_{i}"
@@ -640,7 +655,8 @@ class TestDocumentWorkflows:
     # INTEGRATION EDGE CASE WORKFLOW TESTS
     # ============================================================================
 
-    def test_document_unicode_handling_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_document_unicode_handling_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test workflow with Unicode data handling"""
         
         # Setup Unicode data
@@ -654,7 +670,7 @@ class TestDocumentWorkflows:
                     
                     # Create document with Unicode data
                     items_data = [{"product_id": 1, "quantity": 10, "unit_price": 99.99}]
-                    document = document_service.create_import_document(
+                    document = await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=items_data,
                         created_by="Üñïçødé Üsér",
@@ -665,7 +681,8 @@ class TestDocumentWorkflows:
         assert document.created_by == "Üñïçødé Üsér"
         assert document.note == "Üñïçødé nëtë"
 
-    def test_document_special_characters_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_document_special_characters_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test workflow with special characters"""
         
         # Setup special character data
@@ -679,7 +696,7 @@ class TestDocumentWorkflows:
                     
                     # Create document with special characters
                     items_data = [{"product_id": 1, "quantity": 10, "unit_price": 99.99}]
-                    document = document_service.create_import_document(
+                    document = await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=items_data,
                         created_by="user@company.com",
@@ -690,7 +707,8 @@ class TestDocumentWorkflows:
         assert document.created_by == "user@company.com"
         assert document.note == "Special chars: !@#$%^&*()"
 
-    def test_document_boundary_values_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_document_boundary_values_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test workflow with boundary values"""
         
         # Setup boundary values
@@ -708,11 +726,11 @@ class TestDocumentWorkflows:
                         "quantity": 2147483647,   # Max int
                         "unit_price": 999999.99   # Large decimal
                     }]
-                    document = document_service.create_import_document(
+                    document = await document_service.create_import_document(
                         to_warehouse_id=1,
-            items=items_data,
-            created_by="admin"
-        )
+                        items=items_data,
+                        created_by="admin"
+                    )
         
         # Verify boundary value handling
         assert document.items[0].product_id == 2147483647
@@ -723,7 +741,8 @@ class TestDocumentWorkflows:
     # CROSS-LAYER INTEGRATION TESTS
     # ============================================================================
 
-    def test_repository_service_integration_workflow(self, document_service, document_repo, mock_session, sample_document_model):
+    @pytest.mark.asyncio
+    async def test_repository_service_integration_workflow(self, document_service, document_repo, mock_session, sample_document_model):
         """Test integration between repository and service layers"""
         
         # Mock repository operations
@@ -736,7 +755,8 @@ class TestDocumentWorkflows:
         mock_session.get.assert_called()
         assert document.document_id == 1
 
-    def test_service_validation_integration_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session):
+    @pytest.mark.asyncio
+    async def test_service_validation_integration_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session):
         """Test integration between service validation and business logic"""
         
         # Mock database to return None for non-existent warehouse
@@ -744,13 +764,14 @@ class TestDocumentWorkflows:
         
         # Try operations on non-existent warehouse
         with pytest.raises(Exception):  # Should raise warehouse not found
-            document_service.create_import_document(
+            await document_service.create_import_document(
                 to_warehouse_id=999,
                 items=[{"product_id": 1, "quantity": 10, "unit_price": 99.99}],
                 created_by="admin"
             )
 
-    def test_database_transaction_integration_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_database_transaction_integration_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test database transaction integration"""
         
         # Setup transaction behavior
@@ -763,7 +784,7 @@ class TestDocumentWorkflows:
                     mock_session.add.return_value = None
                     
                     # Create document
-                    document_service.create_import_document(
+                    await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=[{"product_id": 1, "quantity": 10, "unit_price": 99.99}],
                         created_by="admin"
@@ -777,7 +798,8 @@ class TestDocumentWorkflows:
     # CONCURRENT OPERATIONS WORKFLOW TESTS
     # ============================================================================
 
-    def test_concurrent_document_creation_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
+    @pytest.mark.asyncio
+    async def test_concurrent_document_creation_workflow(self, document_service, document_repo, warehouse_repo, product_repo, inventory_repo, mock_session, sample_warehouse_model, sample_product_model):
         """Test concurrent document creation workflow"""
         
         # Mock database to simulate concurrent creation
@@ -797,14 +819,14 @@ class TestDocumentWorkflows:
                     mock_session.add.side_effect = mock_add
                     
                     # Try concurrent creation
-                    document_service.create_import_document(
+                    await document_service.create_import_document(
                         to_warehouse_id=1,
                         items=[{"product_id": 1, "quantity": 10, "unit_price": 99.99}],
                         created_by="user1"
                     )
         
         try:
-            document_service.create_import_document(
+            await document_service.create_import_document(
                 to_warehouse_id=1,
                 items=[{"product_id": 2, "quantity": 20, "unit_price": 199.99}],
                 created_by="user2"

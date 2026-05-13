@@ -19,10 +19,10 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 @router.get("/", response_model=list[WarehouseResponse])
 async def get_all_warehouses(service: WarehouseService = Depends(get_warehouse_service)):
-    warehouses = service.get_all_warehouses()
+    warehouses = await service.get_all_warehouses()
     result = []
     for warehouse in warehouses:
-        inventory = service.get_warehouse_inventory(warehouse.warehouse_id)
+        inventory = await service.get_warehouse_inventory(warehouse.warehouse_id)
         result.append(
             WarehouseResponse(
                 warehouse_id=warehouse.warehouse_id,
@@ -43,7 +43,7 @@ async def create_warehouse(
     warehouse: WarehouseCreate,
     service: WarehouseService = Depends(get_warehouse_service),
 ):
-    created_warehouse = service.create_warehouse(warehouse.name)
+    created_warehouse = await service.create_warehouse(warehouse.name)
     return WarehouseResponse.from_domain(created_warehouse)
 
 
@@ -51,8 +51,8 @@ async def create_warehouse(
 async def get_warehouse(
     warehouse_id: int, service: WarehouseService = Depends(get_warehouse_service)
 ):
-    warehouse = service.get_warehouse(warehouse_id)
-    inventory = service.get_warehouse_inventory(warehouse_id)
+    warehouse = await service.get_warehouse(warehouse_id)
+    inventory = await service.get_warehouse_inventory(warehouse_id)
     return WarehouseResponse(
         warehouse_id=warehouse.warehouse_id,
         name=warehouse.location,
@@ -68,7 +68,7 @@ async def get_warehouse(
 async def delete_warehouse(
     warehouse_id: int, service: WarehouseService = Depends(get_warehouse_service)
 ):
-    service.delete_warehouse(warehouse_id)
+    await service.delete_warehouse(warehouse_id)
     return {"message": f"Warehouse {warehouse_id} deleted successfully"}
 
 
@@ -82,7 +82,7 @@ async def transfer_all_inventory(
     transfer_request: TransferInventoryRequest,
     service: WarehouseService = Depends(get_warehouse_service),
 ):
-    transferred_items = service.transfer_all_inventory(
+    transferred_items = await service.transfer_all_inventory(
         warehouse_id, transfer_request.to_warehouse_id
     )
     return WarehouseTransferResponse(

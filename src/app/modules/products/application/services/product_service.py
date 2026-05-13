@@ -5,6 +5,8 @@ import io
 from typing import Dict, List, Optional
 
 from app.shared.core.logging import get_logger
+from app.shared.core.cache import cached, invalidate_cache_pattern
+from app.shared.core.redis import redis_manager
 from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import ValidationError
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
@@ -33,7 +35,7 @@ class ProductService:
         self._query_handler = ProductQueryHandler(product_repo)
         self._validator = ProductValidator()
 
-    def create_product(
+    async def create_product(
         self,
         product_id: Optional[int] = None,
         name: Optional[str] = None,
@@ -60,14 +62,25 @@ class ProductService:
             price=price,
             description=description,
         )
-        return self._command_handler.handle_create(command)
+        result = self._command_handler.handle_create(command)
+        
+        # Invalidate products_all cache (best-effort)
+        try:
+            await redis_manager.delete("products_all")
+        except Exception as e:
+            logger.error(f"Failed to invalidate products_all cache: {e}")
+        
+        return result
 
-    def get_product_details(self, product_id: int) -> Product:
+    @cached(prefix="product", ttl=3600)  # 1 hour cache
+    async def get_product_details(self, product_id: int) -> Product:
         """Get product details using query pattern."""
         query = GetProductQuery(product_id=product_id)
         return self._query_handler.handle_get(query)
 
-    def update_product(
+    @invalidate_cache_pattern("product")
+    @invalidate_cache_pattern("products_all")
+    async def update_product(
         self,
         product_id: int,
         name: Optional[str] = None,
@@ -81,16 +94,31 @@ class ProductService:
             price=price,
             description=description,
         )
-        return self._command_handler.handle_update(command)
+        result = self._command_handler.handle_update(command)
+        
+        # Invalidate specific product cache (best-effort)
+        try:
+            await redis_manager.delete(f"product:{product_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate product cache: {e}")
+        
+        return result
 
-    def delete_product(self, product_id: int) -> None:
+    @invalidate_cache_pattern("product")
+    @invalidate_cache_pattern("products_all")
+    async def delete_product(self, product_id: int) -> None:
         """Delete product using command pattern."""
         command = DeleteProductCommand(product_id=product_id)
         self._command_handler.handle_delete(command)
+        # Invalidate specific product cache (best-effort)
+        try:
+            await redis_manager.delete(f"product:{product_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate product cache: {e}")
 
-    def get_product_with_inventory(self, product_id: int) -> dict:
+    async def get_product_with_inventory(self, product_id: int) -> dict:
         """Get product with inventory information - facade method."""
-        product = self.get_product_details(product_id)
+        product = await self.get_product_details(product_id)
         quantity = self._command_handler.inventory_repo.get_quantity(product_id)
         return {"product": product, "current_inventory": quantity}
 
@@ -103,12 +131,13 @@ class ProductService:
             products.append({"product": product, "current_inventory": quantity})
         return products
 
-    def get_all_products(self) -> List[Product]:
+    @cached(prefix="products_all", ttl=1800)  # 30 minutes cache
+    async def get_all_products(self) -> List[Product]:
         """Get all products using query pattern."""
         query = GetAllProductsQuery()
         return self._query_handler.handle_get_all(query)
 
-    def import_products(self, rows: List[Dict]) -> Dict:
+    async def import_products(self, rows: List[Dict]) -> Dict:
         """Import products with separated validation logic."""
         self._validator.validate_csv_rows(rows)
         
@@ -143,9 +172,27 @@ class ProductService:
                 self._command_handler.handle_create(command)
                 created += 1
                 
-        return {"created": created, "updated": updated}
+        result = {"created": created, "updated": updated}
+        
+        # Use Redis pipeline for bulk cache invalidation (10-20x faster)
+        if created > 0 or updated > 0:
+            try:
+                pipeline = redis_manager.pipeline()
+                # Invalidate products_all cache
+                pipeline.delete("products_all")
+                # Invalidate individual product caches for updated products
+                for row in rows:
+                    product_id = int(row["product_id"])
+                    pipeline.delete(f"product:{product_id}")
+                
+                await redis_manager.execute_pipeline(pipeline)
+                logger.info(f"Invalidated {1 + len(rows)} cache keys using pipeline")
+            except Exception as e:
+                logger.error(f"Failed to invalidate caches with pipeline: {e}")
+        
+        return result
 
-    def import_products_from_csv(self, content: bytes) -> Dict:
+    async def import_products_from_csv(self, content: bytes) -> Dict:
         """Parse CSV content and import products."""
         decoded = content.decode("utf-8")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -155,5 +202,5 @@ class ProductService:
             if not required.issubset(row.keys()):
                 raise ValidationError("CSV must include product_id,name,price")
             rows.append(row)
-        result = self.import_products(rows)
+        result = await self.import_products(rows)
         return {"summary": result, "count": len(rows)}

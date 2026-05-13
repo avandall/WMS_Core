@@ -90,11 +90,12 @@ class TestPositionService:
     # CREATE POSITION TESTS
     # ============================================================================
 
-    def test_create_position_success(self, position_service, mock_position_repo, mock_audit_repo, sample_position):
+    @pytest.mark.asyncio
+    async def test_create_position_success(self, position_service, mock_position_repo, mock_audit_repo, sample_position):
         """Test create position with valid data"""
         mock_position_repo.create_position.return_value = sample_position
 
-        result = position_service.create_position(
+        result = await position_service.create_position(
             warehouse_id=1,
             code="A-01-01",
             type="STORAGE",
@@ -107,16 +108,19 @@ class TestPositionService:
             warehouse_id=1,
             code="A-01-01",
             type="STORAGE",
-            description="Test Position"
+            description="Test Position",
+            capacity=None,
+            zone=None
         )
         mock_audit_repo.create_event.assert_called_once()
         assert result == sample_position
 
-    def test_create_position_without_audit(self, position_service_no_audit, mock_position_repo, sample_position):
+    @pytest.mark.asyncio
+    async def test_create_position_without_audit(self, position_service_no_audit, mock_position_repo, sample_position):
         """Test create position without audit repo"""
         mock_position_repo.create_position.return_value = sample_position
 
-        result = position_service_no_audit.create_position(
+        result = await position_service_no_audit.create_position(
             warehouse_id=1,
             code="A-01-01",
             type="STORAGE"
@@ -126,11 +130,12 @@ class TestPositionService:
         mock_position_repo.create_position.assert_called_once()
         assert result == sample_position
 
-    def test_create_position_default_type(self, position_service, mock_position_repo, sample_position):
+    @pytest.mark.asyncio
+    async def test_create_position_default_type(self, position_service, mock_position_repo, sample_position):
         """Test create position with default type"""
         mock_position_repo.create_position.return_value = sample_position
 
-        position_service.create_position(
+        await position_service.create_position(
             warehouse_id=1,
             code="A-01-01"
         )
@@ -139,14 +144,17 @@ class TestPositionService:
             warehouse_id=1,
             code="A-01-01",
             type="STORAGE",
-            description=None
+            description=None,
+            capacity=None,
+            zone=None
         )
 
-    def test_create_position_without_user(self, position_service, mock_position_repo, mock_audit_repo, sample_position):
+    @pytest.mark.asyncio
+    async def test_create_position_without_user(self, position_service, mock_position_repo, mock_audit_repo, sample_position):
         """Test create position without user_id"""
         mock_position_repo.create_position.return_value = sample_position
 
-        position_service.create_position(
+        await position_service.create_position(
             warehouse_id=1,
             code="A-01-01"
         )

@@ -18,6 +18,8 @@ class IPositionRepo(ABC):
         code: str,
         type: str = "STORAGE",
         description: Optional[str] = None,
+        capacity: Optional[int] = None,
+        zone: Optional[str] = None,
     ) -> "Position":
         pass
 

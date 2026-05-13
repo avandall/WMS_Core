@@ -45,6 +45,10 @@ dependencies = [
     "langchain-classic>=1.0.3",
     "rank-bm25>=0.2.2",
     "alembic>=1.18.4",
+    "unsloth>=2026.3.11",
+    "datasets>=4.3.0",
+    "trl>=0.24.0",
+    "redis>=7.4.0",
 ]
 
 [project.optional-dependencies]

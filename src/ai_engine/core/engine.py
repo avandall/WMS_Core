@@ -3,7 +3,9 @@ Main WMS AI Engine - orchestrates all components
 """
 from typing import Dict, Any, Optional
 from enum import Enum
+import hashlib
 
+from app.shared.core.cache import cached
 from ..workflows import AdvancedRAGWorkflow
 from ..agents import WMSAgent
 from ..retrieval import HybridRetriever, DocumentProcessor
@@ -52,7 +54,8 @@ class WMSEngine:
         
         logger.info("All components initialized successfully")
     
-    def process_query(self, question: str, mode: Optional[ProcessingMode] = None) -> Dict[str, Any]:
+    @cached(prefix="ai_query", ttl=86400)  # 24 hour cache for AI responses
+    async def process_query(self, question: str, mode: Optional[ProcessingMode] = None) -> Dict[str, Any]:
         """
         Process a query using the specified or default mode
         

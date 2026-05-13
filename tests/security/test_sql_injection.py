@@ -229,7 +229,8 @@ class TestSQLInjectionPrevention:
             except Exception:
                 pass
 
-    def test_input_sanitization_methods(self):
+    @pytest.mark.asyncio
+    async def test_input_sanitization_methods(self):
         """Test input sanitization methods if implemented"""
         # Test with mock service that should sanitize inputs
         mock_product_repo = Mock()
@@ -249,7 +250,7 @@ class TestSQLInjectionPrevention:
         for malicious_input in malicious_inputs:
             try:
                 # This should be sanitized by the service
-                result = service.create_product(
+                result = await service.create_product(
                     name=malicious_input,
                     price=10.0
                 )
@@ -263,7 +264,8 @@ class TestSQLInjectionPrevention:
                 assert 'syntax' not in error_msg
                 assert 'drop' not in error_msg
 
-    def test_parameterized_queries_safety(self):
+    @pytest.mark.asyncio
+    async def test_parameterized_queries_safety(self):
         """Test parameterized queries are used safely"""
         # This test would require access to the actual database layer
         # For now, we test that the service doesn't crash with various inputs
@@ -286,11 +288,11 @@ class TestSQLInjectionPrevention:
         
         for name, price in test_cases:
             try:
-                result = service.create_product(name=name, price=price)
-                # Should not crash the service
-                assert True  # Just ensure no crash
+                result = await service.create_product(name=name, price=price)
+                # Should not crash the service and should return a result or raise validation error
+                assert result is not None or isinstance(result, Product)
             except Exception:
-                # Should be handled gracefully
+                # Should be handled gracefully with validation error
                 pass
 
     def test_error_message_sanitization(self):

@@ -24,13 +24,15 @@ class PositionService:
     def ensure_defaults(self, warehouse_id: int) -> None:
         self.position_repo.ensure_default_positions(warehouse_id)
 
-    def create_position(
+    async def create_position(
         self,
         *,
         warehouse_id: int,
         code: str,
         type: str = "STORAGE",
         description: Optional[str] = None,
+        capacity: Optional[int] = None,
+        zone: Optional[str] = None,
         user_id: Optional[int] = None,
     ) -> Position:
         self.position_repo.ensure_default_positions(warehouse_id)
@@ -39,6 +41,8 @@ class PositionService:
             code=code,
             type=type,
             description=description,
+            capacity=capacity,
+            zone=zone,
         )
         if self.audit_event_repo:
             self.audit_event_repo.create_event(

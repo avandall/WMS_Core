@@ -34,5 +34,5 @@ async def get_inventory_by_warehouse(service: InventoryService = Depends(get_inv
 async def get_product_quantity(
     product_id: int, service: InventoryService = Depends(get_inventory_service)
 ):
-    quantity = service.get_total_quantity(product_id)
+    quantity = await service.get_total_quantity(product_id)
     return {"product_id": product_id, "quantity": quantity}

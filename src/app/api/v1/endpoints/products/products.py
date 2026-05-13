@@ -18,7 +18,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
     dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
 async def get_all_products(service: ProductService = Depends(get_product_service)):
-    products = service.get_all_products()
+    products = await service.get_all_products()
     return [ProductResponse.from_domain(product) for product in products]
 
 
@@ -35,7 +35,7 @@ async def create_product(
 ):
     ProductAuthorizer.can_create_product(user.role)
     
-    created_product = service.create_product(
+    created_product = await service.create_product(
         product_id=product.product_id,
         name=product.name,
         price=product.price,
@@ -50,7 +50,7 @@ async def create_product(
     dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
 async def get_product(product_id: int, service: ProductService = Depends(get_product_service)):
-    product = service.get_product_details(product_id)
+    product = await service.get_product_details(product_id)
     return ProductResponse.from_domain(product)
 
 
@@ -63,7 +63,7 @@ async def update_product(
 ):
     ProductAuthorizer.can_update_product(user.role, product_update)
 
-    updated_product = service.update_product(
+    updated_product = await service.update_product(
         product_id=product_id,
         name=product_update.name,
         price=product_update.price,
@@ -77,7 +77,7 @@ async def update_product(
     dependencies=[Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
 async def delete_product(product_id: int, service: ProductService = Depends(get_product_service)):
-    service.delete_product(product_id)
+    await service.delete_product(product_id)
     return {"message": f"Product {product_id} deleted successfully"}
 
 
@@ -92,6 +92,6 @@ async def import_products_csv(
     if file.content_type not in {"text/csv", "application/vnd.ms-excel", "application/csv"}:
         raise HTTPException(status_code=400, detail="CSV file required")
     content = await file.read()
-    result = service.import_products_from_csv(content)
+    result = await service.import_products_from_csv(content)
     return result
 

@@ -54,7 +54,7 @@ class DocumentService:
         self.session = session
         self._doc_id_generator = document_id_generator()
 
-    def create_import_document(
+    async def create_import_document(
         self,
         to_warehouse_id: int,
         items: List[Dict[str, Any]],
@@ -100,7 +100,7 @@ class DocumentService:
             )
         self.document_repo.delete(document_id)
 
-    def create_export_document(
+    async def create_export_document(
         self,
         from_warehouse_id: int,
         items: List[Dict[str, Any]],
@@ -122,7 +122,7 @@ class DocumentService:
         self.document_repo.save(document)
         return document
 
-    def create_sale_document(
+    async def create_sale_document(
         self,
         from_warehouse_id: int,
         items: List[Dict[str, Any]],
@@ -146,7 +146,7 @@ class DocumentService:
         self.document_repo.save(document)
         return document
 
-    def create_transfer_document(
+    async def create_transfer_document(
         self,
         from_warehouse_id: int,
         to_warehouse_id: int,

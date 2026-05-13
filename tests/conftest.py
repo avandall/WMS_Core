@@ -16,6 +16,10 @@ if str(src_path) not in sys.path:
 import pytest
 from typing import Any
 import requests
+import asyncio
+
+# Enable asyncio mode for pytest
+pytest_plugins = ('pytest_asyncio',)
 
 # Lazy load app to avoid DB connection during SQL tests
 APP_AVAILABLE = True

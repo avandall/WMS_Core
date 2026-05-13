@@ -79,17 +79,18 @@ class TestWarehouseOperationsFunctional:
     # WAREHOUSE CREATION AND MANAGEMENT WORKFLOWS
     # ============================================================================
 
-    def test_create_new_warehouse_workflow(self, mock_warehouse_service, mock_inventory_service):
+    @pytest.mark.asyncio
+    async def test_create_new_warehouse_workflow(self, mock_warehouse_service, mock_inventory_service):
         """Test functional workflow for creating a new warehouse"""
         
         # Setup mocks
         created_warehouse = Warehouse(warehouse_id=1, location="New Warehouse")
-        mock_warehouse_service.create_warehouse.return_value = created_warehouse
-        mock_warehouse_service.get_warehouse_inventory.return_value = []
+        mock_warehouse_service.create_warehouse = AsyncMock(return_value=created_warehouse)
+        mock_warehouse_service.get_warehouse_inventory = AsyncMock(return_value=[])
         
         # Execute workflow
-        warehouse = mock_warehouse_service.create_warehouse("New Warehouse")
-        inventory = mock_warehouse_service.get_warehouse_inventory(warehouse.warehouse_id)
+        warehouse = await mock_warehouse_service.create_warehouse("New Warehouse")
+        inventory = await mock_warehouse_service.get_warehouse_inventory(warehouse.warehouse_id)
         
         # Verify workflow results
         assert warehouse.location == "New Warehouse"
@@ -100,7 +101,8 @@ class TestWarehouseOperationsFunctional:
         mock_warehouse_service.create_warehouse.assert_called_once_with("New Warehouse")
         mock_warehouse_service.get_warehouse_inventory.assert_called_once_with(1)
 
-    def test_warehouse_setup_with_initial_inventory(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products, sample_inventory_items):
+    @pytest.mark.asyncio
+    async def test_warehouse_setup_with_initial_inventory(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products, sample_inventory_items):
         """Test functional workflow for setting up warehouse with initial inventory"""
         
         # Setup mocks
@@ -116,23 +118,23 @@ class TestWarehouseOperationsFunctional:
             created_by="admin"
         )
         
-        mock_warehouse_service.create_warehouse.return_value = warehouse
+        mock_warehouse_service.create_warehouse = AsyncMock(return_value=warehouse)
         mock_document_service.create_import_document.return_value = import_document
         mock_document_service.post_document.return_value = import_document
         # Set status to POSTED to simulate successful posting
         mock_document_service.post_document.return_value.status = DocumentStatus.POSTED
-        mock_warehouse_service.get_warehouse_inventory.return_value = sample_inventory_items[:2]
+        mock_warehouse_service.get_warehouse_inventory = AsyncMock(return_value=sample_inventory_items[:2])
         
         # Execute workflow
         # 1. Create warehouse
-        warehouse = mock_warehouse_service.create_warehouse("Setup Warehouse")
+        warehouse = await mock_warehouse_service.create_warehouse("Setup Warehouse")
         
         # 2. Create import document for initial inventory
         items_data = [
             {"product_id": 1, "quantity": 100, "unit_price": 99.99},
             {"product_id": 2, "quantity": 50, "unit_price": 49.99}
         ]
-        document = mock_document_service.create_import_document(
+        document = await mock_document_service.create_import_document(
             to_warehouse_id=warehouse.warehouse_id,
             items=items_data,
             created_by="admin"
@@ -142,7 +144,7 @@ class TestWarehouseOperationsFunctional:
         posted_document = mock_document_service.post_document(document.document_id, "manager")
         
         # 4. Verify inventory
-        inventory = mock_warehouse_service.get_warehouse_inventory(warehouse.warehouse_id)
+        inventory = await mock_warehouse_service.get_warehouse_inventory(warehouse.warehouse_id)
         
         # Verify workflow results
         assert warehouse.location == "Setup Warehouse"
@@ -153,7 +155,8 @@ class TestWarehouseOperationsFunctional:
         assert inventory[1].product_id == 2
         assert inventory[1].quantity == 50
 
-    def test_warehouse_relocation_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_warehouse, sample_inventory_items):
+    @pytest.mark.asyncio
+    async def test_warehouse_relocation_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_warehouse, sample_inventory_items):
         """Test functional workflow for relocating warehouse inventory"""
         
         # Setup mocks
@@ -165,32 +168,33 @@ class TestWarehouseOperationsFunctional:
             from_warehouse_id=1,
             to_warehouse_id=2,
             items=[
-                DocumentProduct(product_id=1, quantity=50, unit_price=99.99),
-                DocumentProduct(product_id=2, quantity=25, unit_price=49.99)
+                DocumentProduct(product_id=1, quantity=50, unit_price=99.99)
             ],
             created_by="admin"
         )
         
-        mock_warehouse_service.get_warehouse.side_effect = [source_warehouse, target_warehouse]
+        mock_warehouse_service.get_warehouse = AsyncMock(return_value=source_warehouse)
+        mock_warehouse_service.create_warehouse = AsyncMock(return_value=target_warehouse)
         mock_document_service.create_transfer_document.return_value = transfer_document
-        mock_document_service.post_document.return_value = transfer_document
-        # Set status to POSTED to simulate successful posting
-        mock_document_service.post_document.return_value.status = DocumentStatus.POSTED
-        mock_warehouse_service.transfer_all_inventory.return_value = sample_inventory_items[:2]
+        mock_document_service.post_document = AsyncMock(return_value=transfer_document)
+        mock_warehouse_service.get_warehouse_inventory = AsyncMock(return_value=sample_inventory_items[:1])
+        mock_warehouse_service.transfer_all_inventory = AsyncMock(return_value=sample_inventory_items[:2])
+        # Ensure the returned document has POSTED status
+        transfer_document.status = DocumentStatus.POSTED
         
         # Execute workflow
         # 1. Get source warehouse
-        source = mock_warehouse_service.get_warehouse(1)
+        source = await mock_warehouse_service.get_warehouse(1)
         
         # 2. Create target warehouse
-        target = mock_warehouse_service.create_warehouse("Target Warehouse")
+        target = await mock_warehouse_service.create_warehouse("Target Warehouse")
         
         # 3. Create transfer document
         items_data = [
             {"product_id": 1, "quantity": 50, "unit_price": 99.99},
             {"product_id": 2, "quantity": 25, "unit_price": 49.99}
         ]
-        document = mock_document_service.create_transfer_document(
+        document = await mock_document_service.create_transfer_document(
             from_warehouse_id=source.warehouse_id,
             to_warehouse_id=target.warehouse_id,
             items=items_data,
@@ -198,10 +202,10 @@ class TestWarehouseOperationsFunctional:
         )
         
         # 4. Post transfer document
-        posted_document = mock_document_service.post_document(document.document_id, "manager")
+        posted_document = await mock_document_service.post_document(document.document_id, "manager")
         
         # 5. Alternative: Transfer all inventory at once
-        transferred_items = mock_warehouse_service.transfer_all_inventory(
+        transferred_items = await mock_warehouse_service.transfer_all_inventory(
             from_warehouse_id=source.warehouse_id,
             to_warehouse_id=target.warehouse_id
         )
@@ -216,7 +220,8 @@ class TestWarehouseOperationsFunctional:
     # INVENTORY MANAGEMENT WORKFLOWS
     # ============================================================================
 
-    def test_inventory_receiving_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, mock_product_service, sample_products):
+    @pytest.mark.asyncio
+    async def test_inventory_receiving_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, mock_product_service, sample_products):
         """Test functional workflow for receiving inventory"""
         
         # Setup mocks
@@ -231,24 +236,24 @@ class TestWarehouseOperationsFunctional:
             note="Receiving shipment #12345"
         )
         
-        mock_warehouse_service.get_warehouse.return_value = warehouse
-        mock_product_service.get_product_details.return_value = product
+        mock_warehouse_service.get_warehouse = AsyncMock(return_value=warehouse)
+        mock_product_service.get_product_details = AsyncMock(return_value=product)
         mock_document_service.create_import_document.return_value = import_document
         mock_document_service.post_document.return_value = import_document
         # Set status to POSTED to simulate successful posting
         mock_document_service.post_document.return_value.status = DocumentStatus.POSTED
-        mock_warehouse_service.get_warehouse_inventory.return_value = [InventoryItem(product_id=1, quantity=100)]
+        mock_warehouse_service.get_warehouse_inventory = AsyncMock(return_value=[InventoryItem(product_id=1, quantity=100)])
         
         # Execute workflow
         # 1. Verify warehouse exists
-        warehouse = mock_warehouse_service.get_warehouse(1)
+        warehouse = await mock_warehouse_service.get_warehouse(1)
         
         # 2. Verify product exists
-        product = mock_product_service.get_product_details(1)
+        product = await mock_product_service.get_product_details(1)
         
         # 3. Create import document
         items_data = [{"product_id": product.product_id, "quantity": 100, "unit_price": 99.99}]
-        document = mock_document_service.create_import_document(
+        document = await mock_document_service.create_import_document(
             to_warehouse_id=warehouse.warehouse_id,
             items=items_data,
             created_by="admin",
@@ -259,7 +264,7 @@ class TestWarehouseOperationsFunctional:
         posted_document = mock_document_service.post_document(document.document_id, "manager")
         
         # 5. Verify inventory updated
-        inventory = mock_warehouse_service.get_warehouse_inventory(warehouse.warehouse_id)
+        inventory = await mock_warehouse_service.get_warehouse_inventory(warehouse.warehouse_id)
         
         # Verify workflow results
         assert posted_document.status == DocumentStatus.POSTED
@@ -268,7 +273,8 @@ class TestWarehouseOperationsFunctional:
         assert inventory[0].product_id == 1
         assert inventory[0].quantity == 100
 
-    def test_inventory_shipping_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, mock_product_service, sample_products, sample_inventory_items):
+    @pytest.mark.asyncio
+    async def test_inventory_shipping_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, mock_product_service, sample_products, sample_inventory_items):
         """Test functional workflow for shipping inventory"""
         
         # Setup mocks
@@ -297,12 +303,12 @@ class TestWarehouseOperationsFunctional:
         
         # Execute workflow
         # 1. Check current inventory
-        current_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        current_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         initial_quantity = current_inventory[0].quantity if current_inventory else 0
         
         # 2. Create export document
         items_data = [{"product_id": 1, "quantity": 25, "unit_price": 99.99}]
-        document = mock_document_service.create_export_document(
+        document = await mock_document_service.create_export_document(
             from_warehouse_id=1,
             items=items_data,
             created_by="admin",
@@ -313,7 +319,7 @@ class TestWarehouseOperationsFunctional:
         posted_document = mock_document_service.post_document(document.document_id, "manager")
         
         # 4. Verify inventory updated
-        final_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        final_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         final_quantity = final_inventory[0].quantity if final_inventory else 0
         
         # Verify workflow results
@@ -322,30 +328,31 @@ class TestWarehouseOperationsFunctional:
         assert initial_quantity == 100
         assert final_quantity == 75  # 100 - 25 shipped
 
-    def test_inventory_adjustment_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service):
+    @pytest.mark.asyncio
+    async def test_inventory_adjustment_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service):
         """Test functional workflow for inventory adjustments"""
         
         # Setup mocks
         warehouse = Warehouse(warehouse_id=1, location="Adjustment Warehouse")
         
-        mock_warehouse_service.get_warehouse.return_value = warehouse
-        mock_warehouse_service.get_warehouse_inventory.return_value = [InventoryItem(product_id=1, quantity=100)]
-        mock_inventory_service.add_to_total_inventory.return_value = None
-        mock_inventory_service.remove_from_total_inventory.return_value = None
+        mock_warehouse_service.get_warehouse = AsyncMock(return_value=warehouse)
+        mock_warehouse_service.get_warehouse_inventory = AsyncMock(return_value=[InventoryItem(product_id=1, quantity=100)])
+        mock_inventory_service.add_to_total_inventory = AsyncMock(return_value=None)
+        mock_inventory_service.remove_from_total_inventory = AsyncMock(return_value=None)
         
         # Execute workflow
         # 1. Check current inventory
-        current_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        current_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         initial_quantity = current_inventory[0].quantity if current_inventory else 0
         
         # 2. Add inventory (stock in)
-        mock_inventory_service.add_to_total_inventory(1, 25)
+        await mock_inventory_service.add_to_total_inventory(1, 25)
         
         # 3. Remove inventory (stock out)
-        mock_inventory_service.remove_from_total_inventory(1, 10)
+        await mock_inventory_service.remove_from_total_inventory(1, 10)
         
         # 4. Check final inventory
-        final_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        final_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         
         # Verify workflow results
         assert initial_quantity == 100
@@ -356,7 +363,8 @@ class TestWarehouseOperationsFunctional:
     # STOCK LEVEL MANAGEMENT WORKFLOWS
     # ============================================================================
 
-    def test_low_stock_monitoring_workflow(self, mock_inventory_service, mock_product_service, sample_products, sample_inventory_items):
+    @pytest.mark.asyncio
+    async def test_low_stock_monitoring_workflow(self, mock_inventory_service, mock_product_service, sample_products, sample_inventory_items):
         """Test functional workflow for monitoring low stock levels"""
         
         # Setup mocks
@@ -364,17 +372,17 @@ class TestWarehouseOperationsFunctional:
             {"product": sample_products[2], "current_quantity": 5, "threshold": 10, "needs_restock": True}
         ]
         
-        mock_inventory_service.get_low_stock_products.return_value = low_stock_items
+        mock_inventory_service.get_low_stock_products = AsyncMock(return_value=low_stock_items)
         mock_product_service.get_product_details.side_effect = sample_products
         
         # Execute workflow
         # 1. Check low stock products
-        low_stock = mock_inventory_service.get_low_stock_products(threshold=10)
+        low_stock = await mock_inventory_service.get_low_stock_products(threshold=10)
         
         # 2. Generate restock recommendations
         restock_recommendations = []
         for item in low_stock:
-            product = mock_product_service.get_product_details(item["product"].product_id)
+            product = await mock_product_service.get_product_details(item["product"].product_id)
             restock_quantity = item["threshold"] * 2  # Restock to double the threshold
             restock_recommendations.append({
                 "product": product,
@@ -393,7 +401,8 @@ class TestWarehouseOperationsFunctional:
         assert restock_recommendations[0]["recommended_quantity"] == 20
         assert restock_recommendations[0]["urgency"] == "MEDIUM"
 
-    def test_stock_count_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_warehouse, sample_inventory_items):
+    @pytest.mark.asyncio
+    async def test_stock_count_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_warehouse, sample_inventory_items):
         """Test functional workflow for physical stock count"""
         
         # Setup mocks
@@ -417,7 +426,7 @@ class TestWarehouseOperationsFunctional:
         
         # Execute workflow
         # 1. Get current system inventory
-        system_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        system_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         system_counts = {item.product_id: item.quantity for item in system_inventory}
         
         # 2. Simulate physical count results
@@ -450,7 +459,7 @@ class TestWarehouseOperationsFunctional:
             })
         
         if adjustment_items:
-            document = mock_document_service.create_import_document(
+            document = await mock_document_service.create_import_document(
                 to_warehouse_id=1,
                 items=adjustment_items,
                 created_by="admin",
@@ -474,7 +483,8 @@ class TestWarehouseOperationsFunctional:
     # MULTI-WAREHOUSE OPERATIONS WORKFLOWS
     # ============================================================================
 
-    def test_cross_warehouse_transfer_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products):
+    @pytest.mark.asyncio
+    async def test_cross_warehouse_transfer_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products):
         """Test functional workflow for cross-warehouse transfers"""
         
         # Setup mocks
@@ -496,18 +506,18 @@ class TestWarehouseOperationsFunctional:
             [InventoryItem(product_id=1, quantity=25)]   # Target inventory
         ]
         mock_document_service.create_transfer_document.return_value = transfer_document
-        mock_document_service.post_document.return_value = transfer_document
+        mock_document_service.post_document = AsyncMock(return_value=transfer_document)
         # Set status to POSTED to simulate successful posting
         mock_document_service.post_document.return_value.status = DocumentStatus.POSTED
-        mock_warehouse_service.transfer_product.return_value = None
+        mock_warehouse_service.transfer_product = AsyncMock(return_value=None)
         
         # Execute workflow
         # 1. Check source warehouse inventory
-        source_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        source_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         source_quantity = source_inventory[0].quantity if source_inventory else 0
         
         # 2. Check target warehouse inventory
-        target_inventory = mock_warehouse_service.get_warehouse_inventory(2)
+        target_inventory = await mock_warehouse_service.get_warehouse_inventory(2)
         target_quantity = target_inventory[0].quantity if target_inventory else 0
         
         # 3. Verify sufficient stock for transfer
@@ -516,7 +526,7 @@ class TestWarehouseOperationsFunctional:
         
         # 4. Create transfer document
         items_data = [{"product_id": 1, "quantity": transfer_quantity, "unit_price": 99.99}]
-        document = mock_document_service.create_transfer_document(
+        document = await mock_document_service.create_transfer_document(
             from_warehouse_id=1,
             to_warehouse_id=2,
             items=items_data,
@@ -525,10 +535,10 @@ class TestWarehouseOperationsFunctional:
         )
         
         # 5. Post transfer document
-        posted_document = mock_document_service.post_document(document.document_id, "manager")
+        posted_document = await mock_document_service.post_document(document.document_id, "manager")
         
         # 6. Alternative: Use direct transfer service
-        mock_warehouse_service.transfer_product(
+        await mock_warehouse_service.transfer_product(
             from_warehouse_id=1,
             to_warehouse_id=2,
             product_id=1,
@@ -541,7 +551,8 @@ class TestWarehouseOperationsFunctional:
         assert posted_document.status == DocumentStatus.POSTED
         assert posted_document.note == "Stock replenishment for Target Warehouse"
 
-    def test_warehouse_consolidation_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products):
+    @pytest.mark.asyncio
+    async def test_warehouse_consolidation_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products):
         """Test functional workflow for warehouse consolidation"""
         
         # Setup mocks
@@ -563,10 +574,10 @@ class TestWarehouseOperationsFunctional:
         
         # Execute workflow
         # 1. Get old warehouse inventory
-        old_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        old_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         
         # 2. Transfer all inventory to new warehouse
-        transferred_items = mock_warehouse_service.transfer_all_inventory(
+        transferred_items = await mock_warehouse_service.transfer_all_inventory(
             from_warehouse_id=1,
             to_warehouse_id=2
         )
@@ -575,7 +586,7 @@ class TestWarehouseOperationsFunctional:
         assert len(transferred_items) == len(old_inventory)
         
         # 4. Delete old warehouse
-        mock_warehouse_service.delete_warehouse(1)
+        await mock_warehouse_service.delete_warehouse(1)
         
         # Verify workflow results
         assert len(old_inventory) == 3
@@ -587,7 +598,8 @@ class TestWarehouseOperationsFunctional:
     # REPORTING AND ANALYTICS WORKFLOWS
     # ============================================================================
 
-    def test_warehouse_utilization_report_workflow(self, mock_warehouse_service, mock_inventory_service, sample_warehouse, sample_inventory_items):
+    @pytest.mark.asyncio
+    async def test_warehouse_utilization_report_workflow(self, mock_warehouse_service, mock_inventory_service, sample_warehouse, sample_inventory_items):
         """Test functional workflow for warehouse utilization reporting"""
         
         # Setup mocks
@@ -602,8 +614,8 @@ class TestWarehouseOperationsFunctional:
             }
         ]
         
-        mock_warehouse_service.get_all_warehouses_with_inventory_summary.return_value = warehouses_with_inventory
-        mock_inventory_service.get_all_inventory_with_details.return_value = [
+        mock_warehouse_service.get_all_warehouses_with_inventory_summary = AsyncMock(return_value=warehouses_with_inventory)
+        mock_inventory_service.get_all_inventory_with_details = AsyncMock(return_value=[
             {
                 "product": Mock(product_id=1, name="Product A"),
                 "total_quantity": 100,
@@ -625,14 +637,14 @@ class TestWarehouseOperationsFunctional:
                     {"warehouse_id": 1, "warehouse_name": "Main Warehouse", "quantity": 25}
                 ]
             }
-        ]
+        ])
         
         # Execute workflow
         # 1. Get warehouse summaries
-        warehouse_summaries = mock_warehouse_service.get_all_warehouses_with_inventory_summary()
+        warehouse_summaries = await mock_warehouse_service.get_all_warehouses_with_inventory_summary()
         
         # 2. Get detailed inventory information
-        inventory_details = mock_inventory_service.get_all_inventory_with_details()
+        inventory_details = await mock_inventory_service.get_all_inventory_with_details()
         
         # 3. Generate utilization report
         utilization_report = {
@@ -660,7 +672,8 @@ class TestWarehouseOperationsFunctional:
         assert utilization_report["average_items_per_warehouse"] == 175.0
         assert len(utilization_report["warehouse_details"]) == 1
 
-    def test_inventory_turnover_analysis_workflow(self, mock_inventory_service, mock_document_service, sample_products):
+    @pytest.mark.asyncio
+    async def test_inventory_turnover_analysis_workflow(self, mock_inventory_service, mock_document_service, sample_products):
         """Test functional workflow for inventory turnover analysis"""
         
         # Setup mocks
@@ -689,16 +702,16 @@ class TestWarehouseOperationsFunctional:
             )
         ]
         
-        mock_inventory_service.get_inventory_summary.return_value = inventory_summary
+        mock_inventory_service.get_inventory_summary = AsyncMock(return_value=inventory_summary)
         mock_document_service.get_pending_documents.return_value = []
-        mock_document_service.get_documents_by_status.return_value = recent_documents
+        mock_document_service.get_documents_by_status = AsyncMock(return_value=recent_documents)
         
         # Execute workflow
         # 1. Get current inventory summary
-        current_summary = mock_inventory_service.get_inventory_summary()
+        current_summary = await mock_inventory_service.get_inventory_summary()
         
         # 2. Get recent sales/exports
-        recent_exports = mock_document_service.get_documents_by_status(DocumentStatus.POSTED)
+        recent_exports = await mock_document_service.get_documents_by_status(DocumentStatus.POSTED)
         
         # 3. Calculate turnover metrics
         total_sales_quantity = 0
@@ -745,7 +758,8 @@ class TestWarehouseOperationsFunctional:
     # ERROR HANDLING AND EDGE CASE WORKFLOWS
     # ============================================================================
 
-    def test_insufficient_stock_handling_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service):
+    @pytest.mark.asyncio
+    async def test_insufficient_stock_handling_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service):
         """Test functional workflow for handling insufficient stock situations"""
         
         # Setup mocks
@@ -756,7 +770,7 @@ class TestWarehouseOperationsFunctional:
         
         # Execute workflow
         # 1. Check available stock
-        available_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        available_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         available_quantity = available_inventory[0].quantity if available_inventory else 0
         
         # 2. Attempt to fulfill order requiring more stock
@@ -798,7 +812,8 @@ class TestWarehouseOperationsFunctional:
         assert response["partial_fulfillment_quantity"] == 10
         assert response["backorder_quantity"] == 15
 
-    def test_warehouse_closure_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products):
+    @pytest.mark.asyncio
+    async def test_warehouse_closure_workflow(self, mock_warehouse_service, mock_inventory_service, mock_document_service, sample_products):
         """Test functional workflow for warehouse closure and decommissioning"""
         
         # Setup mocks
@@ -823,21 +838,21 @@ class TestWarehouseOperationsFunctional:
         
         # Execute workflow
         # 1. Check warehouse inventory
-        inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         
         # 2. Transfer all inventory to target warehouse
         if inventory:
-            transferred_items = mock_warehouse_service.transfer_all_inventory(
+            transferred_items = await mock_warehouse_service.transfer_all_inventory(
                 from_warehouse_id=1,
                 to_warehouse_id=2
             )
         
         # 3. Verify warehouse is empty
-        final_inventory = mock_warehouse_service.get_warehouse_inventory(1)
+        final_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
         
         # 4. Close warehouse
         if not final_inventory:
-            mock_warehouse_service.delete_warehouse(1)
+            await mock_warehouse_service.delete_warehouse(1)
             closure_status = "SUCCESS"
         else:
             closure_status = "FAILED - Inventory remaining"

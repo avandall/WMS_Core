@@ -32,6 +32,21 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
 
+    # Redis Configuration
+    redis_url: str = "redis://localhost:6379/0"
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
+    redis_max_connections: int = 10
+
+    # Redis Streams (critical events) consumer configuration
+    redis_critical_streams_enabled: bool = True
+    redis_critical_streams_group: str = "wms_api_critical"
+    redis_critical_streams_consumer: str = ""  # if empty, app will generate a unique name
+    redis_critical_streams_consumer_prefix: str = "api"
+    redis_critical_streams_claim_idle_ms: int = 60_000
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:

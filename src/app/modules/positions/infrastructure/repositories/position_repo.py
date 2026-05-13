@@ -85,6 +85,8 @@ class PositionRepo(TransactionalRepository):
         code: str,
         type: str = "STORAGE",
         description: Optional[str] = None,
+        capacity: Optional[int] = None,
+        zone: Optional[str] = None,
     ) -> Position:
         warehouse = self.session.get(WarehouseModel, warehouse_id)
         if not warehouse:
@@ -107,6 +109,8 @@ class PositionRepo(TransactionalRepository):
             code=norm_code,
             type=type.strip().upper(),
             description=description,
+            capacity=capacity,
+            zone=zone,
             is_active=1,
         )
         self.session.add(model)

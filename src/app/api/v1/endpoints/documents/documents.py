@@ -27,7 +27,7 @@ async def create_import_document(
     items_dict = [item.model_dump() for item in doc.items]
     created_by = doc.created_by or current_user.email
     destination_warehouse_id = doc.destination_warehouse_id or doc.warehouse_id
-    document = service.create_import_document(
+    document = await service.create_import_document(
         to_warehouse_id=destination_warehouse_id,
         items=items_dict,
         created_by=created_by,
@@ -49,7 +49,7 @@ async def create_export_document(
     items_dict = [item.model_dump() for item in doc.items]
     created_by = doc.created_by or current_user.email
     source_warehouse_id = doc.source_warehouse_id or doc.warehouse_id
-    document = service.create_export_document(
+    document = await service.create_export_document(
         from_warehouse_id=source_warehouse_id,
         items=items_dict,
         created_by=created_by,
@@ -70,7 +70,7 @@ async def create_sale_document(
 ):
     items_dict = [item.model_dump() for item in doc.items]
     created_by = doc.created_by or current_user.email
-    document = service.create_sale_document(
+    document = await service.create_sale_document(
         from_warehouse_id=doc.source_warehouse_id,
         items=items_dict,
         created_by=created_by,
@@ -92,7 +92,7 @@ async def create_transfer_document(
 ):
     items_dict = [item.model_dump() for item in doc.items]
     created_by = doc.created_by or current_user.email
-    document = service.create_transfer_document(
+    document = await service.create_transfer_document(
         from_warehouse_id=doc.source_warehouse_id,
         to_warehouse_id=doc.destination_warehouse_id,
         items=items_dict,

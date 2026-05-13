@@ -48,11 +48,13 @@ async def create_position(
     service: PositionService = Depends(get_position_service),
     current_user=Depends(get_current_user),
 ):
-    pos = service.create_position(
+    pos = await service.create_position(
         warehouse_id=warehouse_id,
         code=data.code,
         type=data.type,
         description=data.description,
+        capacity=data.capacity,
+        zone=data.zone,
         user_id=getattr(current_user, "user_id", None),
     )
     return PositionResponse(

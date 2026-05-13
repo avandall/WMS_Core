@@ -4,6 +4,7 @@ WMS AI Engine Integration - Add AI endpoints to existing dashboard backend
 import os
 import sys
 import json
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def get_ai_engine():
     return ai_engine
 
 # AI Engine API Handlers
-def handle_ai_query(data):
+async def handle_ai_query(data):
     """Handle AI query requests"""
     try:
         engine = get_ai_engine()
@@ -56,7 +57,7 @@ def handle_ai_query(data):
         processing_mode = mode_map.get(mode_str.lower(), ProcessingMode.HYBRID)
         
         start_time = datetime.now()
-        result = engine.process_query(question, mode=processing_mode)
+        result = await engine.process_query(question, mode=processing_mode)
         processing_time = (datetime.now() - start_time).total_seconds()
         
         return {
@@ -217,7 +218,7 @@ def add_ai_routes_to_fastapi(app):
     @app.post("/api/ai/query")
     async def api_ai_query(request: QueryRequest):
         try:
-            result = handle_ai_query(request.dict())
+            result = await handle_ai_query(request.dict())
             return result
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.shared.core.logging import get_logger
+from app.shared.core.cache import cached, invalidate_cache_pattern
+from app.shared.core.redis import redis_manager
+from app.shared.core.pubsub import EventPublisher
 from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.domain.business_exceptions import EntityNotFoundError, InsufficientStockError, InvalidQuantityError
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
@@ -25,28 +28,83 @@ class InventoryService:
         self.product_repo = product_repo
         self.warehouse_repo = warehouse_repo
 
-    def add_to_total_inventory(self, product_id: int, quantity: int) -> None:
+    @invalidate_cache_pattern("inventory_quantity")
+    async def add_to_total_inventory(self, product_id: int, quantity: int, user_id: Optional[int] = None) -> None:
         if quantity < 0:
             raise InvalidQuantityError("Cannot add negative quantity to inventory")
         product = self.product_repo.get(product_id)
         if not product:
             raise EntityNotFoundError(f"Product {product_id} not found")
+        
+        # Get old quantity for change tracking
+        old_quantity = self.inventory_repo.get_quantity(product_id)
+        
+        # Add quantity
         self.inventory_repo.add_quantity(product_id, quantity)
+        new_quantity = old_quantity + quantity
+        
+        # Invalidate specific inventory cache
+        try:
+            await redis_manager.delete(f"inventory_quantity:{product_id}")
+        except Exception as e:
+            # Log cache error but don't fail the operation
+            logger.error(f"Failed to invalidate cache: {e}")
+        
+        # Publish real-time stock change event
+        try:
+            await EventPublisher.publish_stock_change(
+                product_id=product_id,
+                old_quantity=old_quantity,
+                new_quantity=new_quantity,
+                user_id=user_id,
+                source="inventory_service"
+            )
+        except Exception as e:
+            # Log PubSub error but don't fail the operation
+            logger.error(f"Failed to publish stock change event: {e}")
 
-    def remove_from_total_inventory(self, product_id: int, quantity: int) -> None:
+    @invalidate_cache_pattern("inventory_quantity")
+    async def remove_from_total_inventory(self, product_id: int, quantity: int, user_id: Optional[int] = None) -> None:
         if quantity < 0:
             raise InvalidQuantityError("Cannot remove negative quantity from inventory")
         product = self.product_repo.get(product_id)
         if not product:
             raise EntityNotFoundError(f"Product {product_id} not found")
-        current_quantity = self.inventory_repo.get_quantity(product_id)
-        if current_quantity < quantity:
+        
+        # Get old quantity for change tracking
+        old_quantity = self.inventory_repo.get_quantity(product_id)
+        
+        if old_quantity < quantity:
             raise InsufficientStockError(
-                f"Insufficient inventory: only {current_quantity} items available"
+                f"Insufficient inventory: only {old_quantity} items available"
             )
+        
+        # Remove quantity
         self.inventory_repo.remove_quantity(product_id, quantity)
+        new_quantity = old_quantity - quantity
+        
+        # Invalidate specific inventory cache
+        try:
+            await redis_manager.delete(f"inventory_quantity:{product_id}")
+        except Exception as e:
+            # Log cache error but don't fail the operation
+            logger.error(f"Failed to invalidate cache: {e}")
+        
+        # Publish real-time stock change event
+        try:
+            await EventPublisher.publish_stock_change(
+                product_id=product_id,
+                old_quantity=old_quantity,
+                new_quantity=new_quantity,
+                user_id=user_id,
+                source="inventory_service"
+            )
+        except Exception as e:
+            # Log PubSub error but don't fail the operation
+            logger.error(f"Failed to publish stock change event: {e}")
 
-    def get_total_quantity(self, product_id: int) -> int:
+    @cached(prefix="inventory_quantity", ttl=300)  # 5 minutes cache for real-time data
+    async def get_total_quantity(self, product_id: int) -> int:
         product = self.product_repo.get(product_id)
         if not product:
             raise EntityNotFoundError(f"Product {product_id} not found")
