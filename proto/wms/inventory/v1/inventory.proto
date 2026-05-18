@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package wms.inventory.v1;
+
+service InventoryService {
+  rpc ListInventoryItems(ListInventoryItemsRequest) returns (ListInventoryItemsResponse);
+  rpc GetInventoryByWarehouse(GetInventoryByWarehouseRequest) returns (GetInventoryByWarehouseResponse);
+  rpc GetProductQuantity(GetProductQuantityRequest) returns (GetProductQuantityResponse);
+}
+
+message InventoryItem {
+  int64 product_id = 1;
+  int64 quantity = 2;
+}
+
+message WarehouseInventoryRow {
+  int64 product_id = 1;
+  int64 warehouse_id = 2;
+  string warehouse_name = 3;
+  int64 quantity = 4;
+}
+
+message ListInventoryItemsRequest {}
+
+message ListInventoryItemsResponse {
+  repeated InventoryItem items = 1;
+}
+
+message GetInventoryByWarehouseRequest {}
+
+message GetInventoryByWarehouseResponse {
+  repeated WarehouseInventoryRow rows = 1;
+}
+
+message GetProductQuantityRequest {
+  int64 product_id = 1;
+}
+
+message GetProductQuantityResponse {
+  int64 product_id = 1;
+  int64 quantity = 2;
+}
+
