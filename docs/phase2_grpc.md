@@ -21,12 +21,5 @@ Phase 2 đã extract các domain sau khỏi monolith và expose bằng gRPC:
 
 ## Monolith façade routing (REST → gRPC)
 
-Monolith sẽ gọi gRPC services khi các env vars sau bật:
-
-- `CUSTOMER_GRPC=1` và `CUSTOMER_GRPC_ADDR=customer-service:50052`
-- `PRODUCT_GRPC=1` và `PRODUCT_GRPC_ADDR=product-service:50053`
-- `WAREHOUSE_GRPC=1` và `WAREHOUSE_GRPC_ADDR=warehouse-service:50054`
-
-Identity auth validation dùng:
-- `IDENTITY_GRPC_ADDR=identity-service:50051`
-
+Monolith façade đã được loại khỏi root `docker-compose.yml`. Public entrypoint chuyển sang API Gateway
+(`Services/api-gateway/`) và gateway sẽ gọi gRPC services.

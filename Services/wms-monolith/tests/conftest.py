@@ -10,8 +10,15 @@ from pathlib import Path
 # Add src to Python path for all tests
 project_root = Path(__file__).parent.parent
 src_path = project_root / "src"
+gen_path = project_root / "src" / "app" / "gen"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
+if str(gen_path) not in sys.path:
+    sys.path.insert(0, str(gen_path))
+
+# Use a local SQLite database for tests by default to avoid requiring PostgreSQL.
+test_db_file = project_root / "tests" / "refactor_guard" / "refactor_guard.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{test_db_file}"
 
 import pytest
 from typing import Any

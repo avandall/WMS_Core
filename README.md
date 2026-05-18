@@ -25,7 +25,7 @@ Inter-service communication chuẩn hóa bằng gRPC (API Gateway sẽ làm REST
 
 ## Chạy monolith (tạm thời)
 
-Toàn bộ cách chạy cũ nằm trong `Services/wms-monolith/`.
+Monolith chỉ còn dùng để tham chiếu code/so sánh và chạy test guard. Entrypoint chạy chính thức là `Services/api-gateway/`.
 
 ## gRPC protos
 
@@ -35,3 +35,9 @@ Toàn bộ cách chạy cũ nằm trong `Services/wms-monolith/`.
 ## Phase 2
 
 Chi tiết Phase 2 gRPC + monolith façade routing: `docs/phase2_grpc.md`
+
+## Run (local)
+
+Root `docker-compose.yml` không còn chạy `wms-monolith`. API public entrypoint là API Gateway:
+- REST: `http://localhost:8000/api/v1/*`
+- Downstream: gRPC nội bộ (identity/customer/product/warehouse/inventory)

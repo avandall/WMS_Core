@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from api_gateway.auth import get_current_user
 from api_gateway.grpc_clients import (
     customer_stub,
+    documents_stub,
     inventory_stub,
     product_stub,
     warehouse_ops_stub,
@@ -14,6 +15,7 @@ from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
 from api_gateway.gen.wms.product.v1 import product_pb2
 from api_gateway.gen.wms.warehouse.v1 import warehouse_pb2
+from api_gateway.gen.wms.documents.v1 import documents_pb2
 
 
 router = APIRouter(prefix="/api/v1")
@@ -312,6 +314,140 @@ def optimize_distribution(product_id: int):
         "distribution": [{"warehouse_id": int(d.warehouse_id), "location": d.location, "quantity": int(d.quantity)} for d in resp.distribution],
         "recommendations": list(resp.recommendations),
     }
+
+
+# ---- Documents ----
+@router.post("/documents/import", dependencies=[Depends(get_current_user)])
+def create_import_document(payload: dict):
+    items = payload.get("items") or []
+    with documents_stub() as stub:
+        doc = stub.CreateImport(
+            documents_pb2.CreateDocumentRequest(
+                to_warehouse_id=int(payload.get("destination_warehouse_id") or payload.get("warehouse_id") or 0),
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=int(i.get("product_id") or 0),
+                        quantity=int(i.get("quantity") or 0),
+                        unit_price=float(i.get("unit_price") or 0),
+                    )
+                    for i in items
+                ],
+                created_by=str(payload.get("created_by") or "system"),
+                note=str(payload.get("note") or ""),
+            ),
+            timeout=30,
+        )
+    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+
+
+@router.post("/documents/export", dependencies=[Depends(get_current_user)])
+def create_export_document(payload: dict):
+    items = payload.get("items") or []
+    with documents_stub() as stub:
+        doc = stub.CreateExport(
+            documents_pb2.CreateDocumentRequest(
+                from_warehouse_id=int(payload.get("source_warehouse_id") or payload.get("warehouse_id") or 0),
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=int(i.get("product_id") or 0),
+                        quantity=int(i.get("quantity") or 0),
+                        unit_price=float(i.get("unit_price") or 0),
+                    )
+                    for i in items
+                ],
+                created_by=str(payload.get("created_by") or "system"),
+                note=str(payload.get("note") or ""),
+            ),
+            timeout=30,
+        )
+    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+
+
+@router.post("/documents/sale", dependencies=[Depends(get_current_user)])
+def create_sale_document(payload: dict):
+    items = payload.get("items") or []
+    with documents_stub() as stub:
+        doc = stub.CreateSale(
+            documents_pb2.CreateDocumentRequest(
+                from_warehouse_id=int(payload.get("source_warehouse_id") or payload.get("warehouse_id") or 0),
+                customer_id=int(payload.get("customer_id") or 0),
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=int(i.get("product_id") or 0),
+                        quantity=int(i.get("quantity") or 0),
+                        unit_price=float(i.get("unit_price") or 0),
+                    )
+                    for i in items
+                ],
+                created_by=str(payload.get("created_by") or "system"),
+                note=str(payload.get("note") or ""),
+            ),
+            timeout=30,
+        )
+    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+
+
+@router.post("/documents/transfer", dependencies=[Depends(get_current_user)])
+def create_transfer_document(payload: dict):
+    items = payload.get("items") or []
+    with documents_stub() as stub:
+        doc = stub.CreateTransfer(
+            documents_pb2.CreateDocumentRequest(
+                from_warehouse_id=int(payload.get("source_warehouse_id") or 0),
+                to_warehouse_id=int(payload.get("destination_warehouse_id") or 0),
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=int(i.get("product_id") or 0),
+                        quantity=int(i.get("quantity") or 0),
+                        unit_price=float(i.get("unit_price") or 0),
+                    )
+                    for i in items
+                ],
+                created_by=str(payload.get("created_by") or "system"),
+                note=str(payload.get("note") or ""),
+            ),
+            timeout=30,
+        )
+    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+
+
+@router.post("/documents/{document_id}/post", dependencies=[Depends(get_current_user)])
+def post_document(document_id: int, payload: dict):
+    with documents_stub() as stub:
+        resp = stub.PostDocument(
+            documents_pb2.PostDocumentRequest(document_id=document_id, approved_by=str(payload.get("approved_by") or "")),
+            timeout=30,
+        )
+    return {"message": resp.message}
+
+
+@router.get("/documents/{document_id}", dependencies=[Depends(get_current_user)])
+def get_document(document_id: int):
+    with documents_stub() as stub:
+        doc = stub.GetDocument(documents_pb2.GetDocumentRequest(document_id=document_id), timeout=10)
+    if not doc.document_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+
+
+@router.get("/documents", dependencies=[Depends(get_current_user)])
+def list_documents(doc_type: str | None = None, page: int = 1, page_size: int = 20):
+    with documents_stub() as stub:
+        resp = stub.ListDocuments(
+            documents_pb2.ListDocumentsRequest(doc_type=doc_type or "", page=page, page_size=page_size),
+            timeout=30,
+        )
+    return [
+        {"document_id": int(d.document_id), "doc_type": d.doc_type, "status": d.status}
+        for d in resp.documents
+    ]
+
+
+@router.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
+def delete_document(document_id: int):
+    with documents_stub() as stub:
+        resp = stub.DeleteDocument(documents_pb2.DeleteDocumentRequest(document_id=document_id), timeout=10)
+    return {"message": resp.message}
 
 
 # ---- Inventory ----

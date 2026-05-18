@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import grpc
 
+from shared_utils.events import get_publisher
+
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
 from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
@@ -12,6 +14,8 @@ from inventory_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_
 
 
 class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
+    _publisher = get_publisher("inventory-service")
+
     def _service(self) -> tuple[InventoryService, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -26,6 +30,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         service, db = self._service()
         try:
             items = service.get_all_inventory_items()
+            self._publisher.publish(event_type="InventoryListed", payload={"count": len(items)})
             return inventory_pb2.ListInventoryItemsResponse(
                 items=[
                     inventory_pb2.InventoryItem(product_id=int(i.product_id), quantity=int(i.quantity))
@@ -44,6 +49,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         service, db = self._service()
         try:
             rows = service.get_inventory_by_warehouse_rows()
+            self._publisher.publish(event_type="InventoryByWarehouseListed", payload={"count": len(rows)})
             return inventory_pb2.GetInventoryByWarehouseResponse(
                 rows=[
                     inventory_pb2.WarehouseInventoryRow(
@@ -67,6 +73,10 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         service, db = self._service()
         try:
             qty = service.get_total_quantity(int(request.product_id))
+            self._publisher.publish(
+                event_type="InventoryQuantityRead",
+                payload={"product_id": int(request.product_id), "quantity": int(qty)},
+            )
             return inventory_pb2.GetProductQuantityResponse(product_id=int(request.product_id), quantity=int(qty))
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -80,4 +90,3 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
 
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server
-
