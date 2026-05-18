@@ -36,11 +36,30 @@ def _md(request: Request):
     return [("x-request-id", request_id)] if request_id else None
 
 
+def _timeout(env: str, default: float) -> float:
+    import os
+
+    try:
+        return float(os.getenv(env, str(default)))
+    except Exception:
+        return default
+
+
+GRPC_TIMEOUT_FAST = _timeout("GRPC_TIMEOUT_FAST", 5.0)
+GRPC_TIMEOUT_DEFAULT = _timeout("GRPC_TIMEOUT_DEFAULT", 10.0)
+GRPC_TIMEOUT_SLOW = _timeout("GRPC_TIMEOUT_SLOW", 30.0)
+GRPC_TIMEOUT_AI = _timeout("GRPC_TIMEOUT_AI", 60.0)
+
+
 # ---- Customers ----
 @router.get("/customers", dependencies=[Depends(get_current_user)])
 def list_customers(request: Request):
     with customer_stub() as stub:
-        resp = stub.ListCustomers(customer_pb2.ListCustomersRequest(), timeout=10, metadata=_md(request))
+        resp = stub.ListCustomers(
+            customer_pb2.ListCustomersRequest(),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
+        )
     return [
         {
             "customer_id": int(c.customer_id),
@@ -68,7 +87,7 @@ def create_customer(payload: dict, request: Request):
                 phone=str(payload.get("phone") or ""),
                 address=str(payload.get("address") or ""),
             ),
-            timeout=10,
+            timeout=GRPC_TIMEOUT_DEFAULT,
             metadata=_md(request),
         )
     return {
@@ -88,7 +107,7 @@ def get_customer(customer_id: int, request: Request):
         with customer_stub() as stub:
             c = stub.GetCustomer(
                 customer_pb2.GetCustomerRequest(customer_id=customer_id),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -119,7 +138,7 @@ def update_customer(customer_id: int, payload: dict, request: Request):
                     phone=str(payload.get("phone") or ""),
                     address=str(payload.get("address") or ""),
                 ),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -140,7 +159,7 @@ def update_debt(customer_id: int, payload: dict, request: Request):
     with customer_stub() as stub:
         resp = stub.UpdateDebt(
             customer_pb2.UpdateDebtRequest(customer_id=customer_id, amount=float(payload.get("amount") or 0)),
-            timeout=10,
+            timeout=GRPC_TIMEOUT_DEFAULT,
             metadata=_md(request),
         )
     return {"message": resp.message, "delta": float(resp.delta)}
@@ -151,7 +170,7 @@ def list_purchases(customer_id: int, request: Request):
     with customer_stub() as stub:
         resp = stub.ListPurchases(
             customer_pb2.ListPurchasesRequest(customer_id=customer_id),
-            timeout=10,
+            timeout=GRPC_TIMEOUT_DEFAULT,
             metadata=_md(request),
         )
     return [
@@ -172,7 +191,9 @@ def list_purchases(customer_id: int, request: Request):
 )
 def list_products(request: Request):
     with product_stub() as stub:
-        resp = stub.ListProducts(product_pb2.ListProductsRequest(), timeout=10, metadata=_md(request))
+        resp = stub.ListProducts(
+            product_pb2.ListProductsRequest(), timeout=GRPC_TIMEOUT_DEFAULT, metadata=_md(request)
+        )
     return [
         {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
         for p in resp.products
@@ -192,7 +213,7 @@ def create_product(payload: dict, request: Request):
                 price=float(payload.get("price") or 0),
                 description=str(payload.get("description") or ""),
             ),
-            timeout=10,
+            timeout=GRPC_TIMEOUT_DEFAULT,
             metadata=_md(request),
         )
     return {"product_id": int(resp.product_id), "name": resp.name, "price": float(resp.price), "description": resp.description}
@@ -207,7 +228,7 @@ def get_product(product_id: int, request: Request):
         with product_stub() as stub:
             p = stub.GetProduct(
                 product_pb2.GetProductRequest(product_id=product_id),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -229,7 +250,7 @@ def update_product(product_id: int, payload: dict, request: Request):
                     price=float(payload.get("price") or 0),
                     description=str(payload.get("description") or ""),
                 ),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -246,7 +267,7 @@ def delete_product(product_id: int, request: Request):
         with product_stub() as stub:
             resp = stub.DeleteProduct(
                 product_pb2.DeleteProductRequest(product_id=product_id),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -258,7 +279,11 @@ def delete_product(product_id: int, request: Request):
 @router.get("/warehouses", dependencies=[Depends(get_current_user)])
 def list_warehouses(request: Request):
     with warehouse_stub() as stub:
-        resp = stub.ListWarehouses(warehouse_pb2.ListWarehousesRequest(), timeout=10, metadata=_md(request))
+        resp = stub.ListWarehouses(
+            warehouse_pb2.ListWarehousesRequest(),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
+        )
     return [
         {
             "warehouse_id": int(w.warehouse_id),
@@ -278,7 +303,7 @@ def create_warehouse(payload: dict, request: Request):
     with warehouse_stub() as stub:
         w = stub.CreateWarehouse(
             warehouse_pb2.CreateWarehouseRequest(name=str(payload.get("name") or "")),
-            timeout=10,
+            timeout=GRPC_TIMEOUT_DEFAULT,
             metadata=_md(request),
         )
     return {"warehouse_id": int(w.warehouse_id), "name": w.location, "location": w.location, "inventory": []}
@@ -290,7 +315,7 @@ def get_warehouse(warehouse_id: int, request: Request):
         with warehouse_stub() as stub:
             w = stub.GetWarehouse(
                 warehouse_pb2.GetWarehouseRequest(warehouse_id=warehouse_id),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -312,7 +337,7 @@ def delete_warehouse(warehouse_id: int, request: Request):
         with warehouse_stub() as stub:
             resp = stub.DeleteWarehouse(
                 warehouse_pb2.DeleteWarehouseRequest(warehouse_id=warehouse_id),
-                timeout=10,
+                timeout=GRPC_TIMEOUT_DEFAULT,
                 metadata=_md(request),
             )
     except Exception:
@@ -330,7 +355,7 @@ def transfer_all_inventory(warehouse_id: int, payload: dict, request: Request):
             warehouse_pb2.TransferAllInventoryRequest(
                 warehouse_id=warehouse_id, to_warehouse_id=int(payload.get("to_warehouse_id") or 0)
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return {
@@ -348,7 +373,9 @@ def transfer_all_inventory(warehouse_id: int, payload: dict, request: Request):
 def system_overview(request: Request):
     with warehouse_ops_stub() as stub:
         resp = stub.GetSystemOverview(
-            warehouse_pb2.GetSystemOverviewRequest(), timeout=10, metadata=_md(request)
+            warehouse_pb2.GetSystemOverviewRequest(),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
         )
     return {
         "total_warehouses": int(resp.total_warehouses),
@@ -365,7 +392,9 @@ def system_overview(request: Request):
 def inventory_health(request: Request):
     with warehouse_ops_stub() as stub:
         resp = stub.GetInventoryHealth(
-            warehouse_pb2.GetInventoryHealthRequest(), timeout=30, metadata=_md(request)
+            warehouse_pb2.GetInventoryHealthRequest(),
+            timeout=GRPC_TIMEOUT_SLOW,
+            metadata=_md(request),
         )
     return {
         "system_health_score": float(resp.system_health_score),
@@ -393,7 +422,7 @@ def optimize_distribution(product_id: int, request: Request):
     with warehouse_ops_stub() as stub:
         resp = stub.OptimizeDistribution(
             warehouse_pb2.OptimizeDistributionRequest(product_id=product_id),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     if resp.error:
@@ -431,7 +460,7 @@ def create_import_document(
                 created_by=str(payload.get("created_by") or "system"),
                 note=str(payload.get("note") or ""),
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
@@ -458,7 +487,7 @@ def create_export_document(payload: dict, request: Request):
                 created_by=str(payload.get("created_by") or "system"),
                 note=str(payload.get("note") or ""),
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
@@ -486,7 +515,7 @@ def create_sale_document(payload: dict, request: Request):
                 created_by=str(payload.get("created_by") or "system"),
                 note=str(payload.get("note") or ""),
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
@@ -514,7 +543,7 @@ def create_transfer_document(payload: dict, request: Request):
                 created_by=str(payload.get("created_by") or "system"),
                 note=str(payload.get("note") or ""),
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
@@ -528,7 +557,7 @@ def post_document(document_id: int, payload: dict, request: Request):
     with documents_stub() as stub:
         resp = stub.PostDocument(
             documents_pb2.PostDocumentRequest(document_id=document_id, approved_by=str(payload.get("approved_by") or "")),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return {"message": resp.message}
@@ -538,7 +567,9 @@ def post_document(document_id: int, payload: dict, request: Request):
 def get_document(document_id: int, request: Request):
     with documents_stub() as stub:
         doc = stub.GetDocument(
-            documents_pb2.GetDocumentRequest(document_id=document_id), timeout=10, metadata=_md(request)
+            documents_pb2.GetDocumentRequest(document_id=document_id),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
         )
     if not doc.document_id:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -550,7 +581,7 @@ def list_documents(request: Request, doc_type: str | None = None, page: int = 1,
     with documents_stub() as stub:
         resp = stub.ListDocuments(
             documents_pb2.ListDocumentsRequest(doc_type=doc_type or "", page=page, page_size=page_size),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return [
@@ -563,7 +594,9 @@ def list_documents(request: Request, doc_type: str | None = None, page: int = 1,
 def delete_document(document_id: int, request: Request):
     with documents_stub() as stub:
         resp = stub.DeleteDocument(
-            documents_pb2.DeleteDocumentRequest(document_id=document_id), timeout=10, metadata=_md(request)
+            documents_pb2.DeleteDocumentRequest(document_id=document_id),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
         )
     return {"message": resp.message}
 
@@ -576,7 +609,9 @@ def delete_document(document_id: int, request: Request):
 def list_audit_events(request: Request, limit: int = 100, offset: int = 0):
     with audit_stub() as stub:
         resp = stub.ListEvents(
-            audit_pb2.ListEventsRequest(limit=limit, offset=offset), timeout=10, metadata=_md(request)
+            audit_pb2.ListEventsRequest(limit=limit, offset=offset),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
         )
     return [
         {
@@ -600,7 +635,11 @@ def list_audit_events(request: Request, limit: int = 100, offset: int = 0):
 )
 def get_audit_event(event_id: int, request: Request):
     with audit_stub() as stub:
-        e = stub.GetEvent(audit_pb2.GetEventRequest(id=event_id), timeout=10, metadata=_md(request))
+        e = stub.GetEvent(
+            audit_pb2.GetEventRequest(id=event_id),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
+        )
     if not e.id:
         raise HTTPException(status_code=404, detail="Audit event not found")
     return {
@@ -628,7 +667,7 @@ def report_inventory(request: Request, warehouse_id: int | None = None, low_stoc
                 warehouse_id=int(warehouse_id or 0),
                 low_stock_threshold=int(low_stock_threshold),
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return _try_json(resp.json)
@@ -641,7 +680,9 @@ def report_inventory(request: Request, warehouse_id: int | None = None, low_stoc
 def report_inventory_list(request: Request):
     with reporting_stub() as stub:
         resp = stub.InventoryList(
-            reporting_pb2.InventoryListRequest(), timeout=30, metadata=_md(request)
+            reporting_pb2.InventoryListRequest(),
+            timeout=GRPC_TIMEOUT_SLOW,
+            metadata=_md(request),
         )
     return _try_json(resp.json)
 
@@ -663,7 +704,7 @@ def report_warehouse(
                 start_date=start_date or "",
                 end_date=end_date or "",
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return _try_json(resp.json)
@@ -680,7 +721,7 @@ def report_documents(request: Request, start_date: str | None = None, end_date: 
                 start_date=start_date or "",
                 end_date=end_date or "",
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return _try_json(resp.json)
@@ -703,7 +744,7 @@ def report_product(
                 start_date=start_date or "",
                 end_date=end_date or "",
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return _try_json(resp.json)
@@ -728,7 +769,7 @@ def report_sales(
                 customer_id=int(customer_id or 0),
                 salesperson=salesperson or "",
             ),
-            timeout=30,
+            timeout=GRPC_TIMEOUT_SLOW,
             metadata=_md(request),
         )
     return _try_json(resp.json)
@@ -740,7 +781,7 @@ def ai_query(payload: dict, request: Request):
     with ai_stub() as stub:
         resp = stub.Query(
             ai_pb2.QueryRequest(question=str(payload.get("question") or ""), mode=str(payload.get("mode") or "rag")),
-            timeout=60,
+            timeout=GRPC_TIMEOUT_AI,
             metadata=_md(request),
         )
     return {"success": bool(resp.success), "mode": resp.mode, "response": resp.response, "error": resp.error}
@@ -749,7 +790,7 @@ def ai_query(payload: dict, request: Request):
 @router.get("/ai/status", dependencies=[Depends(get_current_user)])
 def ai_status(request: Request):
     with ai_stub() as stub:
-        resp = stub.Status(ai_pb2.StatusRequest(), timeout=10, metadata=_md(request))
+        resp = stub.Status(ai_pb2.StatusRequest(), timeout=GRPC_TIMEOUT_DEFAULT, metadata=_md(request))
     return _try_json(resp.json)
 
 
@@ -768,7 +809,9 @@ def _try_json(value: str):
 def list_inventory(request: Request):
     with inventory_stub() as stub:
         resp = stub.ListInventoryItems(
-            inventory_pb2.ListInventoryItemsRequest(), timeout=10, metadata=_md(request)
+            inventory_pb2.ListInventoryItemsRequest(),
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            metadata=_md(request),
         )
     return [{"product_id": int(i.product_id), "quantity": int(i.quantity)} for i in resp.items]
 
@@ -780,7 +823,9 @@ def list_inventory(request: Request):
 def inventory_by_warehouse(request: Request):
     with inventory_stub() as stub:
         resp = stub.GetInventoryByWarehouse(
-            inventory_pb2.GetInventoryByWarehouseRequest(), timeout=30, metadata=_md(request)
+            inventory_pb2.GetInventoryByWarehouseRequest(),
+            timeout=GRPC_TIMEOUT_SLOW,
+            metadata=_md(request),
         )
     return [
         {
@@ -801,7 +846,7 @@ def product_quantity(product_id: int, request: Request):
     with inventory_stub() as stub:
         resp = stub.GetProductQuantity(
             inventory_pb2.GetProductQuantityRequest(product_id=product_id),
-            timeout=10,
+            timeout=GRPC_TIMEOUT_DEFAULT,
             metadata=_md(request),
         )
     return {"product_id": int(resp.product_id), "quantity": int(resp.quantity)}

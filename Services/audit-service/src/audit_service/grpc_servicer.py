@@ -11,6 +11,13 @@ from audit_service.gen.wms.audit.v1 import audit_pb2, audit_pb2_grpc
 
 
 class AuditServiceServicer(audit_pb2_grpc.AuditServiceServicer):
+    @staticmethod
+    def _request_id(context: grpc.ServicerContext) -> str | None:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                return v
+        return None
+
     def _repo(self) -> tuple[AuditEventRepo, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -38,6 +45,7 @@ class AuditServiceServicer(audit_pb2_grpc.AuditServiceServicer):
     def ListEvents(self, request: audit_pb2.ListEventsRequest, context: grpc.ServicerContext):
         repo, db = self._repo()
         try:
+            _ = self._request_id(context)  # reserved for future structured logs
             events = repo.list_events(
                 request_id=request.request_id or None,
                 user_id=int(request.user_id) if request.user_id else None,
@@ -60,6 +68,7 @@ class AuditServiceServicer(audit_pb2_grpc.AuditServiceServicer):
     def GetEvent(self, request: audit_pb2.GetEventRequest, context: grpc.ServicerContext):
         repo, db = self._repo()
         try:
+            _ = self._request_id(context)
             event = repo.get(int(request.id))
             if not event:
                 context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -74,4 +83,3 @@ class AuditServiceServicer(audit_pb2_grpc.AuditServiceServicer):
 
 
 add_AuditServiceServicer_to_server = audit_pb2_grpc.add_AuditServiceServicer_to_server
-

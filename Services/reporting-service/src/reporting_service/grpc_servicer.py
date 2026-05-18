@@ -17,6 +17,13 @@ from reporting_service.gen.wms.reporting.v1 import reporting_pb2, reporting_pb2_
 
 
 class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
+    @staticmethod
+    def _request_id(context: grpc.ServicerContext) -> str | None:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                return v
+        return None
+
     def _service(self) -> tuple[ReportOrchestrator, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -36,6 +43,7 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def InventoryReport(self, request: reporting_pb2.InventoryReportRequest, context: grpc.ServicerContext):
         svc, db = self._service()
         try:
+            _ = self._request_id(context)
             data = svc.generate_inventory_report(
                 warehouse_id=int(request.warehouse_id) if request.warehouse_id else None,
                 low_stock_threshold=int(request.low_stock_threshold or 10),
@@ -50,6 +58,7 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def InventoryList(self, request: reporting_pb2.InventoryListRequest, context: grpc.ServicerContext):
         svc, db = self._service()
         try:
+            _ = self._request_id(context)
             data = svc.list_inventory_by_warehouse()
             return reporting_pb2.JsonResponse(json=self._json(data))
         finally:
@@ -61,6 +70,7 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def WarehouseReport(self, request: reporting_pb2.WarehouseReportRequest, context: grpc.ServicerContext):
         svc, db = self._service()
         try:
+            _ = self._request_id(context)
             start = date.fromisoformat(request.start_date) if request.start_date else None
             end = date.fromisoformat(request.end_date) if request.end_date else None
             data = svc.generate_warehouse_performance_report(
@@ -78,6 +88,7 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def DocumentsReport(self, request: reporting_pb2.DocumentsReportRequest, context: grpc.ServicerContext):
         svc, db = self._service()
         try:
+            _ = self._request_id(context)
             start = date.fromisoformat(request.start_date) if request.start_date else None
             end = date.fromisoformat(request.end_date) if request.end_date else None
             data = svc.list_documents_report(start_date=start, end_date=end)
@@ -91,6 +102,7 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def ProductReport(self, request: reporting_pb2.ProductReportRequest, context: grpc.ServicerContext):
         svc, db = self._service()
         try:
+            _ = self._request_id(context)
             start = date.fromisoformat(request.start_date) if request.start_date else None
             end = date.fromisoformat(request.end_date) if request.end_date else None
             data = svc.generate_product_movement_report(
@@ -108,6 +120,7 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def SalesReport(self, request: reporting_pb2.SalesReportRequest, context: grpc.ServicerContext):
         svc, db = self._service()
         try:
+            _ = self._request_id(context)
             start = date.fromisoformat(request.start_date) if request.start_date else None
             end = date.fromisoformat(request.end_date) if request.end_date else None
             data = svc.generate_sales_report(
@@ -125,4 +138,3 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
 
 
 add_ReportingServiceServicer_to_server = reporting_pb2_grpc.add_ReportingServiceServicer_to_server
-

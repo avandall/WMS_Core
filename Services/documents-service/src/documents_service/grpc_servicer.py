@@ -20,6 +20,13 @@ from documents_service.gen.wms.documents.v1 import documents_pb2, documents_pb2_
 class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
     _publisher = get_publisher("documents-service")
 
+    @staticmethod
+    def _request_id(context: grpc.ServicerContext) -> str | None:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                return v
+        return None
+
     def _service(self) -> tuple[DocumentService, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -73,7 +80,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             )
             self._publisher.publish(
                 event_type="DocumentCreated",
-                payload={"doc_type": "IMPORT", "document_id": int(doc.document_id)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "doc_type": "IMPORT",
+                    "document_id": int(doc.document_id),
+                },
             )
             return self._to_proto(doc)
         finally:
@@ -96,7 +107,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             )
             self._publisher.publish(
                 event_type="DocumentCreated",
-                payload={"doc_type": "EXPORT", "document_id": int(doc.document_id)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "doc_type": "EXPORT",
+                    "document_id": int(doc.document_id),
+                },
             )
             return self._to_proto(doc)
         finally:
@@ -120,7 +135,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             )
             self._publisher.publish(
                 event_type="DocumentCreated",
-                payload={"doc_type": "SALE", "document_id": int(doc.document_id)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "doc_type": "SALE",
+                    "document_id": int(doc.document_id),
+                },
             )
             return self._to_proto(doc)
         finally:
@@ -144,7 +163,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             )
             self._publisher.publish(
                 event_type="DocumentCreated",
-                payload={"doc_type": "TRANSFER", "document_id": int(doc.document_id)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "doc_type": "TRANSFER",
+                    "document_id": int(doc.document_id),
+                },
             )
             return self._to_proto(doc)
         finally:
@@ -159,7 +182,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             service.post_document(int(request.document_id), request.approved_by or "system")
             self._publisher.publish(
                 event_type="DocumentPosted",
-                payload={"document_id": int(request.document_id), "approved_by": request.approved_by},
+                payload={
+                    "request_id": self._request_id(context),
+                    "document_id": int(request.document_id),
+                    "approved_by": request.approved_by,
+                },
             )
             return documents_pb2.PostDocumentResponse(
                 message=f"Document {int(request.document_id)} posted successfully"

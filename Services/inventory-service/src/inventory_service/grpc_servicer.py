@@ -16,6 +16,13 @@ from inventory_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_
 class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
     _publisher = get_publisher("inventory-service")
 
+    @staticmethod
+    def _request_id(context: grpc.ServicerContext) -> str | None:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                return v
+        return None
+
     def _service(self) -> tuple[InventoryService, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -30,7 +37,10 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         service, db = self._service()
         try:
             items = service.get_all_inventory_items()
-            self._publisher.publish(event_type="InventoryListed", payload={"count": len(items)})
+            self._publisher.publish(
+                event_type="InventoryListed",
+                payload={"request_id": self._request_id(context), "count": len(items)},
+            )
             return inventory_pb2.ListInventoryItemsResponse(
                 items=[
                     inventory_pb2.InventoryItem(product_id=int(i.product_id), quantity=int(i.quantity))
@@ -49,7 +59,10 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         service, db = self._service()
         try:
             rows = service.get_inventory_by_warehouse_rows()
-            self._publisher.publish(event_type="InventoryByWarehouseListed", payload={"count": len(rows)})
+            self._publisher.publish(
+                event_type="InventoryByWarehouseListed",
+                payload={"request_id": self._request_id(context), "count": len(rows)},
+            )
             return inventory_pb2.GetInventoryByWarehouseResponse(
                 rows=[
                     inventory_pb2.WarehouseInventoryRow(
@@ -75,7 +88,11 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             qty = service.get_total_quantity(int(request.product_id))
             self._publisher.publish(
                 event_type="InventoryQuantityRead",
-                payload={"product_id": int(request.product_id), "quantity": int(qty)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "product_id": int(request.product_id),
+                    "quantity": int(qty),
+                },
             )
             return inventory_pb2.GetProductQuantityResponse(product_id=int(request.product_id), quantity=int(qty))
         except Exception:

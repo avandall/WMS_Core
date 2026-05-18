@@ -20,6 +20,10 @@ class AIServiceServicer(ai_pb2_grpc.AIServiceServicer):
         return cls._engine
 
     def Query(self, request: ai_pb2.QueryRequest, context: grpc.ServicerContext):
+        # Read request id for observability (future structured logs)
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                break
         mode = (request.mode or "rag").lower()
         try:
             engine = self._get_engine()
@@ -44,4 +48,3 @@ class AIServiceServicer(ai_pb2_grpc.AIServiceServicer):
 
 
 add_AIServiceServicer_to_server = ai_pb2_grpc.add_AIServiceServicer_to_server
-

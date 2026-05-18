@@ -7,12 +7,31 @@ import uuid
 from fastapi import HTTPException
 from fastapi import Request
 
+from api_gateway.observability import METRICS, json_log
+
 
 async def request_id_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
+    start = time.monotonic()
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    duration_ms = (time.monotonic() - start) * 1000.0
+    METRICS.observe(
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=duration_ms,
+    )
+    json_log(
+        level="info",
+        message="http_request",
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=duration_ms,
+    )
     return response
 
 
