@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api_gateway.routes import router as v1_router
-from api_gateway.middleware import request_id_middleware
+from api_gateway.middleware import rate_limit_middleware, request_id_middleware
 
 
 def create_app() -> FastAPI:
@@ -17,6 +17,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.middleware("http")(rate_limit_middleware)
     app.middleware("http")(request_id_middleware)
 
     @app.get("/health")

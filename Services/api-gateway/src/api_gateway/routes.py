@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api_gateway.auth import get_current_user
+from api_gateway.authz import require_permissions
 from api_gateway.grpc_clients import (
     ai_stub,
     audit_stub,
@@ -16,6 +17,7 @@ from api_gateway.grpc_clients import (
     warehouse_ops_stub,
     warehouse_stub,
 )
+from api_gateway.permissions import Permission
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
 from api_gateway.gen.wms.product.v1 import product_pb2
@@ -29,11 +31,16 @@ from api_gateway.gen.wms.ai.v1 import ai_pb2
 router = APIRouter(prefix="/api/v1")
 
 
+def _md(request: Request):
+    request_id = getattr(request.state, "request_id", None)
+    return [("x-request-id", request_id)] if request_id else None
+
+
 # ---- Customers ----
 @router.get("/customers", dependencies=[Depends(get_current_user)])
-def list_customers():
+def list_customers(request: Request):
     with customer_stub() as stub:
-        resp = stub.ListCustomers(customer_pb2.ListCustomersRequest(), timeout=10)
+        resp = stub.ListCustomers(customer_pb2.ListCustomersRequest(), timeout=10, metadata=_md(request))
     return [
         {
             "customer_id": int(c.customer_id),
@@ -48,8 +55,11 @@ def list_customers():
     ]
 
 
-@router.post("/customers", dependencies=[Depends(get_current_user)])
-def create_customer(payload: dict):
+@router.post(
+    "/customers",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
+)
+def create_customer(payload: dict, request: Request):
     with customer_stub() as stub:
         resp = stub.CreateCustomer(
             customer_pb2.CreateCustomerRequest(
@@ -59,6 +69,7 @@ def create_customer(payload: dict):
                 address=str(payload.get("address") or ""),
             ),
             timeout=10,
+            metadata=_md(request),
         )
     return {
         "customer_id": int(resp.customer_id),
@@ -72,10 +83,14 @@ def create_customer(payload: dict):
 
 
 @router.get("/customers/{customer_id}", dependencies=[Depends(get_current_user)])
-def get_customer(customer_id: int):
+def get_customer(customer_id: int, request: Request):
     try:
         with customer_stub() as stub:
-            c = stub.GetCustomer(customer_pb2.GetCustomerRequest(customer_id=customer_id), timeout=10)
+            c = stub.GetCustomer(
+                customer_pb2.GetCustomerRequest(customer_id=customer_id),
+                timeout=10,
+                metadata=_md(request),
+            )
     except Exception:
         raise HTTPException(status_code=404, detail="Customer not found")
     return {
@@ -89,8 +104,11 @@ def get_customer(customer_id: int):
     }
 
 
-@router.patch("/customers/{customer_id}", dependencies=[Depends(get_current_user)])
-def update_customer(customer_id: int, payload: dict):
+@router.patch(
+    "/customers/{customer_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
+)
+def update_customer(customer_id: int, payload: dict, request: Request):
     try:
         with customer_stub() as stub:
             c = stub.UpdateCustomer(
@@ -102,6 +120,7 @@ def update_customer(customer_id: int, payload: dict):
                     address=str(payload.get("address") or ""),
                 ),
                 timeout=10,
+                metadata=_md(request),
             )
     except Exception:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -117,19 +136,24 @@ def update_customer(customer_id: int, payload: dict):
 
 
 @router.patch("/customers/{customer_id}/debt", dependencies=[Depends(get_current_user)])
-def update_debt(customer_id: int, payload: dict):
+def update_debt(customer_id: int, payload: dict, request: Request):
     with customer_stub() as stub:
         resp = stub.UpdateDebt(
             customer_pb2.UpdateDebtRequest(customer_id=customer_id, amount=float(payload.get("amount") or 0)),
             timeout=10,
+            metadata=_md(request),
         )
     return {"message": resp.message, "delta": float(resp.delta)}
 
 
 @router.get("/customers/{customer_id}/purchases", dependencies=[Depends(get_current_user)])
-def list_purchases(customer_id: int):
+def list_purchases(customer_id: int, request: Request):
     with customer_stub() as stub:
-        resp = stub.ListPurchases(customer_pb2.ListPurchasesRequest(customer_id=customer_id), timeout=10)
+        resp = stub.ListPurchases(
+            customer_pb2.ListPurchasesRequest(customer_id=customer_id),
+            timeout=10,
+            metadata=_md(request),
+        )
     return [
         {
             "purchase_id": int(p.purchase_id),
@@ -142,18 +166,24 @@ def list_purchases(customer_id: int):
 
 
 # ---- Products ----
-@router.get("/products", dependencies=[Depends(get_current_user)])
-def list_products():
+@router.get(
+    "/products",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_PRODUCTS))],
+)
+def list_products(request: Request):
     with product_stub() as stub:
-        resp = stub.ListProducts(product_pb2.ListProductsRequest(), timeout=10)
+        resp = stub.ListProducts(product_pb2.ListProductsRequest(), timeout=10, metadata=_md(request))
     return [
         {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
         for p in resp.products
     ]
 
 
-@router.post("/products", dependencies=[Depends(get_current_user)])
-def create_product(payload: dict):
+@router.post(
+    "/products",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_PRODUCTS))],
+)
+def create_product(payload: dict, request: Request):
     with product_stub() as stub:
         resp = stub.CreateProduct(
             product_pb2.CreateProductRequest(
@@ -163,22 +193,33 @@ def create_product(payload: dict):
                 description=str(payload.get("description") or ""),
             ),
             timeout=10,
+            metadata=_md(request),
         )
     return {"product_id": int(resp.product_id), "name": resp.name, "price": float(resp.price), "description": resp.description}
 
 
-@router.get("/products/{product_id}", dependencies=[Depends(get_current_user)])
-def get_product(product_id: int):
+@router.get(
+    "/products/{product_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_PRODUCTS))],
+)
+def get_product(product_id: int, request: Request):
     try:
         with product_stub() as stub:
-            p = stub.GetProduct(product_pb2.GetProductRequest(product_id=product_id), timeout=10)
+            p = stub.GetProduct(
+                product_pb2.GetProductRequest(product_id=product_id),
+                timeout=10,
+                metadata=_md(request),
+            )
     except Exception:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
 
 
-@router.put("/products/{product_id}", dependencies=[Depends(get_current_user)])
-def update_product(product_id: int, payload: dict):
+@router.put(
+    "/products/{product_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_PRODUCTS))],
+)
+def update_product(product_id: int, payload: dict, request: Request):
     try:
         with product_stub() as stub:
             p = stub.UpdateProduct(
@@ -189,17 +230,25 @@ def update_product(product_id: int, payload: dict):
                     description=str(payload.get("description") or ""),
                 ),
                 timeout=10,
+                metadata=_md(request),
             )
     except Exception:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
 
 
-@router.delete("/products/{product_id}", dependencies=[Depends(get_current_user)])
-def delete_product(product_id: int):
+@router.delete(
+    "/products/{product_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
+)
+def delete_product(product_id: int, request: Request):
     try:
         with product_stub() as stub:
-            resp = stub.DeleteProduct(product_pb2.DeleteProductRequest(product_id=product_id), timeout=10)
+            resp = stub.DeleteProduct(
+                product_pb2.DeleteProductRequest(product_id=product_id),
+                timeout=10,
+                metadata=_md(request),
+            )
     except Exception:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"message": resp.message}
@@ -207,9 +256,9 @@ def delete_product(product_id: int):
 
 # ---- Warehouses ----
 @router.get("/warehouses", dependencies=[Depends(get_current_user)])
-def list_warehouses():
+def list_warehouses(request: Request):
     with warehouse_stub() as stub:
-        resp = stub.ListWarehouses(warehouse_pb2.ListWarehousesRequest(), timeout=10)
+        resp = stub.ListWarehouses(warehouse_pb2.ListWarehousesRequest(), timeout=10, metadata=_md(request))
     return [
         {
             "warehouse_id": int(w.warehouse_id),
@@ -221,20 +270,29 @@ def list_warehouses():
     ]
 
 
-@router.post("/warehouses", dependencies=[Depends(get_current_user)])
-def create_warehouse(payload: dict):
+@router.post(
+    "/warehouses",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
+)
+def create_warehouse(payload: dict, request: Request):
     with warehouse_stub() as stub:
         w = stub.CreateWarehouse(
-            warehouse_pb2.CreateWarehouseRequest(name=str(payload.get("name") or "")), timeout=10
+            warehouse_pb2.CreateWarehouseRequest(name=str(payload.get("name") or "")),
+            timeout=10,
+            metadata=_md(request),
         )
     return {"warehouse_id": int(w.warehouse_id), "name": w.location, "location": w.location, "inventory": []}
 
 
 @router.get("/warehouses/{warehouse_id}", dependencies=[Depends(get_current_user)])
-def get_warehouse(warehouse_id: int):
+def get_warehouse(warehouse_id: int, request: Request):
     try:
         with warehouse_stub() as stub:
-            w = stub.GetWarehouse(warehouse_pb2.GetWarehouseRequest(warehouse_id=warehouse_id), timeout=10)
+            w = stub.GetWarehouse(
+                warehouse_pb2.GetWarehouseRequest(warehouse_id=warehouse_id),
+                timeout=10,
+                metadata=_md(request),
+            )
     except Exception:
         raise HTTPException(status_code=404, detail="Warehouse not found")
     return {
@@ -245,26 +303,35 @@ def get_warehouse(warehouse_id: int):
     }
 
 
-@router.delete("/warehouses/{warehouse_id}", dependencies=[Depends(get_current_user)])
-def delete_warehouse(warehouse_id: int):
+@router.delete(
+    "/warehouses/{warehouse_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
+)
+def delete_warehouse(warehouse_id: int, request: Request):
     try:
         with warehouse_stub() as stub:
             resp = stub.DeleteWarehouse(
-                warehouse_pb2.DeleteWarehouseRequest(warehouse_id=warehouse_id), timeout=10
+                warehouse_pb2.DeleteWarehouseRequest(warehouse_id=warehouse_id),
+                timeout=10,
+                metadata=_md(request),
             )
     except Exception:
         raise HTTPException(status_code=404, detail="Warehouse not found")
     return {"message": resp.message}
 
 
-@router.post("/warehouses/{warehouse_id}/transfer", dependencies=[Depends(get_current_user)])
-def transfer_all_inventory(warehouse_id: int, payload: dict):
+@router.post(
+    "/warehouses/{warehouse_id}/transfer",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
+)
+def transfer_all_inventory(warehouse_id: int, payload: dict, request: Request):
     with warehouse_stub() as stub:
         resp = stub.TransferAllInventory(
             warehouse_pb2.TransferAllInventoryRequest(
                 warehouse_id=warehouse_id, to_warehouse_id=int(payload.get("to_warehouse_id") or 0)
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return {
         "from_warehouse_id": int(resp.from_warehouse_id),
@@ -274,10 +341,15 @@ def transfer_all_inventory(warehouse_id: int, payload: dict):
     }
 
 
-@router.get("/warehouse-operations/system-overview", dependencies=[Depends(get_current_user)])
-def system_overview():
+@router.get(
+    "/warehouse-operations/system-overview",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def system_overview(request: Request):
     with warehouse_ops_stub() as stub:
-        resp = stub.GetSystemOverview(warehouse_pb2.GetSystemOverviewRequest(), timeout=10)
+        resp = stub.GetSystemOverview(
+            warehouse_pb2.GetSystemOverviewRequest(), timeout=10, metadata=_md(request)
+        )
     return {
         "total_warehouses": int(resp.total_warehouses),
         "total_products": int(resp.total_products),
@@ -286,10 +358,15 @@ def system_overview():
     }
 
 
-@router.get("/warehouse-operations/inventory-health", dependencies=[Depends(get_current_user)])
-def inventory_health():
+@router.get(
+    "/warehouse-operations/inventory-health",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def inventory_health(request: Request):
     with warehouse_ops_stub() as stub:
-        resp = stub.GetInventoryHealth(warehouse_pb2.GetInventoryHealthRequest(), timeout=30)
+        resp = stub.GetInventoryHealth(
+            warehouse_pb2.GetInventoryHealthRequest(), timeout=30, metadata=_md(request)
+        )
     return {
         "system_health_score": float(resp.system_health_score),
         "warehouses": [
@@ -308,11 +385,16 @@ def inventory_health():
     }
 
 
-@router.get("/warehouse-operations/optimize-distribution/{product_id}", dependencies=[Depends(get_current_user)])
-def optimize_distribution(product_id: int):
+@router.get(
+    "/warehouse-operations/optimize-distribution/{product_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def optimize_distribution(product_id: int, request: Request):
     with warehouse_ops_stub() as stub:
         resp = stub.OptimizeDistribution(
-            warehouse_pb2.OptimizeDistributionRequest(product_id=product_id), timeout=30
+            warehouse_pb2.OptimizeDistributionRequest(product_id=product_id),
+            timeout=30,
+            metadata=_md(request),
         )
     if resp.error:
         raise HTTPException(status_code=404, detail=resp.error)
@@ -325,8 +407,14 @@ def optimize_distribution(product_id: int):
 
 
 # ---- Documents ----
-@router.post("/documents/import", dependencies=[Depends(get_current_user)])
-def create_import_document(payload: dict):
+@router.post(
+    "/documents/import",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_CREATE_IMPORT))],
+)
+def create_import_document(
+    payload: dict,
+    request: Request,
+):
     items = payload.get("items") or []
     with documents_stub() as stub:
         doc = stub.CreateImport(
@@ -344,12 +432,16 @@ def create_import_document(payload: dict):
                 note=str(payload.get("note") or ""),
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
 
 
-@router.post("/documents/export", dependencies=[Depends(get_current_user)])
-def create_export_document(payload: dict):
+@router.post(
+    "/documents/export",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_CREATE_EXPORT))],
+)
+def create_export_document(payload: dict, request: Request):
     items = payload.get("items") or []
     with documents_stub() as stub:
         doc = stub.CreateExport(
@@ -367,12 +459,16 @@ def create_export_document(payload: dict):
                 note=str(payload.get("note") or ""),
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
 
 
-@router.post("/documents/sale", dependencies=[Depends(get_current_user)])
-def create_sale_document(payload: dict):
+@router.post(
+    "/documents/sale",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_CREATE_EXPORT))],
+)
+def create_sale_document(payload: dict, request: Request):
     items = payload.get("items") or []
     with documents_stub() as stub:
         doc = stub.CreateSale(
@@ -391,12 +487,16 @@ def create_sale_document(payload: dict):
                 note=str(payload.get("note") or ""),
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
 
 
-@router.post("/documents/transfer", dependencies=[Depends(get_current_user)])
-def create_transfer_document(payload: dict):
+@router.post(
+    "/documents/transfer",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_CREATE_TRANSFER))],
+)
+def create_transfer_document(payload: dict, request: Request):
     items = payload.get("items") or []
     with documents_stub() as stub:
         doc = stub.CreateTransfer(
@@ -415,35 +515,43 @@ def create_transfer_document(payload: dict):
                 note=str(payload.get("note") or ""),
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
 
 
-@router.post("/documents/{document_id}/post", dependencies=[Depends(get_current_user)])
-def post_document(document_id: int, payload: dict):
+@router.post(
+    "/documents/{document_id}/post",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def post_document(document_id: int, payload: dict, request: Request):
     with documents_stub() as stub:
         resp = stub.PostDocument(
             documents_pb2.PostDocumentRequest(document_id=document_id, approved_by=str(payload.get("approved_by") or "")),
             timeout=30,
+            metadata=_md(request),
         )
     return {"message": resp.message}
 
 
 @router.get("/documents/{document_id}", dependencies=[Depends(get_current_user)])
-def get_document(document_id: int):
+def get_document(document_id: int, request: Request):
     with documents_stub() as stub:
-        doc = stub.GetDocument(documents_pb2.GetDocumentRequest(document_id=document_id), timeout=10)
+        doc = stub.GetDocument(
+            documents_pb2.GetDocumentRequest(document_id=document_id), timeout=10, metadata=_md(request)
+        )
     if not doc.document_id:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
 
 
 @router.get("/documents", dependencies=[Depends(get_current_user)])
-def list_documents(doc_type: str | None = None, page: int = 1, page_size: int = 20):
+def list_documents(request: Request, doc_type: str | None = None, page: int = 1, page_size: int = 20):
     with documents_stub() as stub:
         resp = stub.ListDocuments(
             documents_pb2.ListDocumentsRequest(doc_type=doc_type or "", page=page, page_size=page_size),
             timeout=30,
+            metadata=_md(request),
         )
     return [
         {"document_id": int(d.document_id), "doc_type": d.doc_type, "status": d.status}
@@ -452,17 +560,24 @@ def list_documents(doc_type: str | None = None, page: int = 1, page_size: int = 
 
 
 @router.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
-def delete_document(document_id: int):
+def delete_document(document_id: int, request: Request):
     with documents_stub() as stub:
-        resp = stub.DeleteDocument(documents_pb2.DeleteDocumentRequest(document_id=document_id), timeout=10)
+        resp = stub.DeleteDocument(
+            documents_pb2.DeleteDocumentRequest(document_id=document_id), timeout=10, metadata=_md(request)
+        )
     return {"message": resp.message}
 
 
 # ---- Audit ----
-@router.get("/audit-events", dependencies=[Depends(get_current_user)])
-def list_audit_events(limit: int = 100, offset: int = 0):
+@router.get(
+    "/audit-events",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],
+)
+def list_audit_events(request: Request, limit: int = 100, offset: int = 0):
     with audit_stub() as stub:
-        resp = stub.ListEvents(audit_pb2.ListEventsRequest(limit=limit, offset=offset), timeout=10)
+        resp = stub.ListEvents(
+            audit_pb2.ListEventsRequest(limit=limit, offset=offset), timeout=10, metadata=_md(request)
+        )
     return [
         {
             "id": int(e.id),
@@ -479,10 +594,13 @@ def list_audit_events(limit: int = 100, offset: int = 0):
     ]
 
 
-@router.get("/audit-events/{event_id}", dependencies=[Depends(get_current_user)])
-def get_audit_event(event_id: int):
+@router.get(
+    "/audit-events/{event_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],
+)
+def get_audit_event(event_id: int, request: Request):
     with audit_stub() as stub:
-        e = stub.GetEvent(audit_pb2.GetEventRequest(id=event_id), timeout=10)
+        e = stub.GetEvent(audit_pb2.GetEventRequest(id=event_id), timeout=10, metadata=_md(request))
     if not e.id:
         raise HTTPException(status_code=404, detail="Audit event not found")
     return {
@@ -499,8 +617,11 @@ def get_audit_event(event_id: int):
 
 
 # ---- Reporting ----
-@router.get("/reports/inventory", dependencies=[Depends(get_current_user)])
-def report_inventory(warehouse_id: int | None = None, low_stock_threshold: int = 10):
+@router.get(
+    "/reports/inventory",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def report_inventory(request: Request, warehouse_id: int | None = None, low_stock_threshold: int = 10):
     with reporting_stub() as stub:
         resp = stub.InventoryReport(
             reporting_pb2.InventoryReportRequest(
@@ -508,19 +629,33 @@ def report_inventory(warehouse_id: int | None = None, low_stock_threshold: int =
                 low_stock_threshold=int(low_stock_threshold),
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return _try_json(resp.json)
 
 
-@router.get("/reports/inventory/list", dependencies=[Depends(get_current_user)])
-def report_inventory_list():
+@router.get(
+    "/reports/inventory/list",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def report_inventory_list(request: Request):
     with reporting_stub() as stub:
-        resp = stub.InventoryList(reporting_pb2.InventoryListRequest(), timeout=30)
+        resp = stub.InventoryList(
+            reporting_pb2.InventoryListRequest(), timeout=30, metadata=_md(request)
+        )
     return _try_json(resp.json)
 
 
-@router.get("/reports/warehouse/{warehouse_id}", dependencies=[Depends(get_current_user)])
-def report_warehouse(warehouse_id: int, start_date: str | None = None, end_date: str | None = None):
+@router.get(
+    "/reports/warehouse/{warehouse_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def report_warehouse(
+    warehouse_id: int,
+    request: Request,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
     with reporting_stub() as stub:
         resp = stub.WarehouseReport(
             reporting_pb2.WarehouseReportRequest(
@@ -529,12 +664,16 @@ def report_warehouse(warehouse_id: int, start_date: str | None = None, end_date:
                 end_date=end_date or "",
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return _try_json(resp.json)
 
 
-@router.get("/reports/documents", dependencies=[Depends(get_current_user)])
-def report_documents(start_date: str | None = None, end_date: str | None = None):
+@router.get(
+    "/reports/documents",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def report_documents(request: Request, start_date: str | None = None, end_date: str | None = None):
     with reporting_stub() as stub:
         resp = stub.DocumentsReport(
             reporting_pb2.DocumentsReportRequest(
@@ -542,12 +681,21 @@ def report_documents(start_date: str | None = None, end_date: str | None = None)
                 end_date=end_date or "",
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return _try_json(resp.json)
 
 
-@router.get("/reports/product/{product_id}", dependencies=[Depends(get_current_user)])
-def report_product(product_id: int, start_date: str | None = None, end_date: str | None = None):
+@router.get(
+    "/reports/product/{product_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
+def report_product(
+    product_id: int,
+    request: Request,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
     with reporting_stub() as stub:
         resp = stub.ProductReport(
             reporting_pb2.ProductReportRequest(
@@ -556,12 +704,17 @@ def report_product(product_id: int, start_date: str | None = None, end_date: str
                 end_date=end_date or "",
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return _try_json(resp.json)
 
 
-@router.get("/reports/sales", dependencies=[Depends(get_current_user)])
+@router.get(
+    "/reports/sales",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_REPORTS))],
+)
 def report_sales(
+    request: Request,
     start_date: str | None = None,
     end_date: str | None = None,
     customer_id: int | None = None,
@@ -576,25 +729,27 @@ def report_sales(
                 salesperson=salesperson or "",
             ),
             timeout=30,
+            metadata=_md(request),
         )
     return _try_json(resp.json)
 
 
 # ---- AI ----
 @router.post("/ai/query", dependencies=[Depends(get_current_user)])
-def ai_query(payload: dict):
+def ai_query(payload: dict, request: Request):
     with ai_stub() as stub:
         resp = stub.Query(
             ai_pb2.QueryRequest(question=str(payload.get("question") or ""), mode=str(payload.get("mode") or "rag")),
             timeout=60,
+            metadata=_md(request),
         )
     return {"success": bool(resp.success), "mode": resp.mode, "response": resp.response, "error": resp.error}
 
 
 @router.get("/ai/status", dependencies=[Depends(get_current_user)])
-def ai_status():
+def ai_status(request: Request):
     with ai_stub() as stub:
-        resp = stub.Status(ai_pb2.StatusRequest(), timeout=10)
+        resp = stub.Status(ai_pb2.StatusRequest(), timeout=10, metadata=_md(request))
     return _try_json(resp.json)
 
 
@@ -606,17 +761,27 @@ def _try_json(value: str):
 
 
 # ---- Inventory ----
-@router.get("/inventory", dependencies=[Depends(get_current_user)])
-def list_inventory():
+@router.get(
+    "/inventory",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def list_inventory(request: Request):
     with inventory_stub() as stub:
-        resp = stub.ListInventoryItems(inventory_pb2.ListInventoryItemsRequest(), timeout=10)
+        resp = stub.ListInventoryItems(
+            inventory_pb2.ListInventoryItemsRequest(), timeout=10, metadata=_md(request)
+        )
     return [{"product_id": int(i.product_id), "quantity": int(i.quantity)} for i in resp.items]
 
 
-@router.get("/inventory/by-warehouse", dependencies=[Depends(get_current_user)])
-def inventory_by_warehouse():
+@router.get(
+    "/inventory/by-warehouse",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def inventory_by_warehouse(request: Request):
     with inventory_stub() as stub:
-        resp = stub.GetInventoryByWarehouse(inventory_pb2.GetInventoryByWarehouseRequest(), timeout=30)
+        resp = stub.GetInventoryByWarehouse(
+            inventory_pb2.GetInventoryByWarehouseRequest(), timeout=30, metadata=_md(request)
+        )
     return [
         {
             "product_id": int(r.product_id),
@@ -628,10 +793,15 @@ def inventory_by_warehouse():
     ]
 
 
-@router.get("/inventory/{product_id}", dependencies=[Depends(get_current_user)])
-def product_quantity(product_id: int):
+@router.get(
+    "/inventory/{product_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def product_quantity(product_id: int, request: Request):
     with inventory_stub() as stub:
         resp = stub.GetProductQuantity(
-            inventory_pb2.GetProductQuantityRequest(product_id=product_id), timeout=10
+            inventory_pb2.GetProductQuantityRequest(product_id=product_id),
+            timeout=10,
+            metadata=_md(request),
         )
     return {"product_id": int(resp.product_id), "quantity": int(resp.quantity)}
