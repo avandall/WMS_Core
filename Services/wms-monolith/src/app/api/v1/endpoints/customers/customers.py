@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.auth_deps import get_current_user, require_permissions
 from app.api.api_deps import get_customer_service
+from app.api.service_proxy import proxy_request
 from app.modules.customers.application.dtos.customer import (
     CustomerCreate,
     CustomerDetailResponse,
@@ -25,7 +27,14 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
     response_model=CustomerResponse,
     dependencies=[Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
-def create_customer(payload: CustomerCreate, service: CustomerService = Depends(get_customer_service)):
+async def create_customer(
+    payload: CustomerCreate,
+    request: Request,
+    service: CustomerService = Depends(get_customer_service),
+):
+    base = os.getenv("CUSTOMER_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     model = service.create(payload.model_dump())
     return CustomerResponse(
         customer_id=model.customer_id,
@@ -39,13 +48,23 @@ def create_customer(payload: CustomerCreate, service: CustomerService = Depends(
 
 
 @router.get("/", response_model=List[CustomerResponse])
-def list_customers(service: CustomerService = Depends(get_customer_service)):
+async def list_customers(request: Request, service: CustomerService = Depends(get_customer_service)):
+    base = os.getenv("CUSTOMER_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     data = service.list()
     return [CustomerResponse(**c) for c in data]
 
 
 @router.get("/{customer_id}", response_model=CustomerDetailResponse)
-def get_customer(customer_id: int, service: CustomerService = Depends(get_customer_service)):
+async def get_customer(
+    customer_id: int,
+    request: Request,
+    service: CustomerService = Depends(get_customer_service),
+):
+    base = os.getenv("CUSTOMER_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     c = service.get(customer_id)
     if not c:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
@@ -53,7 +72,15 @@ def get_customer(customer_id: int, service: CustomerService = Depends(get_custom
 
 
 @router.patch("/{customer_id}/debt")
-def update_debt(customer_id: int, payload: DebtUpdate, service: CustomerService = Depends(get_customer_service)):
+async def update_debt(
+    customer_id: int,
+    payload: DebtUpdate,
+    request: Request,
+    service: CustomerService = Depends(get_customer_service),
+):
+    base = os.getenv("CUSTOMER_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     service.update_debt(customer_id, payload.amount)
     return {"message": "Debt updated", "delta": payload.amount}
 
@@ -63,7 +90,15 @@ def update_debt(customer_id: int, payload: DebtUpdate, service: CustomerService 
     response_model=CustomerResponse,
     dependencies=[Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
-def update_customer(customer_id: int, payload: CustomerUpdate, service: CustomerService = Depends(get_customer_service)):
+async def update_customer(
+    customer_id: int,
+    payload: CustomerUpdate,
+    request: Request,
+    service: CustomerService = Depends(get_customer_service),
+):
+    base = os.getenv("CUSTOMER_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     existing = service.get(customer_id)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
@@ -73,7 +108,13 @@ def update_customer(customer_id: int, payload: CustomerUpdate, service: Customer
 
 
 @router.get("/{customer_id}/purchases", response_model=List[PurchaseResponse])
-def list_purchases(customer_id: int, service: CustomerService = Depends(get_customer_service)):
+async def list_purchases(
+    customer_id: int,
+    request: Request,
+    service: CustomerService = Depends(get_customer_service),
+):
+    base = os.getenv("CUSTOMER_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     purchases = service.purchases(customer_id)
     return [PurchaseResponse(**p) for p in purchases]
-

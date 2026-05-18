@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import os
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.api.auth_deps import get_current_user, require_permissions
 from app.api.authorization.product_authorizers import ProductAuthorizer
 from app.api.api_deps import get_product_service
+from app.api.service_proxy import proxy_request
 from app.modules.products.application.dtos.product import ProductCreate, ProductResponse, ProductUpdate
 from app.modules.products.application.services.product_service import ProductService
 from app.shared.core.permissions import Permission
@@ -17,7 +20,10 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
     response_model=list[ProductResponse],
     dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
-async def get_all_products(service: ProductService = Depends(get_product_service)):
+async def get_all_products(request: Request, service: ProductService = Depends(get_product_service)):
+    base = os.getenv("PRODUCT_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     products = service.get_all_products()
     return [ProductResponse.from_domain(product) for product in products]
 
@@ -30,9 +36,13 @@ async def get_all_products(service: ProductService = Depends(get_product_service
 )
 async def create_product(
     product: ProductCreate, 
+    request: Request,
     service: ProductService = Depends(get_product_service),
     user=Depends(get_current_user),
 ):
+    base = os.getenv("PRODUCT_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     ProductAuthorizer.can_create_product(user.role)
     
     created_product = service.create_product(
@@ -49,7 +59,14 @@ async def create_product(
     response_model=ProductResponse,
     dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
-async def get_product(product_id: int, service: ProductService = Depends(get_product_service)):
+async def get_product(
+    product_id: int,
+    request: Request,
+    service: ProductService = Depends(get_product_service),
+):
+    base = os.getenv("PRODUCT_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     product = service.get_product_details(product_id)
     return ProductResponse.from_domain(product)
 
@@ -58,9 +75,13 @@ async def get_product(product_id: int, service: ProductService = Depends(get_pro
 async def update_product(
     product_id: int,
     product_update: ProductUpdate,
+    request: Request,
     service: ProductService = Depends(get_product_service),
     user=Depends(get_current_user),
 ):
+    base = os.getenv("PRODUCT_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     ProductAuthorizer.can_update_product(user.role, product_update)
 
     updated_product = service.update_product(
@@ -76,7 +97,14 @@ async def update_product(
     "/{product_id}",
     dependencies=[Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
-async def delete_product(product_id: int, service: ProductService = Depends(get_product_service)):
+async def delete_product(
+    product_id: int,
+    request: Request,
+    service: ProductService = Depends(get_product_service),
+):
+    base = os.getenv("PRODUCT_SERVICE_URL")
+    if base:
+        return await proxy_request(request, base_url=base)
     service.delete_product(product_id)
     return {"message": f"Product {product_id} deleted successfully"}
 
@@ -94,4 +122,3 @@ async def import_products_csv(
     content = await file.read()
     result = service.import_products_from_csv(content)
     return result
-

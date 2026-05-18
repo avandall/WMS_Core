@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request as UrlRequest, urlopen
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
@@ -17,6 +22,29 @@ from app.modules.users.application.services.user_service import UserService
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _identity_base_url() -> str | None:
+    url = os.getenv("IDENTITY_SERVICE_URL")
+    return url.rstrip("/") if url else None
+
+
+def _fetch_identity_me(token: str) -> dict:
+    base = _identity_base_url()
+    if not base:
+        raise RuntimeError("IDENTITY_SERVICE_URL not set")
+    url = f"{base}/api/v1/users/me"
+    req = UrlRequest(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise HTTPException(status_code=exc.code, detail="Not authenticated") from exc
+    except URLError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity service unavailable",
+        ) from exc
 
 
 def get_current_user(
@@ -39,14 +67,28 @@ def get_current_user(
     if not creds:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     token = creds.credentials
-    try:
-        payload = decode_token(token)
-        user_id = int(payload.get("sub"))
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    identity_base = _identity_base_url()
+    if identity_base:
+        me = _fetch_identity_me(token)
+        user = User(
+            user_id=int(me.get("user_id") or me.get("id") or me.get("userId") or 0),
+            email=str(me.get("email") or ""),
+            hashed_password="",
+            role=str(me.get("role") or ""),
+            full_name=str(me.get("full_name") or me.get("fullName") or ""),
+            is_active=bool(me.get("is_active", True)),
+        )
+        if not user.user_id or not user.role:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    else:
+        try:
+            payload = decode_token(token)
+            user_id = int(payload.get("sub"))
+        except jwt.PyJWTError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    service = UserService(UserRepo(db))
-    user = service.get_user(user_id)
+        service = UserService(UserRepo(db))
+        user = service.get_user(user_id)
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     request.state.user = user
@@ -85,4 +127,3 @@ def require_permissions(*perms: Permission):
         return user
 
     return _checker
-
