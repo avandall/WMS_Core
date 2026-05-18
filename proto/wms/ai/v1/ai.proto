@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package wms.ai.v1;
+
+service AIService {
+  rpc Query(QueryRequest) returns (QueryResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+message QueryRequest {
+  string question = 1;
+  string mode = 2; // rag|agent|hybrid
+}
+
+message QueryResponse {
+  bool success = 1;
+  string mode = 2;
+  string response = 3;
+  string error = 4;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  string json = 1;
+}
+

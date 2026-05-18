@@ -3,6 +3,7 @@ from __future__ import annotations
 import uvicorn
 
 from audit_service.app import create_app
+from audit_service.grpc_server import serve
 
 
 def main() -> None:
@@ -12,4 +13,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def main_grpc() -> None:
+    serve(host="0.0.0.0", port=50057)
 

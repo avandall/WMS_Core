@@ -3,6 +3,10 @@
 Repo này đang được refactor từ monolith sang microservices theo `MICROSERVICES_REFACTOR_PLAN.md`.
 Inter-service communication chuẩn hóa bằng gRPC (API Gateway sẽ làm REST→gRPC).
 
+## Roadmap
+
+Trạng thái theo roadmap dài hạn: `docs/roadmap.md`
+
 ## Cấu trúc hiện tại
 
 ```
@@ -41,3 +45,5 @@ Chi tiết Phase 2 gRPC + monolith façade routing: `docs/phase2_grpc.md`
 Root `docker-compose.yml` không còn chạy `wms-monolith`. API public entrypoint là API Gateway:
 - REST: `http://localhost:8000/api/v1/*`
 - Downstream: gRPC nội bộ (identity/customer/product/warehouse/inventory)
+
+Chi tiết run: `docs/run_gateway.md`

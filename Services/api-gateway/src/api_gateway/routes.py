@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from api_gateway.auth import get_current_user
 from api_gateway.grpc_clients import (
+    ai_stub,
+    audit_stub,
     customer_stub,
     documents_stub,
     inventory_stub,
     product_stub,
+    reporting_stub,
     warehouse_ops_stub,
     warehouse_stub,
 )
@@ -16,6 +21,9 @@ from api_gateway.gen.wms.inventory.v1 import inventory_pb2
 from api_gateway.gen.wms.product.v1 import product_pb2
 from api_gateway.gen.wms.warehouse.v1 import warehouse_pb2
 from api_gateway.gen.wms.documents.v1 import documents_pb2
+from api_gateway.gen.wms.audit.v1 import audit_pb2
+from api_gateway.gen.wms.reporting.v1 import reporting_pb2
+from api_gateway.gen.wms.ai.v1 import ai_pb2
 
 
 router = APIRouter(prefix="/api/v1")
@@ -448,6 +456,153 @@ def delete_document(document_id: int):
     with documents_stub() as stub:
         resp = stub.DeleteDocument(documents_pb2.DeleteDocumentRequest(document_id=document_id), timeout=10)
     return {"message": resp.message}
+
+
+# ---- Audit ----
+@router.get("/audit-events", dependencies=[Depends(get_current_user)])
+def list_audit_events(limit: int = 100, offset: int = 0):
+    with audit_stub() as stub:
+        resp = stub.ListEvents(audit_pb2.ListEventsRequest(limit=limit, offset=offset), timeout=10)
+    return [
+        {
+            "id": int(e.id),
+            "request_id": e.request_id,
+            "user_id": int(e.user_id),
+            "action": e.action,
+            "entity_type": e.entity_type,
+            "entity_id": e.entity_id,
+            "warehouse_id": int(e.warehouse_id),
+            "payload": _try_json(e.payload_json),
+            "created_at": e.created_at,
+        }
+        for e in resp.events
+    ]
+
+
+@router.get("/audit-events/{event_id}", dependencies=[Depends(get_current_user)])
+def get_audit_event(event_id: int):
+    with audit_stub() as stub:
+        e = stub.GetEvent(audit_pb2.GetEventRequest(id=event_id), timeout=10)
+    if not e.id:
+        raise HTTPException(status_code=404, detail="Audit event not found")
+    return {
+        "id": int(e.id),
+        "request_id": e.request_id,
+        "user_id": int(e.user_id),
+        "action": e.action,
+        "entity_type": e.entity_type,
+        "entity_id": e.entity_id,
+        "warehouse_id": int(e.warehouse_id),
+        "payload": _try_json(e.payload_json),
+        "created_at": e.created_at,
+    }
+
+
+# ---- Reporting ----
+@router.get("/reports/inventory", dependencies=[Depends(get_current_user)])
+def report_inventory(warehouse_id: int | None = None, low_stock_threshold: int = 10):
+    with reporting_stub() as stub:
+        resp = stub.InventoryReport(
+            reporting_pb2.InventoryReportRequest(
+                warehouse_id=int(warehouse_id or 0),
+                low_stock_threshold=int(low_stock_threshold),
+            ),
+            timeout=30,
+        )
+    return _try_json(resp.json)
+
+
+@router.get("/reports/inventory/list", dependencies=[Depends(get_current_user)])
+def report_inventory_list():
+    with reporting_stub() as stub:
+        resp = stub.InventoryList(reporting_pb2.InventoryListRequest(), timeout=30)
+    return _try_json(resp.json)
+
+
+@router.get("/reports/warehouse/{warehouse_id}", dependencies=[Depends(get_current_user)])
+def report_warehouse(warehouse_id: int, start_date: str | None = None, end_date: str | None = None):
+    with reporting_stub() as stub:
+        resp = stub.WarehouseReport(
+            reporting_pb2.WarehouseReportRequest(
+                warehouse_id=warehouse_id,
+                start_date=start_date or "",
+                end_date=end_date or "",
+            ),
+            timeout=30,
+        )
+    return _try_json(resp.json)
+
+
+@router.get("/reports/documents", dependencies=[Depends(get_current_user)])
+def report_documents(start_date: str | None = None, end_date: str | None = None):
+    with reporting_stub() as stub:
+        resp = stub.DocumentsReport(
+            reporting_pb2.DocumentsReportRequest(
+                start_date=start_date or "",
+                end_date=end_date or "",
+            ),
+            timeout=30,
+        )
+    return _try_json(resp.json)
+
+
+@router.get("/reports/product/{product_id}", dependencies=[Depends(get_current_user)])
+def report_product(product_id: int, start_date: str | None = None, end_date: str | None = None):
+    with reporting_stub() as stub:
+        resp = stub.ProductReport(
+            reporting_pb2.ProductReportRequest(
+                product_id=product_id,
+                start_date=start_date or "",
+                end_date=end_date or "",
+            ),
+            timeout=30,
+        )
+    return _try_json(resp.json)
+
+
+@router.get("/reports/sales", dependencies=[Depends(get_current_user)])
+def report_sales(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    customer_id: int | None = None,
+    salesperson: str | None = None,
+):
+    with reporting_stub() as stub:
+        resp = stub.SalesReport(
+            reporting_pb2.SalesReportRequest(
+                start_date=start_date or "",
+                end_date=end_date or "",
+                customer_id=int(customer_id or 0),
+                salesperson=salesperson or "",
+            ),
+            timeout=30,
+        )
+    return _try_json(resp.json)
+
+
+# ---- AI ----
+@router.post("/ai/query", dependencies=[Depends(get_current_user)])
+def ai_query(payload: dict):
+    with ai_stub() as stub:
+        resp = stub.Query(
+            ai_pb2.QueryRequest(question=str(payload.get("question") or ""), mode=str(payload.get("mode") or "rag")),
+            timeout=60,
+        )
+    return {"success": bool(resp.success), "mode": resp.mode, "response": resp.response, "error": resp.error}
+
+
+@router.get("/ai/status", dependencies=[Depends(get_current_user)])
+def ai_status():
+    with ai_stub() as stub:
+        resp = stub.Status(ai_pb2.StatusRequest(), timeout=10)
+    return _try_json(resp.json)
+
+
+def _try_json(value: str):
+    try:
+        return json.loads(value) if value else value
+    except Exception:
+        return value
 
 
 # ---- Inventory ----

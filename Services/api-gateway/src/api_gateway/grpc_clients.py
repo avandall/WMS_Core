@@ -12,6 +12,9 @@ from api_gateway.gen.wms.inventory.v1 import inventory_pb2_grpc
 from api_gateway.gen.wms.product.v1 import product_pb2_grpc
 from api_gateway.gen.wms.warehouse.v1 import warehouse_pb2_grpc
 from api_gateway.gen.wms.documents.v1 import documents_pb2_grpc
+from api_gateway.gen.wms.audit.v1 import audit_pb2_grpc
+from api_gateway.gen.wms.reporting.v1 import reporting_pb2_grpc
+from api_gateway.gen.wms.ai.v1 import ai_pb2_grpc
 
 
 def _addr(env: str, default: str) -> str:
@@ -68,5 +71,32 @@ def documents_stub() -> Iterator[documents_pb2_grpc.DocumentsServiceStub]:
     channel = grpc.insecure_channel(_addr("DOCUMENTS_GRPC_ADDR", "documents-service:50056"))
     try:
         yield documents_pb2_grpc.DocumentsServiceStub(channel)
+    finally:
+        channel.close()
+
+
+@contextmanager
+def audit_stub() -> Iterator[audit_pb2_grpc.AuditServiceStub]:
+    channel = grpc.insecure_channel(_addr("AUDIT_GRPC_ADDR", "audit-service:50057"))
+    try:
+        yield audit_pb2_grpc.AuditServiceStub(channel)
+    finally:
+        channel.close()
+
+
+@contextmanager
+def reporting_stub() -> Iterator[reporting_pb2_grpc.ReportingServiceStub]:
+    channel = grpc.insecure_channel(_addr("REPORTING_GRPC_ADDR", "reporting-service:50058"))
+    try:
+        yield reporting_pb2_grpc.ReportingServiceStub(channel)
+    finally:
+        channel.close()
+
+
+@contextmanager
+def ai_stub() -> Iterator[ai_pb2_grpc.AIServiceStub]:
+    channel = grpc.insecure_channel(_addr("AI_GRPC_ADDR", "ai-service:50059"))
+    try:
+        yield ai_pb2_grpc.AIServiceStub(channel)
     finally:
         channel.close()

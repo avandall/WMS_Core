@@ -16,6 +16,9 @@ services:
       - WAREHOUSE_GRPC_ADDR=warehouse-service:50054
       - INVENTORY_GRPC_ADDR=inventory-service:50055
       - DOCUMENTS_GRPC_ADDR=documents-service:50056
+      - AUDIT_GRPC_ADDR=audit-service:50057
+      - REPORTING_GRPC_ADDR=reporting-service:50058
+      - AI_GRPC_ADDR=ai-service:50059
 
   identity-service:
     image: python:3.12-slim
@@ -97,6 +100,7 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8007:8007"
+      - "50057:50057"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
 
@@ -108,6 +112,7 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8008:8008"
+      - "50058:50058"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
 
@@ -119,5 +124,6 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8009:8009"
+      - "50059:50059"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
