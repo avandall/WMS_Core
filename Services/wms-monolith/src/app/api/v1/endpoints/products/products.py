@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from app.api.auth_deps import get_current_user, require_permissions
 from app.api.authorization.product_authorizers import ProductAuthorizer
 from app.api.api_deps import get_product_service
-from app.api.service_proxy import proxy_request
+from app.api.grpc_product_client import (
+    create_product as grpc_create_product,
+    delete_product as grpc_delete_product,
+    get_product as grpc_get_product,
+    list_products as grpc_list_products,
+    update_product as grpc_update_product,
+)
 from app.modules.products.application.dtos.product import ProductCreate, ProductResponse, ProductUpdate
 from app.modules.products.application.services.product_service import ProductService
 from app.shared.core.permissions import Permission
@@ -21,9 +27,9 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
     dependencies=[Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
 async def get_all_products(request: Request, service: ProductService = Depends(get_product_service)):
-    base = os.getenv("PRODUCT_SERVICE_URL")
-    if base:
-        return await proxy_request(request, base_url=base)
+    if os.getenv("PRODUCT_GRPC", "1") == "1":
+        products = grpc_list_products()
+        return [ProductResponse(**p) for p in products]
     products = service.get_all_products()
     return [ProductResponse.from_domain(product) for product in products]
 
@@ -40,9 +46,14 @@ async def create_product(
     service: ProductService = Depends(get_product_service),
     user=Depends(get_current_user),
 ):
-    base = os.getenv("PRODUCT_SERVICE_URL")
-    if base:
-        return await proxy_request(request, base_url=base)
+    if os.getenv("PRODUCT_GRPC", "1") == "1":
+        created = grpc_create_product(
+            product_id=getattr(product, "product_id", None),
+            name=product.name,
+            price=float(product.price),
+            description=product.description,
+        )
+        return ProductResponse(**created)
     ProductAuthorizer.can_create_product(user.role)
     
     created_product = service.create_product(
@@ -64,9 +75,11 @@ async def get_product(
     request: Request,
     service: ProductService = Depends(get_product_service),
 ):
-    base = os.getenv("PRODUCT_SERVICE_URL")
-    if base:
-        return await proxy_request(request, base_url=base)
+    if os.getenv("PRODUCT_GRPC", "1") == "1":
+        p = grpc_get_product(product_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return ProductResponse(**p)
     product = service.get_product_details(product_id)
     return ProductResponse.from_domain(product)
 
@@ -79,9 +92,16 @@ async def update_product(
     service: ProductService = Depends(get_product_service),
     user=Depends(get_current_user),
 ):
-    base = os.getenv("PRODUCT_SERVICE_URL")
-    if base:
-        return await proxy_request(request, base_url=base)
+    if os.getenv("PRODUCT_GRPC", "1") == "1":
+        updated = grpc_update_product(
+            product_id,
+            name=product_update.name,
+            price=float(product_update.price) if product_update.price is not None else None,
+            description=product_update.description,
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return ProductResponse(**updated)
     ProductAuthorizer.can_update_product(user.role, product_update)
 
     updated_product = service.update_product(
@@ -102,9 +122,11 @@ async def delete_product(
     request: Request,
     service: ProductService = Depends(get_product_service),
 ):
-    base = os.getenv("PRODUCT_SERVICE_URL")
-    if base:
-        return await proxy_request(request, base_url=base)
+    if os.getenv("PRODUCT_GRPC", "1") == "1":
+        resp = grpc_delete_product(product_id)
+        if not resp:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return resp
     service.delete_product(product_id)
     return {"message": f"Product {product_id} deleted successfully"}
 

@@ -31,3 +31,7 @@ Toàn bộ cách chạy cũ nằm trong `Services/wms-monolith/`.
 
 - Protos đặt tại `proto/`
 - Generate Python stubs (dùng venv trong repo): `./.venv/bin/python scripts/gen_protos.py`
+
+## Phase 2
+
+Chi tiết Phase 2 gRPC + monolith façade routing: `docs/phase2_grpc.md`

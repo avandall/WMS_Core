@@ -30,6 +30,7 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8002:8002"
+      - "50052:50052"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
 
@@ -41,6 +42,7 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8003:8003"
+      - "50053:50053"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
 
@@ -52,6 +54,7 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8004:8004"
+      - "50054:50054"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
 
@@ -109,3 +112,20 @@ services:
       - "8009:8009"
     environment:
       - IDENTITY_GRPC_ADDR=identity-service:50051
+
+  wms-monolith:
+    image: python:3.12-slim
+    working_dir: /workspace
+    volumes:
+      - ./Services/wms-monolith:/workspace
+    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    ports:
+      - "8010:8000"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
+      - CUSTOMER_GRPC=1
+      - PRODUCT_GRPC=1
+      - WAREHOUSE_GRPC=1
+      - CUSTOMER_GRPC_ADDR=customer-service:50052
+      - PRODUCT_GRPC_ADDR=product-service:50053
+      - WAREHOUSE_GRPC_ADDR=warehouse-service:50054
