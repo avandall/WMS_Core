@@ -18,6 +18,9 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8001:8001"
+      - "50051:50051"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   customer-service:
     image: python:3.12-slim
@@ -27,6 +30,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8002:8002"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   product-service:
     image: python:3.12-slim
@@ -36,6 +41,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8003:8003"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   warehouse-service:
     image: python:3.12-slim
@@ -45,6 +52,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8004:8004"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   inventory-service:
     image: python:3.12-slim
@@ -54,6 +63,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8005:8005"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   documents-service:
     image: python:3.12-slim
@@ -63,6 +74,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8006:8006"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   audit-service:
     image: python:3.12-slim
@@ -72,6 +85,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8007:8007"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   reporting-service:
     image: python:3.12-slim
@@ -81,6 +96,8 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8008:8008"
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051
 
   ai-service:
     image: python:3.12-slim
@@ -90,4 +107,5 @@ services:
     command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
     ports:
       - "8009:8009"
-
+    environment:
+      - IDENTITY_GRPC_ADDR=identity-service:50051

@@ -1,6 +1,7 @@
 # WMS Monorepo (Microservices Refactor)
 
 Repo này đang được refactor từ monolith sang microservices theo `MICROSERVICES_REFACTOR_PLAN.md`.
+Inter-service communication chuẩn hóa bằng gRPC (API Gateway sẽ làm REST→gRPC).
 
 ## Cấu trúc hiện tại
 
@@ -25,3 +26,8 @@ Repo này đang được refactor từ monolith sang microservices theo `MICROSE
 ## Chạy monolith (tạm thời)
 
 Toàn bộ cách chạy cũ nằm trong `Services/wms-monolith/`.
+
+## gRPC protos
+
+- Protos đặt tại `proto/`
+- Generate Python stubs (dùng venv trong repo): `./.venv/bin/python scripts/gen_protos.py`

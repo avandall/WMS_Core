@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import os
-from urllib.error import HTTPError, URLError
-from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -24,27 +21,8 @@ from app.modules.users.application.services.user_service import UserService
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def _identity_base_url() -> str | None:
-    url = os.getenv("IDENTITY_SERVICE_URL")
-    return url.rstrip("/") if url else None
-
-
-def _fetch_identity_me(token: str) -> dict:
-    base = _identity_base_url()
-    if not base:
-        raise RuntimeError("IDENTITY_SERVICE_URL not set")
-    url = f"{base}/api/v1/users/me"
-    req = UrlRequest(url, headers={"Authorization": f"Bearer {token}"})
-    try:
-        with urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except HTTPError as exc:
-        raise HTTPException(status_code=exc.code, detail="Not authenticated") from exc
-    except URLError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Identity service unavailable",
-        ) from exc
+def _identity_grpc_enabled() -> bool:
+    return bool(os.getenv("IDENTITY_GRPC_ADDR"))
 
 
 def get_current_user(
@@ -67,19 +45,20 @@ def get_current_user(
     if not creds:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     token = creds.credentials
-    identity_base = _identity_base_url()
-    if identity_base:
-        me = _fetch_identity_me(token)
-        user = User(
-            user_id=int(me.get("user_id") or me.get("id") or me.get("userId") or 0),
-            email=str(me.get("email") or ""),
-            hashed_password="",
-            role=str(me.get("role") or ""),
-            full_name=str(me.get("full_name") or me.get("fullName") or ""),
-            is_active=bool(me.get("is_active", True)),
-        )
-        if not user.user_id or not user.role:
+    if _identity_grpc_enabled():
+        from app.api.grpc_identity_client import validate_token
+
+        me = validate_token(token)
+        if not me:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        user = User(
+            user_id=me.user_id,
+            email=me.email,
+            hashed_password="",
+            role=me.role,
+            full_name=me.full_name,
+            is_active=me.is_active,
+        )
     else:
         try:
             payload = decode_token(token)
