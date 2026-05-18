@@ -7,6 +7,8 @@ from typing import Dict, Set
 
 
 class Permission(str, Enum):
+    VIEW_CUSTOMERS = "view_customers"
+    MANAGE_CUSTOMERS = "manage_customers"
     VIEW_PRODUCTS = "view_products"
     VIEW_INVENTORY = "view_inventory"
     VIEW_REPORTS = "view_reports"
@@ -27,14 +29,22 @@ class Permission(str, Enum):
 
 ROLE_PERMISSIONS: Dict[str, Set[Permission]] = {
     "admin": set(p for p in Permission),
-    "user": {Permission.VIEW_PRODUCTS, Permission.VIEW_INVENTORY, Permission.VIEW_REPORTS},
+    "user": {
+        Permission.VIEW_CUSTOMERS,
+        Permission.VIEW_PRODUCTS,
+        Permission.VIEW_INVENTORY,
+        Permission.VIEW_REPORTS,
+    },
     "sales": {
+        Permission.VIEW_CUSTOMERS,
+        Permission.MANAGE_CUSTOMERS,
         Permission.VIEW_PRODUCTS,
         Permission.VIEW_INVENTORY,
         Permission.VIEW_REPORTS,
         Permission.DOC_CREATE_IMPORT,
     },
     "warehouse_manager": {
+        Permission.VIEW_CUSTOMERS,
         Permission.VIEW_PRODUCTS,
         Permission.MANAGE_PRODUCTS,
         Permission.VIEW_WAREHOUSES,
@@ -46,6 +56,7 @@ ROLE_PERMISSIONS: Dict[str, Set[Permission]] = {
         Permission.VIEW_REPORTS,
     },
     "warehouse": {
+        Permission.VIEW_CUSTOMERS,
         Permission.VIEW_PRODUCTS,
         Permission.VIEW_INVENTORY,
         Permission.VIEW_REPORTS,
@@ -53,6 +64,7 @@ ROLE_PERMISSIONS: Dict[str, Set[Permission]] = {
         Permission.DOC_POST,
     },
     "accountant": {
+        Permission.VIEW_CUSTOMERS,
         Permission.VIEW_PRODUCTS,
         Permission.VIEW_INVENTORY,
         Permission.VIEW_REPORTS,
@@ -66,4 +78,3 @@ def role_has_permissions(role: str, required: Set[Permission]) -> bool:
         return True
     allowed = ROLE_PERMISSIONS.get(role, set())
     return required.issubset(allowed)
-

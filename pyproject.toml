@@ -1,0 +1,54 @@
+[project]
+name = "wms-microservices"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "ai-service",
+  "api-gateway",
+  "audit-service",
+  "customer-service",
+  "documents-service",
+  "identity-service",
+  "inventory-service",
+  "product-service",
+  "reporting-service",
+  "shared-utils",
+  "warehouse-service",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.1",
+  "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
+  "pytest-cov>=6.0.0",
+]
+
+[tool.uv.workspace]
+members = [
+  "Libraries/shared-utils",
+  "Services/ai-service",
+  "Services/api-gateway",
+  "Services/audit-service",
+  "Services/customer-service",
+  "Services/documents-service",
+  "Services/identity-service",
+  "Services/inventory-service",
+  "Services/product-service",
+  "Services/reporting-service",
+  "Services/wms-monolith",
+  "Services/warehouse-service",
+]
+
+[tool.uv.sources]
+ai-service = { workspace = true }
+api-gateway = { workspace = true }
+audit-service = { workspace = true }
+customer-service = { workspace = true }
+documents-service = { workspace = true }
+identity-service = { workspace = true }
+inventory-service = { workspace = true }
+product-service = { workspace = true }
+reporting-service = { workspace = true }
+shared-utils = { workspace = true }
+warehouse-service = { workspace = true }

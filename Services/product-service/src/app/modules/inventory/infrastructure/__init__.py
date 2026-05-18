@@ -1,1 +1,3 @@
-from __future__ import annotations\n\n__all__ = []\n
+from __future__ import annotations
+
+__all__ = []

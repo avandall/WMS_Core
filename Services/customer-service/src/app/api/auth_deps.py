@@ -31,7 +31,7 @@ def get_current_user(
 
     from customer_service.grpc_identity_client import validate_token
 
-    me = validate_token(creds.credentials)
+    me = validate_token(creds.credentials, request_id=request.headers.get("x-request-id"))
     if not me:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = CurrentUser(

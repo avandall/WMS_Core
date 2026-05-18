@@ -21,10 +21,15 @@ def _identity_addr() -> str:
     return os.getenv("IDENTITY_GRPC_ADDR", "identity-service:50051")
 
 
-def validate_token(access_token: str) -> IdentityUser | None:
+def validate_token(access_token: str, *, request_id: str | None = None) -> IdentityUser | None:
+    metadata = [("x-request-id", request_id)] if request_id else None
     with grpc.insecure_channel(_identity_addr()) as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = stub.ValidateToken(identity_pb2.ValidateTokenRequest(access_token=access_token), timeout=5)
+        resp = stub.ValidateToken(
+            identity_pb2.ValidateTokenRequest(access_token=access_token),
+            timeout=5,
+            metadata=metadata,
+        )
         if not resp.valid:
             return None
         return IdentityUser(
@@ -34,4 +39,3 @@ def validate_token(access_token: str) -> IdentityUser | None:
             role=resp.role,
             is_active=bool(resp.is_active),
         )
-

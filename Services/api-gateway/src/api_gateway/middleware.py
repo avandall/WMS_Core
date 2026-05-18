@@ -14,25 +14,39 @@ async def request_id_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
     start = time.monotonic()
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
-    duration_ms = (time.monotonic() - start) * 1000.0
-    METRICS.observe(
-        method=request.method,
-        path=request.url.path,
-        status=response.status_code,
-        duration_ms=duration_ms,
-    )
-    json_log(
-        level="info",
-        message="http_request",
-        request_id=request_id,
-        method=request.method,
-        path=request.url.path,
-        status=response.status_code,
-        duration_ms=duration_ms,
-    )
-    return response
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception as exc:
+        json_log(
+            level="error",
+            message="http_request_failed",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            error=type(exc).__name__,
+        )
+        raise
+    finally:
+        duration_ms = (time.monotonic() - start) * 1000.0
+        METRICS.observe(
+            method=request.method,
+            path=request.url.path,
+            status=status_code,
+            duration_ms=duration_ms,
+        )
+        json_log(
+            level="info",
+            message="http_request",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status=status_code,
+            duration_ms=duration_ms,
+        )
 
 
 _rate_state: dict[str, tuple[float, int]] = {}

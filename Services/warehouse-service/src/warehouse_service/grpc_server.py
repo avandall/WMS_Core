@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 import grpc
+from shared_utils.observability import grpc_observability_interceptor
 
 from warehouse_service.grpc_servicer import (
     WarehouseOperationsServiceServicer,
@@ -13,10 +14,12 @@ from warehouse_service.grpc_servicer import (
 
 
 def serve(*, host: str = "0.0.0.0", port: int = 50054) -> None:
-    server = grpc.server(ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(
+        ThreadPoolExecutor(max_workers=10),
+        interceptors=[grpc_observability_interceptor(service="warehouse-service")],
+    )
     add_WarehouseServiceServicer_to_server(WarehouseServiceServicer(), server)
     add_WarehouseOperationsServiceServicer_to_server(WarehouseOperationsServiceServicer(), server)
     server.add_insecure_port(f"{host}:{port}")
     server.start()
     server.wait_for_termination()
-

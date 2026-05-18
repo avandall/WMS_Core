@@ -7,6 +7,7 @@ import grpc
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from api_gateway.errors import grpc_http_exception
 from api_gateway.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
 
 
@@ -33,9 +34,18 @@ def get_current_user(
     if not creds:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     token = creds.credentials
-    with grpc.insecure_channel(_identity_addr()) as channel:
-        stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = stub.ValidateToken(identity_pb2.ValidateTokenRequest(access_token=token), timeout=5)
+    request_id = getattr(request.state, "request_id", None)
+    metadata = [("x-request-id", request_id)] if request_id else None
+    try:
+        with grpc.insecure_channel(_identity_addr()) as channel:
+            stub = identity_pb2_grpc.IdentityServiceStub(channel)
+            resp = stub.ValidateToken(
+                identity_pb2.ValidateTokenRequest(access_token=token),
+                timeout=5,
+                metadata=metadata,
+            )
+    except grpc.RpcError as exc:
+        raise grpc_http_exception(exc, fallback_detail="Identity service unavailable")
     if not resp.valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = CurrentUser(
@@ -49,4 +59,3 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     request.state.user = user
     return user
-

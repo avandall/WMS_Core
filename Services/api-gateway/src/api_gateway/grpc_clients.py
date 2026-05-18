@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+import time
 
 import grpc
 
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Callable, Iterator, TypeVar
 
 from api_gateway.gen.wms.customer.v1 import customer_pb2_grpc
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2_grpc
@@ -16,9 +17,51 @@ from api_gateway.gen.wms.audit.v1 import audit_pb2_grpc
 from api_gateway.gen.wms.reporting.v1 import reporting_pb2_grpc
 from api_gateway.gen.wms.ai.v1 import ai_pb2_grpc
 
+T = TypeVar("T")
+
 
 def _addr(env: str, default: str) -> str:
     return os.getenv(env, default)
+
+
+def _retry_attempts() -> int:
+    try:
+        return max(1, int(os.getenv("GRPC_RETRY_ATTEMPTS", "2")))
+    except ValueError:
+        return 2
+
+
+def _retry_backoff_seconds(attempt: int) -> float:
+    try:
+        base = max(0.0, float(os.getenv("GRPC_RETRY_BACKOFF_SECONDS", "0.05")))
+    except ValueError:
+        base = 0.05
+    return base * (2 ** max(0, attempt - 1))
+
+
+_RETRYABLE_STATUS = {
+    grpc.StatusCode.UNAVAILABLE,
+    grpc.StatusCode.DEADLINE_EXCEEDED,
+    grpc.StatusCode.RESOURCE_EXHAUSTED,
+}
+
+
+def call_idempotent(
+    fn: Callable[..., T],
+    request,
+    *,
+    timeout: float,
+    metadata=None,
+) -> T:
+    attempts = _retry_attempts()
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn(request, timeout=timeout, metadata=metadata)
+        except grpc.RpcError as exc:
+            if attempt >= attempts or exc.code() not in _RETRYABLE_STATUS:
+                raise
+            time.sleep(_retry_backoff_seconds(attempt))
+    raise RuntimeError("unreachable")
 
 
 @contextmanager
