@@ -10,9 +10,9 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 3: Inventory + Documents — DONE (gRPC services + API Gateway REST→gRPC + event hooks placeholder)
 - Phase 4: Audit + Reporting — DONE (gRPC services + API Gateway REST→gRPC)
 - Phase 5: AI Service — DONE (gRPC service + API Gateway REST→gRPC)
-- Phase 6: Harden API Gateway (Core) — IN PROGRESS
-- Phase 7: Observability & Reliability — TODO
-- Phase 8: Docker/Compose “Run For Real” — TODO
+- Phase 6: Harden API Gateway (Core) — DONE
+- Phase 7: Observability & Reliability — DONE
+- Phase 8: Docker/Compose “Run For Real” — DONE
 - Phase 9: CI + Contract/E2E Migration — TODO
 - Phase 10: Data Ownership & Datastores — TODO
 - Phase 11: Event Bus & Async Workflows — TODO

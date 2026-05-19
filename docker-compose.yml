@@ -1,129 +1,228 @@
 name: wms-monorepo
 
+x-service-env: &service-env
+  PYTHONUNBUFFERED: "1"
+  IDENTITY_GRPC_ADDR: identity-service:50051
+  DATABASE_URL: sqlite:////tmp/wms.db
+  SECRET_KEY: wms-local-dev-secret
+
+x-grpc-healthcheck: &grpc-healthcheck
+  interval: 10s
+  timeout: 3s
+  retries: 12
+  start_period: 20s
+
 services:
   api-gateway:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/api-gateway:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/api-gateway:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: api-gateway
+    command: ["python", "-m", "api_gateway.main"]
     ports:
       - "8000:8000"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
-      - CUSTOMER_GRPC_ADDR=customer-service:50052
-      - PRODUCT_GRPC_ADDR=product-service:50053
-      - WAREHOUSE_GRPC_ADDR=warehouse-service:50054
-      - INVENTORY_GRPC_ADDR=inventory-service:50055
-      - DOCUMENTS_GRPC_ADDR=documents-service:50056
-      - AUDIT_GRPC_ADDR=audit-service:50057
-      - REPORTING_GRPC_ADDR=reporting-service:50058
-      - AI_GRPC_ADDR=ai-service:50059
+      <<: *service-env
+      CUSTOMER_GRPC_ADDR: customer-service:50052
+      PRODUCT_GRPC_ADDR: product-service:50053
+      WAREHOUSE_GRPC_ADDR: warehouse-service:50054
+      INVENTORY_GRPC_ADDR: inventory-service:50055
+      DOCUMENTS_GRPC_ADDR: documents-service:50056
+      AUDIT_GRPC_ADDR: audit-service:50057
+      REPORTING_GRPC_ADDR: reporting-service:50058
+      AI_GRPC_ADDR: ai-service:50059
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      warehouse-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      documents-service:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+      reporting-service:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "http", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
 
   identity-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/identity-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/identity-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: identity-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "identity_service"]
     ports:
-      - "8001:8001"
       - "50051:50051"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50051"]
 
   customer-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/customer-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/customer-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: customer-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "customer_service"]
     ports:
-      - "8002:8002"
       - "50052:50052"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50052"]
 
   product-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/product-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/product-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: product-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "product_service"]
     ports:
-      - "8003:8003"
       - "50053:50053"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50053"]
 
   warehouse-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/warehouse-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/warehouse-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: warehouse-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "warehouse_service"]
     ports:
-      - "8004:8004"
       - "50054:50054"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50054"]
 
   inventory-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/inventory-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/inventory-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: inventory-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "inventory_service"]
     ports:
-      - "8005:8005"
       - "50055:50055"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50055"]
 
   documents-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/documents-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/documents-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: documents-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "documents_service"]
     ports:
-      - "8006:8006"
       - "50056:50056"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50056"]
 
   audit-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/audit-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/audit-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: audit-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "audit_service"]
     ports:
-      - "8007:8007"
       - "50057:50057"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50057"]
 
   reporting-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/reporting-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/reporting-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: reporting-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "reporting_service"]
     ports:
-      - "8008:8008"
       - "50058:50058"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50058"]
 
   ai-service:
-    image: python:3.12-slim
-    working_dir: /workspace
-    volumes:
-      - ./Services/ai-service:/workspace
-    command: ["bash", "-lc", "python -V && echo 'TODO: add Dockerfile / deps install' && sleep infinity"]
+    image: wms/ai-service:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_PACKAGE: ai-service
+    command: ["python", "/app/scripts/run_grpc_service.py", "ai_service"]
     ports:
-      - "8009:8009"
       - "50059:50059"
     environment:
-      - IDENTITY_GRPC_ADDR=identity-service:50051
+      <<: *service-env
+    depends_on:
+      identity-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *grpc-healthcheck
+      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50059"]

@@ -3,17 +3,6 @@ name = "wms-microservices"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "ai-service",
-  "api-gateway",
-  "audit-service",
-  "customer-service",
-  "documents-service",
-  "identity-service",
-  "inventory-service",
-  "product-service",
-  "reporting-service",
-  "shared-utils",
-  "warehouse-service",
 ]
 
 [dependency-groups]
