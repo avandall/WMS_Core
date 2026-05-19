@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: api-gateway
-    command: ["python", "-m", "api_gateway.main"]
+    command: ["api-gateway"]
     ports:
       - "8000:8000"
     environment:
@@ -66,7 +66,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: identity-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "identity_service"]
+    command: ["identity-grpc"]
     ports:
       - "50051:50051"
     environment:
@@ -82,7 +82,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: customer-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "customer_service"]
+    command: ["customer-grpc"]
     ports:
       - "50052:50052"
     environment:
@@ -101,7 +101,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: product-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "product_service"]
+    command: ["product-grpc"]
     ports:
       - "50053:50053"
     environment:
@@ -120,7 +120,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: warehouse-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "warehouse_service"]
+    command: ["warehouse-grpc"]
     ports:
       - "50054:50054"
     environment:
@@ -139,7 +139,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: inventory-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "inventory_service"]
+    command: ["inventory-grpc"]
     ports:
       - "50055:50055"
     environment:
@@ -158,7 +158,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: documents-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "documents_service"]
+    command: ["documents-grpc"]
     ports:
       - "50056:50056"
     environment:
@@ -177,7 +177,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: audit-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "audit_service"]
+    command: ["audit-grpc"]
     ports:
       - "50057:50057"
     environment:
@@ -196,7 +196,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: reporting-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "reporting_service"]
+    command: ["reporting-grpc"]
     ports:
       - "50058:50058"
     environment:
@@ -215,7 +215,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_PACKAGE: ai-service
-    command: ["python", "/app/scripts/run_grpc_service.py", "ai_service"]
+    command: ["ai-grpc"]
     ports:
       - "50059:50059"
     environment:

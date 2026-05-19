@@ -16,6 +16,10 @@ dependencies = [
   "shared-utils",
 ]
 
+[project.scripts]
+warehouse-grpc = "warehouse_service.main:main_grpc"
+warehouse-http = "warehouse_service.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

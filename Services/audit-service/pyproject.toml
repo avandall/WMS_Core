@@ -16,6 +16,10 @@ dependencies = [
   "shared-utils",
 ]
 
+[project.scripts]
+audit-grpc = "audit_service.main:main_grpc"
+audit-http = "audit_service.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

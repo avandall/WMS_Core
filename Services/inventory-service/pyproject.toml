@@ -16,6 +16,10 @@ dependencies = [
   "shared-utils",
 ]
 
+[project.scripts]
+inventory-grpc = "inventory_service.main:main_grpc"
+inventory-http = "inventory_service.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

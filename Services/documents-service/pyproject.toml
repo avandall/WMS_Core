@@ -16,6 +16,10 @@ dependencies = [
   "shared-utils",
 ]
 
+[project.scripts]
+documents-grpc = "documents_service.main:main_grpc"
+documents-http = "documents_service.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

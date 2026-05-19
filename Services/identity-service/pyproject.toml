@@ -17,6 +17,10 @@ dependencies = [
   "shared-utils",
 ]
 
+[project.scripts]
+identity-grpc = "identity_service.main:main_grpc"
+identity-http = "identity_service.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
