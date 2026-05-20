@@ -10,6 +10,13 @@ Root compose exposes the API Gateway at `http://localhost:8000`.
 
 `docker compose up -d`
 
+Default compose does not start `ai-service`; it is behind the `ai` profile so normal dev/test
+commands do not build the heavy ML image.
+
+To include AI explicitly:
+
+`docker compose --profile ai up -d`
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).
@@ -24,3 +31,4 @@ Root compose exposes the API Gateway at `http://localhost:8000`.
 
 - Phase 5 adds AI gRPC service:
   - `/api/v1/ai/*`
+  - AI is opt-in for local compose: `docker compose --profile ai up -d`

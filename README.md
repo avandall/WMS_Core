@@ -45,5 +45,6 @@ Chi tiết Phase 2 gRPC + monolith façade routing: `docs/phase2_grpc.md`
 Root `docker-compose.yml` không còn chạy `wms-monolith`. API public entrypoint là API Gateway:
 - REST: `http://localhost:8000/api/v1/*`
 - Downstream: gRPC nội bộ (identity/customer/product/warehouse/inventory)
+- AI service được tách vào Compose profile `ai` để dev/test mặc định không build image ML nặng.
 
 Chi tiết run: `docs/run_gateway.md`
