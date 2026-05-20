@@ -1,5 +1,6 @@
 """Database configuration and helpers for the WMS application."""
 
+import os
 import time
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -53,6 +54,14 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 
 
+def _init_db_tables():
+    configured = os.getenv("INIT_DB_TABLES", "")
+    if configured.strip() == "__none__":
+        return []
+    table_names = [name.strip() for name in configured.split(",") if name.strip()]
+    return [Base.metadata.tables[name] for name in table_names if name in Base.metadata.tables] or None
+
+
 def get_session():
     db = SessionLocal()
     try:
@@ -100,7 +109,7 @@ def init_db() -> None:
             with engine.connect() as conn:
                 conn.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id})
                 try:
-                    Base.metadata.create_all(bind=conn)
+                    Base.metadata.create_all(bind=conn, tables=_init_db_tables())
                     conn.commit()
                 except Exception:
                     conn.rollback()
@@ -112,7 +121,7 @@ def init_db() -> None:
                         conn.rollback()
                         conn.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
         else:
-            Base.metadata.create_all(bind=engine)
+            Base.metadata.create_all(bind=engine, tables=_init_db_tables())
         logger.info("Database tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")

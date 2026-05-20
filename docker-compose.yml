@@ -71,6 +71,7 @@ services:
       - "50051:50051"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: users
     healthcheck:
       <<: *grpc-healthcheck
       test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50051"]
@@ -87,6 +88,7 @@ services:
       - "50052:50052"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: customers
     depends_on:
       identity-service:
         condition: service_healthy
@@ -106,6 +108,7 @@ services:
       - "50053:50053"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: products,inventory
     depends_on:
       identity-service:
         condition: service_healthy
@@ -125,6 +128,7 @@ services:
       - "50054:50054"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: products,warehouses,warehouse_inventory,positions,inventory,position_inventory
     depends_on:
       identity-service:
         condition: service_healthy
@@ -144,6 +148,7 @@ services:
       - "50055:50055"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: products,warehouses,inventory,warehouse_inventory
     depends_on:
       identity-service:
         condition: service_healthy
@@ -163,6 +168,7 @@ services:
       - "50056:50056"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: products,customers,warehouses,documents,document_items
     depends_on:
       identity-service:
         condition: service_healthy
@@ -182,6 +188,7 @@ services:
       - "50057:50057"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: __none__
     depends_on:
       identity-service:
         condition: service_healthy
@@ -201,6 +208,7 @@ services:
       - "50058:50058"
     environment:
       <<: *service-env
+      INIT_DB_TABLES: products,customers,warehouses,inventory,warehouse_inventory,documents,document_items,customer_purchases
     depends_on:
       identity-service:
         condition: service_healthy

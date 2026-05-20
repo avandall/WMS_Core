@@ -14,7 +14,7 @@ def _headers() -> dict[str, str]:
     assert ACCESS_TOKEN, "E2E_ACCESS_TOKEN is required for gateway stack E2E tests"
     return {
         "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "X-Request-ID": f"phase9-e2e-{uuid.uuid4().hex}",
+        "X-Request-ID": f"gateway-e2e-{uuid.uuid4().hex}",
     }
 
 
@@ -41,10 +41,10 @@ def test_gateway_rejects_unauthenticated_domain_requests() -> None:
 def test_customer_create_through_gateway_to_grpc_service() -> None:
     suffix = uuid.uuid4().hex[:8]
     payload = {
-        "name": f"Phase 9 Customer {suffix}",
-        "email": f"phase9.customer.{suffix}@example.com",
+        "name": f"Gateway E2E Customer {suffix}",
+        "email": f"gateway.e2e.customer.{suffix}@example.com",
         "phone": "555-0109",
-        "address": "Phase 9 Gateway E2E",
+        "address": "Gateway E2E",
     }
 
     with httpx.Client(base_url=GATEWAY_URL, headers=_headers(), timeout=15.0) as client:
@@ -53,6 +53,6 @@ def test_customer_create_through_gateway_to_grpc_service() -> None:
         customer = created.json()
         assert customer["name"] == payload["name"]
         assert customer["email"] == payload["email"]
-        assert created.headers["x-request-id"].startswith("phase9-e2e-")
+        assert created.headers["x-request-id"].startswith("gateway-e2e-")
 
         assert customer["customer_id"] > 0

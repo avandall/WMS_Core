@@ -55,7 +55,10 @@ Base = declarative_base()
 
 
 def _init_db_tables():
-    table_names = [name.strip() for name in os.getenv("INIT_DB_TABLES", "").split(",") if name.strip()]
+    configured = os.getenv("INIT_DB_TABLES", "")
+    if configured.strip() == "__none__":
+        return []
+    table_names = [name.strip() for name in configured.split(",") if name.strip()]
     return [Base.metadata.tables[name] for name in table_names if name in Base.metadata.tables] or None
 
 

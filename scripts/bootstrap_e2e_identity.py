@@ -10,8 +10,8 @@ from app.shared.core.settings import settings
 
 
 def main() -> None:
-    email = os.getenv("E2E_ADMIN_EMAIL", "phase9-admin@example.com")
-    password = os.getenv("E2E_ADMIN_PASSWORD", "Phase9Admin123!")
+    email = os.getenv("E2E_ADMIN_EMAIL", "gateway-e2e-admin@example.com")
+    password = os.getenv("E2E_ADMIN_PASSWORD", "GatewayE2EAdmin123!")
     role = os.getenv("E2E_ADMIN_ROLE", "admin")
 
     init_db()
@@ -24,7 +24,7 @@ def main() -> None:
                 email=email,
                 password=password,
                 role=role,
-                full_name="Phase 9 E2E Admin",
+                full_name="Gateway E2E Admin",
             )
             db.commit()
         token = create_token(

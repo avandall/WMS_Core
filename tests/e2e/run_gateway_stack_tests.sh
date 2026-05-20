@@ -4,15 +4,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.phase9.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-wms-gateway-e2e}"
 BUILD_FLAG="${BUILD_FLAG---build}"
 
 cleanup() {
-  docker compose -f "$COMPOSE_FILE" down -v
+  docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" down -v
 }
 trap cleanup EXIT
 
-docker compose -f "$COMPOSE_FILE" up -d $BUILD_FLAG
+docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d $BUILD_FLAG identity-service customer-service
+docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d $BUILD_FLAG --no-deps api-gateway
 
 echo "Waiting for API Gateway health..."
 for i in $(seq 1 60); do
@@ -20,14 +22,14 @@ for i in $(seq 1 60); do
     break
   fi
   if [ "$i" = "60" ]; then
-    docker compose -f "$COMPOSE_FILE" ps
-    docker compose -f "$COMPOSE_FILE" logs --tail=120 api-gateway identity-service customer-service
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" ps
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" logs --tail=120 api-gateway identity-service customer-service
     exit 1
   fi
   sleep 2
 done
 
-TOKEN="$(docker compose -f "$COMPOSE_FILE" exec -T identity-service python /app/scripts/bootstrap_e2e_identity.py | tail -n 1)"
+TOKEN="$(docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" exec -T identity-service python /app/scripts/bootstrap_e2e_identity.py | tail -n 1)"
 if [ -z "$TOKEN" ]; then
   echo "Failed to bootstrap E2E access token"
   exit 1
