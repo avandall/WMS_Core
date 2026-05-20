@@ -13,7 +13,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 6: Harden API Gateway (Core) — DONE
 - Phase 7: Observability & Reliability — DONE
 - Phase 8: Docker/Compose “Run For Real” — DONE
-- Phase 9: CI + Contract/E2E Migration — TODO
+- Phase 9: CI + Contract/E2E Migration — DONE (gateway contract/E2E smoke on minimal gRPC stack)
 - Phase 10: Data Ownership & Datastores — TODO
 - Phase 11: Event Bus & Async Workflows — TODO
 - Phase 12: Production Observability (OpenTelemetry) — TODO
@@ -53,9 +53,11 @@ Goal: `docker compose up` chạy được toàn stack (không placeholder `sleep
 
 Goal: CI test theo entrypoint mới (API Gateway) thay vì monolith.
 
-- Add contract/e2e tests against API Gateway + gRPC stack
-- Migrate GitHub Actions integration/contract tests từ `Services/wms-monolith` sang root stack
-- Keep `Services/wms-monolith/tests/refactor_guard` làm safety net cho đến khi retire monolith hoàn toàn
+- DONE: Add contract/e2e tests against API Gateway + gRPC stack
+- DONE: Migrate GitHub Actions integration/contract tests từ `Services/wms-monolith` sang root stack
+- DONE: Keep `Services/wms-monolith/tests/refactor_guard` làm safety net cho đến khi retire monolith hoàn toàn
+- CI/E2E uses `docker-compose.phase9.yml` as a minimal stack (`api-gateway`, `identity-service`, `customer-service`) to verify REST→gRPC without building the heavy AI image.
+- Full-stack compose validation including `ai-service` is intentionally left as an explicit/manual run until AI image dependencies are slimmed down or split behind a CI profile.
 
 ## Phase 10: Data Ownership & Datastores
 

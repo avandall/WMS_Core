@@ -69,18 +69,26 @@ def get_session():
 
 def import_all_models():
     """Import all SQLAlchemy models from all modules for database initialization."""
-    # Import module-specific models
-    from app.modules.audit.infrastructure.models.audit_event import AuditEventModel
-    from app.modules.customers.infrastructure.models.customer import CustomerModel
-    from app.modules.customers.infrastructure.models.customer_purchase import CustomerPurchaseModel
-    from app.modules.documents.infrastructure.models.document import DocumentModel
-    from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
-    from app.modules.inventory.infrastructure.models.inventory import InventoryModel
-    from app.modules.inventory.infrastructure.models.position_inventory import PositionInventoryModel
-    from app.modules.positions.infrastructure.models.position import PositionModel
-    from app.modules.products.infrastructure.models.product import ProductModel
-    from app.modules.users.infrastructure.models.user import UserModel
-    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
+    import importlib
+
+    model_modules = [
+        "app.modules.audit.infrastructure.models.audit_event",
+        "app.modules.customers.infrastructure.models.customer",
+        "app.modules.customers.infrastructure.models.customer_purchase",
+        "app.modules.documents.infrastructure.models.document",
+        "app.modules.documents.infrastructure.models.document_item",
+        "app.modules.inventory.infrastructure.models.inventory",
+        "app.modules.inventory.infrastructure.models.position_inventory",
+        "app.modules.positions.infrastructure.models.position",
+        "app.modules.products.infrastructure.models.product",
+        "app.modules.users.infrastructure.models.user",
+        "app.modules.warehouses.infrastructure.models.warehouse",
+    ]
+    for module in model_modules:
+        try:
+            importlib.import_module(module)
+        except ModuleNotFoundError:
+            logger.debug("Skipping unavailable model module: %s", module)
 
 
 def init_db() -> None:

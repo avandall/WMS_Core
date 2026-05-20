@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 import grpc
+from app.shared.core.database import init_db
 from shared_utils.observability import grpc_observability_interceptor
 
 from warehouse_service.grpc_servicer import (
@@ -14,6 +15,7 @@ from warehouse_service.grpc_servicer import (
 
 
 def serve(*, host: str = "0.0.0.0", port: int = 50054) -> None:
+    init_db()
     server = grpc.server(
         ThreadPoolExecutor(max_workers=10),
         interceptors=[grpc_observability_interceptor(service="warehouse-service")],

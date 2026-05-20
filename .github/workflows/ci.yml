@@ -39,7 +39,7 @@ jobs:
           chmod +x tests/refactor_guard/run_refactor_guard.sh
           ./tests/refactor_guard/run_refactor_guard.sh
 
-  integration-and-contract-tests:
+  gateway-stack-contract-e2e-tests:
     needs: refactor-guard-tests
     runs-on: ubuntu-latest
     steps:
@@ -48,40 +48,9 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
-      - name: Install dependencies
-        run: pip install -r Services/wms-monolith/requirements.txt schemathesis
-      - name: Start Docker Compose stack
+      - name: Install gateway test dependencies
         run: |
-          docker compose -f Services/wms-monolith/docker-compose.yml up -d db api
-          echo "Waiting for API to become ready..."
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8000/openapi.json >/dev/null 2>&1; then
-              echo "API is ready"
-              break
-            fi
-            echo "Waiting for API... ($i/30)"
-            sleep 5
-          done
-          curl -sf http://localhost:8000/openapi.json >/dev/null || (docker compose -f Services/wms-monolith/docker-compose.yml logs api && exit 1)
-      - name: Run Alembic migrations
-        env:
-          DATABASE_URL: postgresql://wms_user:wms_password@localhost:5433/warehouse_db
-        run: |
-          cd Services/wms-monolith
-          alembic upgrade head
-      - name: Run integration tests
-        env:
-          DATABASE_URL: postgresql://wms_user:wms_password@localhost:5433/warehouse_db
-          TEST_DATABASE_URL: postgresql://wms_user:wms_password@localhost:5433/warehouse_db
-          DEBUG: true
-          TESTING: true
-        run: |
-          cd Services/wms-monolith
-          pytest -q tests/integration
-      - name: Run contract tests
-        run: |
-          schemathesis run http://localhost:8000/openapi.json --checks all --max-examples 20
-      - name: Tear down Docker Compose stack
-        if: always()
-        run: |
-          docker compose -f Services/wms-monolith/docker-compose.yml down -v
+          python -m pip install --upgrade pip
+          python -m pip install pytest httpx
+      - name: Run API Gateway contract and E2E tests against root gRPC stack
+        run: tests/e2e/run_gateway_stack_tests.sh

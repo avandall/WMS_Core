@@ -1,5 +1,6 @@
 """Database configuration and helpers for the WMS application."""
 
+import os
 import time
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -53,6 +54,11 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 
 
+def _init_db_tables():
+    table_names = [name.strip() for name in os.getenv("INIT_DB_TABLES", "").split(",") if name.strip()]
+    return [Base.metadata.tables[name] for name in table_names if name in Base.metadata.tables] or None
+
+
 def get_session():
     db = SessionLocal()
     try:
@@ -69,18 +75,16 @@ def get_session():
 
 def import_all_models():
     """Import all SQLAlchemy models from all modules for database initialization."""
-    # Import module-specific models
-    from app.modules.audit.infrastructure.models.audit_event import AuditEventModel
-    from app.modules.customers.infrastructure.models.customer import CustomerModel
-    from app.modules.customers.infrastructure.models.customer_purchase import CustomerPurchaseModel
-    from app.modules.documents.infrastructure.models.document import DocumentModel
-    from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
-    from app.modules.inventory.infrastructure.models.inventory import InventoryModel
-    from app.modules.inventory.infrastructure.models.position_inventory import PositionInventoryModel
-    from app.modules.positions.infrastructure.models.position import PositionModel
-    from app.modules.products.infrastructure.models.product import ProductModel
-    from app.modules.users.infrastructure.models.user import UserModel
-    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
+    import importlib
+
+    model_modules = [
+        "app.modules.customers.infrastructure.models.customer",
+    ]
+    for module in model_modules:
+        try:
+            importlib.import_module(module)
+        except ModuleNotFoundError:
+            logger.debug("Skipping unavailable model module: %s", module)
 
 
 def init_db() -> None:
@@ -92,7 +96,7 @@ def init_db() -> None:
             with engine.connect() as conn:
                 conn.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id})
                 try:
-                    Base.metadata.create_all(bind=conn)
+                    Base.metadata.create_all(bind=conn, tables=_init_db_tables())
                     conn.commit()
                 except Exception:
                     conn.rollback()
@@ -104,7 +108,7 @@ def init_db() -> None:
                         conn.rollback()
                         conn.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
         else:
-            Base.metadata.create_all(bind=engine)
+            Base.metadata.create_all(bind=engine, tables=_init_db_tables())
         logger.info("Database tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")
