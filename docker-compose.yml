@@ -6,6 +6,8 @@ x-service-env: &service-env
   SECRET_KEY: wms-local-dev-secret
   EVENT_BUS_URL: redis://event-bus:6379/0
   EVENT_STREAM: wms.events
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_TRACES_EXPORTER: otlp
 
 x-grpc-healthcheck: &grpc-healthcheck
   interval: 10s

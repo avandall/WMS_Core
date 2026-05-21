@@ -6,6 +6,7 @@ from collections.abc import Callable
 import grpc
 
 from .http import METRICS, json_log
+from .trace import child_trace_context, parse_traceparent, set_trace_context
 
 
 class GrpcObservabilityInterceptor(grpc.ServerInterceptor):
@@ -21,6 +22,8 @@ class GrpcObservabilityInterceptor(grpc.ServerInterceptor):
 
         def unary_unary(request, context):
             request_id = _request_id(context)
+            trace_context = child_trace_context(_trace_context(context))
+            set_trace_context(trace_context)
             start = time.monotonic()
             status = "OK"
             try:
@@ -35,6 +38,8 @@ class GrpcObservabilityInterceptor(grpc.ServerInterceptor):
                     method=method,
                     error=type(exc).__name__,
                     grpc_status=status,
+                    trace_id=trace_context.trace_id,
+                    span_id=trace_context.span_id,
                 )
                 raise
             finally:
@@ -48,6 +53,8 @@ class GrpcObservabilityInterceptor(grpc.ServerInterceptor):
                     method=method,
                     grpc_status=status,
                     duration_ms=duration_ms,
+                    trace_id=trace_context.trace_id,
+                    span_id=trace_context.span_id,
                 )
 
         return grpc.unary_unary_rpc_method_handler(
@@ -65,6 +72,13 @@ def _request_id(context: grpc.ServicerContext) -> str | None:
     for key, value in context.invocation_metadata() or []:
         if key.lower() == "x-request-id":
             return value
+    return None
+
+
+def _trace_context(context: grpc.ServicerContext):
+    for key, value in context.invocation_metadata() or []:
+        if key.lower() == "traceparent":
+            return parse_traceparent(value)
     return None
 
 

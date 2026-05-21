@@ -7,18 +7,23 @@ import uuid
 from fastapi import HTTPException
 from fastapi import Request
 
-from api_gateway.observability import METRICS, json_log
+from api_gateway.observability import METRICS, child_trace_context, json_log, parse_traceparent
 
 
 async def request_id_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
+    trace_context = child_trace_context(parse_traceparent(request.headers.get("traceparent")))
+    request.state.trace_id = trace_context.trace_id
+    request.state.span_id = trace_context.span_id
+    request.state.traceparent = trace_context.traceparent
     start = time.monotonic()
     status_code = 500
     try:
         response = await call_next(request)
         status_code = response.status_code
         response.headers["X-Request-ID"] = request_id
+        response.headers["traceparent"] = trace_context.traceparent
         return response
     except Exception as exc:
         json_log(
@@ -28,6 +33,8 @@ async def request_id_middleware(request: Request, call_next):
             method=request.method,
             path=request.url.path,
             error=type(exc).__name__,
+            trace_id=trace_context.trace_id,
+            span_id=trace_context.span_id,
         )
         raise
     finally:
@@ -46,6 +53,8 @@ async def request_id_middleware(request: Request, call_next):
             path=request.url.path,
             status=status_code,
             duration_ms=duration_ms,
+            trace_id=trace_context.trace_id,
+            span_id=trace_context.span_id,
         )
 
 

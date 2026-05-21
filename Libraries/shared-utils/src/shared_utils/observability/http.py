@@ -9,6 +9,8 @@ from typing import Any
 
 from fastapi import Request
 
+from .trace import child_trace_context, parse_traceparent, set_trace_context
+
 
 @dataclass(slots=True)
 class Metrics:
@@ -61,8 +63,15 @@ def json_log(*, service: str, level: str, message: str, request_id: str | None =
 def http_metrics_middleware(*, service: str):
     async def _mw(request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or getattr(request.state, "request_id", None)
+        parent = parse_traceparent(request.headers.get("traceparent"))
+        trace_context = child_trace_context(parent)
+        set_trace_context(trace_context)
+        request.state.trace_id = trace_context.trace_id
+        request.state.span_id = trace_context.span_id
+        request.state.traceparent = trace_context.traceparent
         start = time.monotonic()
         response = await call_next(request)
+        response.headers["traceparent"] = trace_context.traceparent
         duration_ms = (time.monotonic() - start) * 1000.0
         METRICS.observe(
             method=request.method,
@@ -79,8 +88,9 @@ def http_metrics_middleware(*, service: str):
             path=request.url.path,
             status=response.status_code,
             duration_ms=duration_ms,
+            trace_id=trace_context.trace_id,
+            span_id=trace_context.span_id,
         )
         return response
 
     return _mw
-

@@ -16,7 +16,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 9: CI + Contract/E2E Migration — DONE (gateway contract/E2E smoke on root compose; AI opt-in)
 - Phase 10: Data Ownership & Datastores — DONE (per-service local datastore baseline + ownership guards)
 - Phase 11: Event Bus & Async Workflows — DONE (Redis Streams baseline + audit consumer)
-- Phase 12: Production Observability (OpenTelemetry) — TODO
+- Phase 12: Production Observability (OpenTelemetry) — DONE (W3C trace context + OTLP-ready baseline)
 - Phase 13: Security Hardening (Prod) — TODO
 - Phase 14: Resilience & SLO Readiness — TODO
 - Phase 15: Release/Deployment & Ops — TODO
@@ -96,17 +96,15 @@ Goal: thay placeholder events bằng message broker thật + consumer pipelines.
 
 Goal: trace + metrics + logs thống nhất end-to-end.
 
-- Adopt OpenTelemetry SDK for:
-  - API Gateway (FastAPI)
-  - gRPC clients/servers
-- Trace propagation:
-  - Use W3C `traceparent` or service-mesh propagation
-  - Keep `x-request-id` as human-friendly correlation id
-- Metrics:
-  - Standardize Prometheus metrics naming/labels
-  - Dashboards + alerts (latency, error rate, saturation)
-- Logging:
-  - Structured JSON logs with trace/span IDs
+- DONE: Adopt W3C `traceparent` propagation baseline for:
+  - API Gateway HTTP middleware
+  - API Gateway gRPC client metadata
+  - gRPC server interceptors
+- DONE: Keep `x-request-id` as human-friendly correlation id.
+- DONE: Add structured JSON logs with `trace_id`/`span_id`.
+- DONE: Keep Prometheus-style metrics endpoints for gateway/services.
+- DONE: Add OTLP-ready compose env (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_EXPORTER`).
+- Deferred: install/export with the full OpenTelemetry SDK and collector dashboards during deployment/ops hardening.
 
 ## Phase 13: Security Hardening (Prod)
 

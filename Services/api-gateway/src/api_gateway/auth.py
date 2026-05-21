@@ -35,14 +35,19 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     token = creds.credentials
     request_id = getattr(request.state, "request_id", None)
-    metadata = [("x-request-id", request_id)] if request_id else None
+    traceparent = getattr(request.state, "traceparent", None)
+    metadata = []
+    if request_id:
+        metadata.append(("x-request-id", request_id))
+    if traceparent:
+        metadata.append(("traceparent", traceparent))
     try:
         with grpc.insecure_channel(_identity_addr()) as channel:
             stub = identity_pb2_grpc.IdentityServiceStub(channel)
             resp = stub.ValidateToken(
                 identity_pb2.ValidateTokenRequest(access_token=token),
                 timeout=5,
-                metadata=metadata,
+                metadata=metadata or None,
             )
     except grpc.RpcError as exc:
         raise grpc_http_exception(exc, fallback_detail="Identity service unavailable")

@@ -46,7 +46,13 @@ router = APIRouter(prefix="/api/v1")
 
 def _md(request: Request):
     request_id = getattr(request.state, "request_id", None)
-    return [("x-request-id", request_id)] if request_id else None
+    traceparent = getattr(request.state, "traceparent", None)
+    metadata = []
+    if request_id:
+        metadata.append(("x-request-id", request_id))
+    if traceparent:
+        metadata.append(("traceparent", traceparent))
+    return metadata or None
 
 
 def _timeout(env: str, default: float) -> float:

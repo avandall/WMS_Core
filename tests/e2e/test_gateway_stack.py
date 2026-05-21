@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 
 import httpx
@@ -8,6 +9,7 @@ import httpx
 
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8000").rstrip("/")
 ACCESS_TOKEN = os.getenv("E2E_ACCESS_TOKEN", "")
+TRACEPARENT_RE = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$")
 
 
 def _headers() -> dict[str, str]:
@@ -23,6 +25,7 @@ def test_gateway_health_metrics_and_openapi() -> None:
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json() == {"status": "healthy"}
+        assert TRACEPARENT_RE.match(health.headers["traceparent"])
 
         metrics = client.get("/metrics")
         assert metrics.status_code == 200

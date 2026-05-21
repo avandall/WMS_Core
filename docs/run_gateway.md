@@ -23,6 +23,9 @@ Each service has its own local datastore connection in root compose. See
 Root compose also starts Redis Streams as `event-bus` for async domain events. See
 `docs/events.md` for the Phase 11 event envelope and consumer baseline.
 
+Gateway and gRPC services propagate W3C `traceparent` and keep `x-request-id` for human
+correlation. See `docs/observability.md` for the Phase 12 baseline.
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).
