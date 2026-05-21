@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import grpc
 
+from shared_utils.events import get_publisher
+
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
 from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
 from app.modules.warehouses.application.services.warehouse_operations_service import (
@@ -32,6 +34,15 @@ class _NullDocumentRepo:
 
 
 class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
+    _publisher = get_publisher("warehouse-service")
+
+    @staticmethod
+    def _request_id(context: grpc.ServicerContext) -> str | None:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                return v
+        return None
+
     def _service(self) -> tuple[WarehouseService, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -90,6 +101,16 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
         service, db = self._service()
         try:
             w = service.create_warehouse(request.name)
+            self._publisher.publish(
+                event_type="WarehouseCreated",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "warehouse",
+                    "entity_id": int(w.warehouse_id),
+                    "warehouse_id": int(w.warehouse_id),
+                    "location": w.location,
+                },
+            )
             return warehouse_pb2.Warehouse(
                 warehouse_id=int(w.warehouse_id),
                 name=w.location or "",
@@ -104,9 +125,19 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
     def DeleteWarehouse(self, request: warehouse_pb2.DeleteWarehouseRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            service.delete_warehouse(int(request.warehouse_id))
+            warehouse_id = int(request.warehouse_id)
+            service.delete_warehouse(warehouse_id)
+            self._publisher.publish(
+                event_type="WarehouseDeleted",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "warehouse",
+                    "entity_id": warehouse_id,
+                    "warehouse_id": warehouse_id,
+                },
+            )
             return warehouse_pb2.DeleteWarehouseResponse(
-                message=f"Warehouse {int(request.warehouse_id)} deleted successfully"
+                message=f"Warehouse {warehouse_id} deleted successfully"
             )
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -124,6 +155,17 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
         service, db = self._service()
         try:
             transferred = service.transfer_all_inventory(int(request.warehouse_id), int(request.to_warehouse_id))
+            self._publisher.publish(
+                event_type="InventoryAdjusted",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "warehouse",
+                    "entity_id": int(request.warehouse_id),
+                    "warehouse_id": int(request.warehouse_id),
+                    "to_warehouse_id": int(request.to_warehouse_id),
+                    "item_count": len(transferred),
+                },
+            )
             return warehouse_pb2.TransferAllInventoryResponse(
                 from_warehouse_id=int(request.warehouse_id),
                 to_warehouse_id=int(request.to_warehouse_id),
@@ -262,4 +304,3 @@ add_WarehouseServiceServicer_to_server = warehouse_pb2_grpc.add_WarehouseService
 add_WarehouseOperationsServiceServicer_to_server = (
     warehouse_pb2_grpc.add_WarehouseOperationsServiceServicer_to_server
 )
-

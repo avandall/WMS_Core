@@ -20,6 +20,9 @@ To include AI explicitly:
 Each service has its own local datastore connection in root compose. See
 `docs/data_ownership.md` for the Phase 10 ownership baseline and remaining migration work.
 
+Root compose also starts Redis Streams as `event-bus` for async domain events. See
+`docs/events.md` for the Phase 11 event envelope and consumer baseline.
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).

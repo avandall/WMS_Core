@@ -6,12 +6,14 @@ import grpc
 from app.shared.core.database import init_db
 from shared_utils.observability import grpc_observability_interceptor
 
+from audit_service.event_consumer import start_audit_event_consumer_thread
 from audit_service.grpc_servicer import AuditServiceServicer
 from audit_service.grpc_servicer import add_AuditServiceServicer_to_server
 
 
 def serve(*, host: str = "0.0.0.0", port: int = 50057) -> None:
     init_db()
+    start_audit_event_consumer_thread()
     server = grpc.server(
         ThreadPoolExecutor(max_workers=10),
         interceptors=[grpc_observability_interceptor(service="audit-service")],

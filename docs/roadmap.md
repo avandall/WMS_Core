@@ -15,7 +15,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 8: Docker/Compose “Run For Real” — DONE
 - Phase 9: CI + Contract/E2E Migration — DONE (gateway contract/E2E smoke on root compose; AI opt-in)
 - Phase 10: Data Ownership & Datastores — DONE (per-service local datastore baseline + ownership guards)
-- Phase 11: Event Bus & Async Workflows — TODO
+- Phase 11: Event Bus & Async Workflows — DONE (Redis Streams baseline + audit consumer)
 - Phase 12: Production Observability (OpenTelemetry) — TODO
 - Phase 13: Security Hardening (Prod) — TODO
 - Phase 14: Resilience & SLO Readiness — TODO
@@ -82,15 +82,15 @@ Goal: đúng “microservice chuẩn” về data autonomy (không share DB sche
 
 Goal: thay placeholder events bằng message broker thật + consumer pipelines.
 
-- Choose broker (NATS/Kafka/RabbitMQ/Redis Streams) + local docker-compose support
-- Define event contracts + versioning:
-  - `DocumentUploaded`, `InventoryAdjusted`, `ProductUpdated`, `WarehouseCreated`, `AuditEventLogged`, ...
-- Implement publishers in domain services (outbox pattern recommended)
-- Implement consumers:
-  - `reporting-service` builds read models
-  - `audit-service` ingests cross-service actions
-  - `ai-service` reindex/update embeddings when documents/products change
-- Add idempotency keys + retry/dead-letter strategy
+- DONE: Choose broker (Redis Streams) + local docker-compose support via `event-bus`
+- DONE: Define event contracts + versioning in `docs/events.md`:
+  - `DocumentUploaded`, `DocumentPosted`, `InventoryAdjusted`, `ProductUpdated`, `WarehouseCreated`, ...
+- DONE: Implement Redis-backed publishers in shared utils with stdout fallback
+- DONE: Publish domain events from product/document/warehouse/inventory gRPC services
+- DONE: Implement first consumer pipeline:
+  - `audit-service` ingests cross-service events into `audit_events`
+- DONE: Add event envelope `event_id` idempotency key
+- Deferred: durable consumer groups, retry/dead-letter queues, reporting read-model consumers, and AI reindex consumers
 
 ## Phase 12: Production Observability (OpenTelemetry)
 

@@ -79,9 +79,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 note=request.note or None,
             )
             self._publisher.publish(
-                event_type="DocumentCreated",
+                event_type="DocumentUploaded",
                 payload={
                     "request_id": self._request_id(context),
+                    "entity_type": "document",
+                    "entity_id": int(doc.document_id),
                     "doc_type": "IMPORT",
                     "document_id": int(doc.document_id),
                 },
@@ -106,9 +108,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 note=request.note or None,
             )
             self._publisher.publish(
-                event_type="DocumentCreated",
+                event_type="DocumentUploaded",
                 payload={
                     "request_id": self._request_id(context),
+                    "entity_type": "document",
+                    "entity_id": int(doc.document_id),
                     "doc_type": "EXPORT",
                     "document_id": int(doc.document_id),
                 },
@@ -134,11 +138,14 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 customer_id=int(request.customer_id) if request.customer_id else None,
             )
             self._publisher.publish(
-                event_type="DocumentCreated",
+                event_type="DocumentUploaded",
                 payload={
                     "request_id": self._request_id(context),
+                    "entity_type": "document",
+                    "entity_id": int(doc.document_id),
                     "doc_type": "SALE",
                     "document_id": int(doc.document_id),
+                    "customer_id": int(request.customer_id) if request.customer_id else None,
                 },
             )
             return self._to_proto(doc)
@@ -162,9 +169,11 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 note=request.note or None,
             )
             self._publisher.publish(
-                event_type="DocumentCreated",
+                event_type="DocumentUploaded",
                 payload={
                     "request_id": self._request_id(context),
+                    "entity_type": "document",
+                    "entity_id": int(doc.document_id),
                     "doc_type": "TRANSFER",
                     "document_id": int(doc.document_id),
                 },
@@ -184,6 +193,8 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 event_type="DocumentPosted",
                 payload={
                     "request_id": self._request_id(context),
+                    "entity_type": "document",
+                    "entity_id": int(request.document_id),
                     "document_id": int(request.document_id),
                     "approved_by": request.approved_by,
                 },

@@ -1,4 +1,21 @@
-__all__ = ["EventPublisher", "StdoutEventPublisher", "get_publisher"]
+__all__ = [
+    "EventEnvelope",
+    "EventPublisher",
+    "NoopEventPublisher",
+    "RedisStreamClient",
+    "RedisStreamEventPublisher",
+    "StdoutEventPublisher",
+    "build_event",
+    "get_publisher",
+]
 
-from .publisher import EventPublisher, StdoutEventPublisher, get_publisher
-
+from .publisher import (
+    EventEnvelope,
+    EventPublisher,
+    NoopEventPublisher,
+    RedisStreamClient,
+    RedisStreamEventPublisher,
+    StdoutEventPublisher,
+    build_event,
+    get_publisher,
+)

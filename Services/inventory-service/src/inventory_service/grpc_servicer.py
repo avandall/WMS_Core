@@ -39,7 +39,11 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             items = service.get_all_inventory_items()
             self._publisher.publish(
                 event_type="InventoryListed",
-                payload={"request_id": self._request_id(context), "count": len(items)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "inventory",
+                    "count": len(items),
+                },
             )
             return inventory_pb2.ListInventoryItemsResponse(
                 items=[
@@ -61,7 +65,11 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             rows = service.get_inventory_by_warehouse_rows()
             self._publisher.publish(
                 event_type="InventoryByWarehouseListed",
-                payload={"request_id": self._request_id(context), "count": len(rows)},
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "inventory",
+                    "count": len(rows),
+                },
             )
             return inventory_pb2.GetInventoryByWarehouseResponse(
                 rows=[
@@ -90,6 +98,8 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 event_type="InventoryQuantityRead",
                 payload={
                     "request_id": self._request_id(context),
+                    "entity_type": "inventory",
+                    "entity_id": int(request.product_id),
                     "product_id": int(request.product_id),
                     "quantity": int(qty),
                 },

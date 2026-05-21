@@ -4,6 +4,8 @@ x-service-env: &service-env
   PYTHONUNBUFFERED: "1"
   IDENTITY_GRPC_ADDR: identity-service:50051
   SECRET_KEY: wms-local-dev-secret
+  EVENT_BUS_URL: redis://event-bus:6379/0
+  EVENT_STREAM: wms.events
 
 x-grpc-healthcheck: &grpc-healthcheck
   interval: 10s
@@ -12,6 +14,17 @@ x-grpc-healthcheck: &grpc-healthcheck
   start_period: 20s
 
 services:
+  event-bus:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
   api-gateway:
     image: wms/api-gateway:dev
     build:
@@ -35,6 +48,8 @@ services:
       # Enable it with: docker compose --profile ai up -d
       AI_GRPC_ADDR: ai-service:50059
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
       customer-service:
@@ -91,6 +106,8 @@ services:
       DATABASE_URL: sqlite:////tmp/wms-customer.db
       INIT_DB_TABLES: customers
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:
@@ -112,6 +129,8 @@ services:
       DATABASE_URL: sqlite:////tmp/wms-product.db
       INIT_DB_TABLES: products,inventory
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:
@@ -154,6 +173,8 @@ services:
       DATABASE_URL: sqlite:////tmp/wms-inventory.db
       INIT_DB_TABLES: products,warehouses,inventory,warehouse_inventory
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:
@@ -175,6 +196,8 @@ services:
       DATABASE_URL: sqlite:////tmp/wms-documents.db
       INIT_DB_TABLES: products,customers,warehouses,documents,document_items
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:
@@ -195,7 +218,10 @@ services:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-audit.db
       INIT_DB_TABLES: audit_events
+      AUDIT_EVENT_CONSUMER_ENABLED: "1"
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:
@@ -217,6 +243,8 @@ services:
       DATABASE_URL: sqlite:////tmp/wms-reporting.db
       INIT_DB_TABLES: products,customers,warehouses,inventory,warehouse_inventory,documents,document_items,customer_purchases
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:
@@ -239,6 +267,8 @@ services:
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
     depends_on:
+      event-bus:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
     healthcheck:

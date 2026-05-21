@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import grpc
 
+from shared_utils.events import get_publisher
+
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
 from app.modules.products.application.services.product_service import ProductService
 from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
@@ -11,6 +13,15 @@ from product_service.gen.wms.product.v1 import product_pb2, product_pb2_grpc
 
 
 class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
+    _publisher = get_publisher("product-service")
+
+    @staticmethod
+    def _request_id(context: grpc.ServicerContext) -> str | None:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "x-request-id":
+                return v
+        return None
+
     def _service(self) -> tuple[ProductService, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -65,6 +76,16 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                 price=float(request.price),
                 description=request.description,
             )
+            self._publisher.publish(
+                event_type="ProductCreated",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "product",
+                    "entity_id": int(p.product_id),
+                    "product_id": int(p.product_id),
+                    "name": p.name,
+                },
+            )
             return product_pb2.Product(
                 product_id=int(p.product_id),
                 name=p.name or "",
@@ -86,6 +107,16 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                 price=float(request.price) if request.price else None,
                 description=request.description or None,
             )
+            self._publisher.publish(
+                event_type="ProductUpdated",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "product",
+                    "entity_id": int(p.product_id),
+                    "product_id": int(p.product_id),
+                    "name": p.name,
+                },
+            )
             return product_pb2.Product(
                 product_id=int(p.product_id),
                 name=p.name or "",
@@ -105,9 +136,19 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
     def DeleteProduct(self, request: product_pb2.DeleteProductRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            service.delete_product(int(request.product_id))
+            product_id = int(request.product_id)
+            service.delete_product(product_id)
+            self._publisher.publish(
+                event_type="ProductDeleted",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "product",
+                    "entity_id": product_id,
+                    "product_id": product_id,
+                },
+            )
             return product_pb2.DeleteProductResponse(
-                message=f"Product {int(request.product_id)} deleted successfully"
+                message=f"Product {product_id} deleted successfully"
             )
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -121,4 +162,3 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
 
 
 add_ProductServiceServicer_to_server = product_pb2_grpc.add_ProductServiceServicer_to_server
-
