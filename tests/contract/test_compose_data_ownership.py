@@ -44,6 +44,8 @@ def test_default_compose_uses_service_owned_datastore_urls() -> None:
     assert actual_databases == expected_databases
     assert len(set(actual_databases.values())) == len(actual_databases)
 
+    assert services["audit-service"]["environment"]["INIT_DB_TABLES"] == "audit_events"
+
 
 def test_ai_profile_has_its_own_datastore_configuration() -> None:
     config = _compose_config("--profile", "ai")

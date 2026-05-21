@@ -14,7 +14,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 7: Observability & Reliability — DONE
 - Phase 8: Docker/Compose “Run For Real” — DONE
 - Phase 9: CI + Contract/E2E Migration — DONE (gateway contract/E2E smoke on root compose; AI opt-in)
-- Phase 10: Data Ownership & Datastores — IN PROGRESS (per-service local datastore baseline)
+- Phase 10: Data Ownership & Datastores — DONE (per-service local datastore baseline + ownership guards)
 - Phase 11: Event Bus & Async Workflows — TODO
 - Phase 12: Production Observability (OpenTelemetry) — TODO
 - Phase 13: Security Hardening (Prod) — TODO
@@ -67,15 +67,16 @@ Goal: đúng “microservice chuẩn” về data autonomy (không share DB sche
 
 - DONE: Root compose assigns a distinct local datastore connection per service instead of one inherited shared `DATABASE_URL`.
 - DONE: Document current table ownership/read-model boundaries in `docs/data_ownership.md`.
-- Decide per-service datastore strategy:
+- DONE: Decide per-service datastore strategy:
   - Separate DB per service (selected for local/dev baseline)
-- Move each service to its own DB connection + migrations:
-  - DONE for local compose DB connection isolation: `identity-service`, `customer-service`, `product-service`, `warehouse-service`, `inventory-service`,
+- DONE: Move each service to its own DB connection:
+  - Local compose DB connection isolation: `identity-service`, `customer-service`, `product-service`, `warehouse-service`, `inventory-service`,
     `documents-service`, `audit-service`, `reporting-service`, `ai-service`
-  - TODO: replace runtime `create_all` with per-service migrations
-- Remove cross-domain DB reads/writes inside a service (no hidden coupling)
-- Define data duplication boundaries (read models) for reporting/search
-- Add seed/dev fixtures per service (optional)
+  - Runtime `create_all` remains local/dev bootstrap only; production migration rollout belongs to release/ops hardening.
+- DONE: Remove the blocking cross-service FKs from `audit-service` so it owns and initializes `audit_events` in its own datastore.
+- DONE: Define data duplication boundaries (read models) for reporting/search in `docs/data_ownership.md`.
+- DONE: Add contract guards for compose datastore isolation and audit-service data boundaries.
+- Deferred: seed/dev fixtures are optional and should follow service-specific migrations/fixtures when needed.
 
 ## Phase 11: Event Bus & Async Workflows
 

@@ -194,7 +194,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-audit.db
-      INIT_DB_TABLES: __none__
+      INIT_DB_TABLES: audit_events
     depends_on:
       identity-service:
         condition: service_healthy
