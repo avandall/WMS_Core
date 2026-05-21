@@ -17,6 +17,9 @@ To include AI explicitly:
 
 `docker compose --profile ai up -d`
 
+Each service has its own local datastore connection in root compose. See
+`docs/data_ownership.md` for the Phase 10 ownership baseline and remaining migration work.
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).
