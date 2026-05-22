@@ -18,7 +18,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 11: Event Bus & Async Workflows — DONE (Redis Streams baseline + audit consumer)
 - Phase 12: Production Observability (OpenTelemetry) — DONE (W3C trace context + OTLP-ready baseline)
 - Phase 13: Security Hardening (Prod) — DONE (gateway hardening + opt-in gRPC mTLS baseline)
-- Phase 14: Resilience & SLO Readiness — TODO
+- Phase 14: Resilience & SLO Readiness — DONE (SLO baseline + circuit breaker + event backpressure)
 - Phase 15: Release/Deployment & Ops — TODO
 
 ## Phase 6: Harden API Gateway (Core)
@@ -131,15 +131,16 @@ Goal: production-grade security posture.
 
 Goal: behavior ổn định dưới failure/latency, đáp ứng SLO.
 
-- Define SLOs (availability/latency) per endpoint
+- DONE: Define initial SLOs (availability/latency) per endpoint class in `docs/resilience.md`
 - Implement resilience patterns:
-  - timeouts/deadlines (already started), retries w/ backoff where safe
-  - circuit breaker / bulkhead (optional)
+  - DONE: Keep env-configured gRPC timeouts/deadlines and bounded retries with backoff for idempotent calls
+  - DONE: Add gateway circuit breaker for idempotent downstream gRPC calls
 - Load testing:
-  - API Gateway throughput, critical workflows
+  - Document critical workflow targets; full load tooling deferred to Phase 15/ops
 - Chaos/failure testing:
-  - kill a downstream service, verify graceful degradation
-- Backpressure strategy for event consumers
+  - DONE: Document downstream-kill manual check and verify gateway E2E still returns bounded responses
+- DONE: Add backpressure strategy for audit event consumer batch reads and stream length guard
+- Deferred: distributed circuit state, bulkheads, durable DLQ/replay, and full automated load/chaos suites.
 
 ## Phase 15: Release/Deployment & Ops
 

@@ -98,6 +98,10 @@ class RedisStreamClient:
         result = self.execute("XADD", stream, "*", "event", envelope.to_json())
         return str(result)
 
+    def xlen(self, stream: str) -> int:
+        result = self.execute("XLEN", stream)
+        return int(result or 0)
+
     def xread(self, stream: str, last_id: str, *, block_ms: int, count: int) -> list[tuple[str, EventEnvelope]]:
         result = self.execute("XREAD", "COUNT", count, "BLOCK", block_ms, "STREAMS", stream, last_id)
         if result is None:

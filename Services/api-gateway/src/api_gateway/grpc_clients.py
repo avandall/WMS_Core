@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
+from dataclasses import dataclass
 
 import grpc
 
@@ -19,6 +21,17 @@ from api_gateway.gen.wms.ai.v1 import ai_pb2_grpc
 from api_gateway.grpc_security import configured_grpc_channel
 
 T = TypeVar("T")
+
+
+class CircuitOpenError(grpc.RpcError):
+    def __init__(self, key: str):
+        self.key = key
+
+    def code(self) -> grpc.StatusCode:
+        return grpc.StatusCode.UNAVAILABLE
+
+    def details(self) -> str:
+        return f"Circuit open for downstream gRPC method: {self.key}"
 
 
 def _addr(env: str, default: str) -> str:
@@ -47,6 +60,65 @@ _RETRYABLE_STATUS = {
 }
 
 
+@dataclass(slots=True)
+class _CircuitState:
+    failures: int = 0
+    open_until: float = 0.0
+
+
+_circuit_lock = threading.Lock()
+_circuit_state: dict[str, _CircuitState] = {}
+
+
+def _circuit_threshold() -> int:
+    try:
+        return max(0, int(os.getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5")))
+    except ValueError:
+        return 5
+
+
+def _circuit_recovery_seconds() -> float:
+    try:
+        return max(0.0, float(os.getenv("CIRCUIT_BREAKER_RECOVERY_SECONDS", "15")))
+    except ValueError:
+        return 15.0
+
+
+def _circuit_key(fn: Callable[..., object]) -> str:
+    method = getattr(fn, "_method", None)
+    if isinstance(method, bytes):
+        return method.decode("utf-8", errors="replace")
+    if method:
+        return str(method)
+    return getattr(fn, "__name__", repr(fn))
+
+
+def _circuit_before_call(key: str) -> None:
+    if _circuit_threshold() <= 0:
+        return
+    now = time.monotonic()
+    with _circuit_lock:
+        state = _circuit_state.get(key)
+        if state and state.open_until > now:
+            raise CircuitOpenError(key)
+
+
+def _circuit_record_success(key: str) -> None:
+    with _circuit_lock:
+        _circuit_state.pop(key, None)
+
+
+def _circuit_record_failure(key: str) -> None:
+    threshold = _circuit_threshold()
+    if threshold <= 0:
+        return
+    with _circuit_lock:
+        state = _circuit_state.setdefault(key, _CircuitState())
+        state.failures += 1
+        if state.failures >= threshold:
+            state.open_until = time.monotonic() + _circuit_recovery_seconds()
+
+
 def call_idempotent(
     fn: Callable[..., T],
     request,
@@ -55,12 +127,19 @@ def call_idempotent(
     metadata=None,
 ) -> T:
     attempts = _retry_attempts()
+    circuit_key = _circuit_key(fn)
     for attempt in range(1, attempts + 1):
+        _circuit_before_call(circuit_key)
         try:
-            return fn(request, timeout=timeout, metadata=metadata)
+            response = fn(request, timeout=timeout, metadata=metadata)
+            _circuit_record_success(circuit_key)
+            return response
         except grpc.RpcError as exc:
             if attempt >= attempts or exc.code() not in _RETRYABLE_STATUS:
+                if exc.code() in _RETRYABLE_STATUS:
+                    _circuit_record_failure(circuit_key)
                 raise
+            _circuit_record_failure(circuit_key)
             time.sleep(_retry_backoff_seconds(attempt))
     raise RuntimeError("unreachable")
 

@@ -29,6 +29,9 @@ correlation. See `docs/observability.md` for the Phase 12 baseline.
 Gateway security headers, explicit CORS configuration, request body limits, and opt-in gRPC
 TLS are documented in `docs/security.md`.
 
+Timeouts, bounded retries, the gateway circuit breaker, SLO targets, and audit-consumer
+backpressure are documented in `docs/resilience.md`.
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).
