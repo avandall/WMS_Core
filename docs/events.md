@@ -46,4 +46,4 @@ Events are published as one JSON field named `event` in Redis Streams.
 
 - `audit-service` starts an in-process Redis Stream consumer when `AUDIT_EVENT_CONSUMER_ENABLED=1`.
 - The consumer writes received domain events into `audit_events` in the audit datastore.
-- Reporting and AI consumers are intentionally follow-up work; Phase 12+ can add production observability and Phase 15 can harden deployment/runtime operations.
+- Reporting and AI consumers are intentionally follow-up work; Phase 18 tracks durable async/read-model expansion.

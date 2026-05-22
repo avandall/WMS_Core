@@ -19,7 +19,10 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 12: Production Observability (OpenTelemetry) — DONE (W3C trace context + OTLP-ready baseline)
 - Phase 13: Security Hardening (Prod) — DONE (gateway hardening + opt-in gRPC mTLS baseline)
 - Phase 14: Resilience & SLO Readiness — DONE (SLO baseline + circuit breaker + event backpressure)
-- Phase 15: Release/Deployment & Ops — TODO
+- Phase 15: Release/Deployment & Ops — DONE (release contract + ops runbooks + CI cleanup)
+- Phase 16: Monolith Retirement & Codebase Simplification — TODO
+- Phase 17: Production Deployment Automation — TODO
+- Phase 18: Advanced Async/Analytics Workflows — TODO
 
 ## Phase 6: Harden API Gateway (Core)
 
@@ -136,7 +139,7 @@ Goal: behavior ổn định dưới failure/latency, đáp ứng SLO.
   - DONE: Keep env-configured gRPC timeouts/deadlines and bounded retries with backoff for idempotent calls
   - DONE: Add gateway circuit breaker for idempotent downstream gRPC calls
 - Load testing:
-  - Document critical workflow targets; full load tooling deferred to Phase 15/ops
+  - Document critical workflow targets; full load tooling deferred to Phase 17 deployment automation
 - Chaos/failure testing:
   - DONE: Document downstream-kill manual check and verify gateway E2E still returns bounded responses
 - DONE: Add backpressure strategy for audit event consumer batch reads and stream length guard
@@ -146,13 +149,43 @@ Goal: behavior ổn định dưới failure/latency, đáp ứng SLO.
 
 Goal: shipable, maintainable, operable in production.
 
-- Container images + tagging strategy + SBOM
+- DONE: Document container image tagging strategy and SBOM expectations in `docs/release_ops.md`
 - Deployment:
-  - Kubernetes manifests/Helm (or equivalent)
-  - rolling updates + canary (optional)
-- DB migration automation per service
+  - DONE: Define deployment contract, rollout order, smoke checks, and rollback order
+  - Kubernetes manifests/Helm are deferred to the deployment automation phase
+- DONE: Define DB migration ownership per service and production rule: do not rely on `create_all`
 - Runbooks:
-  - incident response, rollback, reindex AI, replay events
+  - DONE: Add incident triage, rollback, AI reindex, and event replay runbooks
 - Versioning policy:
-  - REST API versions in gateway
-  - proto backward compatibility guidelines
+  - DONE: Document REST `/api/v1` and proto `wms.<domain>.v1` compatibility rules
+- DONE: Remove stale root `python-ci.yml` workflow and make gateway E2E prefer `uv` workspace execution
+
+## Phase 16: Monolith Retirement & Codebase Simplification
+
+Goal: giảm technical debt sau khi microservice path đã chạy ổn.
+
+- Decide final retirement date for `Services/wms-monolith`
+- Move remaining seed/dev fixture ownership into service-specific fixtures
+- Remove duplicated module code copied across services where shared abstractions are now stable
+- Keep only a small archived monolith reference or delete it after parity sign-off
+- Update docs/scripts so new contributors start from API Gateway + gRPC stack only
+
+## Phase 17: Production Deployment Automation
+
+Goal: biến release contract thành deployment artifact thật.
+
+- Add Kubernetes manifests/Helm or equivalent deployment package
+- Wire secret manager and gRPC cert rotation into deployment
+- Add per-service migration commands/jobs
+- Add OpenTelemetry collector/dashboard deployment
+- Add automated load/chaos checks and SLO alerts
+
+## Phase 18: Advanced Async/Analytics Workflows
+
+Goal: hoàn thiện các workflow async/read-model còn deferred.
+
+- Durable Redis consumer groups with retry/dead-letter queues
+- Reporting read-model consumers
+- AI reindex/replay consumer pipeline
+- Event replay tooling and idempotency verification
+- Cross-service analytics/search read-model hardening

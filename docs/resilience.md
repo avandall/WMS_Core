@@ -14,7 +14,7 @@ Initial API Gateway targets:
 | Reporting/warehouse analytics | 99.0% | p95 <= 3s |
 | AI endpoints | 98.5% | p95 <= 10s |
 
-These targets are intentionally conservative for the local/dev stack. Phase 15 should turn
+These targets are intentionally conservative for the local/dev stack. Phase 17 should turn
 them into deployment alerts and dashboards.
 
 ## Gateway Timeout And Retry Policy

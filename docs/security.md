@@ -63,4 +63,4 @@ Root compose uses a local `SECRET_KEY` default for dev convenience. Production m
 
 - Certificate provisioning/rotation belongs in deployment automation.
 - Fine-grained authz scopes should keep living at the API Gateway boundary.
-- Kubernetes network policies or service mesh policy can be added in Phase 15 deployment work.
+- Kubernetes network policies or service mesh policy can be added in Phase 17 deployment work.

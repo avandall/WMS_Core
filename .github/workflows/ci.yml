@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install dependencies
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install dependencies
@@ -45,12 +45,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install gateway test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest httpx
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
       - name: Run API Gateway contract and E2E tests against root gRPC stack
         run: tests/e2e/run_gateway_stack_tests.sh

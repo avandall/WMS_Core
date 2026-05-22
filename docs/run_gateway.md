@@ -32,6 +32,9 @@ TLS are documented in `docs/security.md`.
 Timeouts, bounded retries, the gateway circuit breaker, SLO targets, and audit-consumer
 backpressure are documented in `docs/resilience.md`.
 
+Release tagging, SBOM expectations, deployment order, migration ownership, runbooks, and
+API/proto versioning are documented in `docs/release_ops.md`.
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).

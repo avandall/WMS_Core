@@ -38,10 +38,10 @@ fi
 export GATEWAY_URL="${GATEWAY_URL:-http://localhost:8000}"
 export E2E_ACCESS_TOKEN="$TOKEN"
 
-if python3 -c "import httpx, pytest" >/dev/null 2>&1; then
-  python3 -m pytest -q tests/contract tests/e2e
-elif command -v uv >/dev/null 2>&1; then
+if command -v uv >/dev/null 2>&1; then
   uv run --group dev pytest -q tests/contract tests/e2e
+elif python3 -c "import httpx, pytest" >/dev/null 2>&1; then
+  python3 -m pytest -q tests/contract tests/e2e
 else
   echo "pytest/httpx are required. Install them or run via uv."
   exit 1
