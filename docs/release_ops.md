@@ -1,8 +1,7 @@
 # Release, Deployment, and Ops Baseline
 
-Phase 15 defines the release/ops contract for the gRPC-first microservice stack. It is a
-baseline for production readiness; provider-specific Terraform, Helm charts, and runtime
-secret wiring belong to the next deployment phase.
+Phase 15 defines the release/ops contract for the gRPC-first microservice stack. Phase 17
+adds the first deployment artifact baseline under `deploy/kubernetes`.
 
 ## Release Identity
 
@@ -61,6 +60,14 @@ Minimum platform requirements:
 - Redis Streams is available as `event-bus`.
 - `/health` and `/metrics` are scraped for gateway and services.
 
+Deployment package:
+
+- Kubernetes base: `deploy/kubernetes/base`
+- Secret/cert placeholders: `deploy/kubernetes/base/secrets.example.yaml`
+- Migration job templates: `deploy/kubernetes/examples/migration-jobs.yaml`
+- SLO alert examples: `deploy/kubernetes/examples/slo-alerts.yaml`
+- Load/chaos release gate checklist: `deploy/kubernetes/examples/load-chaos-checks.md`
+
 Rollout order:
 
 1. Apply datastore migrations per service.
@@ -88,8 +95,9 @@ migration stream per service-owned datastore:
 | reporting-service | read-model/reporting schema |
 | ai-service | vector/index metadata schema |
 
-Migration automation is a deployment concern for the next phase. Until then, production
-deployment must not rely on `create_all`.
+Phase 17 provides Kubernetes job templates for these service-owned migration streams.
+Replace each placeholder command with the real migration runner before production use.
+Production deployment must not rely on `create_all`.
 
 ## Runbooks
 

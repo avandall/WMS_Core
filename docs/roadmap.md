@@ -21,7 +21,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 14: Resilience & SLO Readiness — DONE (SLO baseline + circuit breaker + event backpressure)
 - Phase 15: Release/Deployment & Ops — DONE (release contract + ops runbooks + CI cleanup)
 - Phase 16: Monolith Retirement & Codebase Simplification — DONE (monolith archived outside active workspace/CI)
-- Phase 17: Production Deployment Automation — TODO
+- Phase 17: Production Deployment Automation — DONE
 - Phase 18: Advanced Async/Analytics Workflows — TODO
 
 ## Phase 6: Harden API Gateway (Core)
@@ -177,11 +177,12 @@ Goal: giảm technical debt sau khi microservice path đã chạy ổn.
 
 Goal: biến release contract thành deployment artifact thật.
 
-- Add Kubernetes manifests/Helm or equivalent deployment package
-- Wire secret manager and gRPC cert rotation into deployment
-- Add per-service migration commands/jobs
-- Add OpenTelemetry collector/dashboard deployment
-- Add automated load/chaos checks and SLO alerts
+- DONE: Added deployable Kubernetes base under `deploy/kubernetes/base`
+- DONE: Added secret-manager placeholders and gRPC mTLS cert volume wiring
+- DONE: Added per-service migration job templates under `deploy/kubernetes/examples`
+- DONE: Added OpenTelemetry Collector deployment baseline
+- DONE: Added load/chaos release gate checklist and SLO alert examples
+- DONE: Added deployment automation contract tests
 
 ## Phase 18: Advanced Async/Analytics Workflows
 

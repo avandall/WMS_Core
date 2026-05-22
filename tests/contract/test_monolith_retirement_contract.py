@@ -39,5 +39,5 @@ def test_roadmap_marks_phase_16_done_and_tracks_followups() -> None:
     source = (ROOT_DIR / "docs/roadmap.md").read_text()
 
     assert "Phase 16: Monolith Retirement & Codebase Simplification — DONE" in source
-    assert "Phase 17: Production Deployment Automation — TODO" in source
+    assert "Phase 17: Production Deployment Automation — DONE" in source
     assert "Phase 18: Advanced Async/Analytics Workflows — TODO" in source

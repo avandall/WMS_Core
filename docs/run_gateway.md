@@ -35,6 +35,8 @@ backpressure are documented in `docs/resilience.md`.
 Release tagging, SBOM expectations, deployment order, migration ownership, runbooks, and
 API/proto versioning are documented in `docs/release_ops.md`.
 
+Production deployment artifacts are under `deploy/kubernetes`.
+
 Monolith retirement status and fixture ownership are documented in `docs/monolith_retirement.md`.
 
 ## 3) Notes
