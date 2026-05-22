@@ -20,7 +20,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 13: Security Hardening (Prod) — DONE (gateway hardening + opt-in gRPC mTLS baseline)
 - Phase 14: Resilience & SLO Readiness — DONE (SLO baseline + circuit breaker + event backpressure)
 - Phase 15: Release/Deployment & Ops — DONE (release contract + ops runbooks + CI cleanup)
-- Phase 16: Monolith Retirement & Codebase Simplification — TODO
+- Phase 16: Monolith Retirement & Codebase Simplification — DONE (monolith archived outside active workspace/CI)
 - Phase 17: Production Deployment Automation — TODO
 - Phase 18: Advanced Async/Analytics Workflows — TODO
 
@@ -58,11 +58,12 @@ Goal: CI test theo entrypoint mới (API Gateway) thay vì monolith.
 
 - DONE: Add contract/e2e tests against API Gateway + gRPC stack
 - DONE: Migrate GitHub Actions integration/contract tests từ `Services/wms-monolith` sang root stack
-- DONE: Keep `Services/wms-monolith/tests/refactor_guard` làm safety net cho đến khi retire monolith hoàn toàn
+- DONE: Keep `Services/wms-monolith/tests/refactor_guard` as temporary safety net until Phase 16 retirement
 - CI/E2E uses the root `docker-compose.yml` and selects only the services needed for the gateway smoke path (`api-gateway`, `identity-service`, `customer-service`).
 - Gateway E2E runs under an isolated Compose project (`wms-gateway-e2e`) so cleanup does not stop a developer's normal root stack.
 - Root compose keeps `ai-service` behind the `ai` profile, so default dev/test commands do not build or start it.
 - Full-stack compose validation including `ai-service` is intentionally left as an explicit/manual run: `docker compose --profile ai up -d`.
+- Phase 16 removed monolith guard jobs from default CI after gateway contract/E2E became the active safety net.
 
 ## Phase 10: Data Ownership & Datastores
 
@@ -164,11 +165,13 @@ Goal: shipable, maintainable, operable in production.
 
 Goal: giảm technical debt sau khi microservice path đã chạy ổn.
 
-- Decide final retirement date for `Services/wms-monolith`
-- Move remaining seed/dev fixture ownership into service-specific fixtures
-- Remove duplicated module code copied across services where shared abstractions are now stable
-- Keep only a small archived monolith reference or delete it after parity sign-off
-- Update docs/scripts so new contributors start from API Gateway + gRPC stack only
+- DONE: Remove `Services/wms-monolith` from root `uv` workspace membership.
+- DONE: Remove monolith unit/refactor-guard jobs from default CI; gateway contract/E2E is the active CI path.
+- DONE: Stop generating gRPC stubs into monolith with `scripts/gen_protos.py`.
+- DONE: Keep `Services/wms-monolith` as archived reference only and document retirement criteria in `docs/monolith_retirement.md`.
+- DONE: Document service-owned fixture targets and contributor entrypoints.
+- DONE: Update root README/run docs so new contributors start from API Gateway + gRPC stack.
+- Deferred to Phase 17/18: production migration jobs, read-model consumers, and final delete/archive sign-off after parity acceptance.
 
 ## Phase 17: Production Deployment Automation
 

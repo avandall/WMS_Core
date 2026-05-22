@@ -19,7 +19,7 @@ Phase 2 đã extract các domain sau khỏi monolith và expose bằng gRPC:
 
 `./.venv/bin/python scripts/gen_protos.py`
 
-## Monolith façade routing (REST → gRPC)
+## Public routing
 
-Monolith façade đã được loại khỏi root `docker-compose.yml`. Public entrypoint chuyển sang API Gateway
-(`Services/api-gateway/`) và gateway sẽ gọi gRPC services.
+Monolith façade đã được loại khỏi root `docker-compose.yml` và khỏi default workspace/CI.
+Public entrypoint chuyển sang API Gateway (`Services/api-gateway/`) và gateway sẽ gọi gRPC services.

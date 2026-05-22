@@ -20,7 +20,6 @@ TARGETS = {
     "Services/reporting-service": "src/reporting_service/gen",
     "Services/ai-service": "src/ai_service/gen",
     "Services/api-gateway": "src/api_gateway/gen",
-    "Services/wms-monolith": "src/app/gen",
 }
 
 

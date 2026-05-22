@@ -25,7 +25,6 @@ members = [
   "Services/inventory-service",
   "Services/product-service",
   "Services/reporting-service",
-  "Services/wms-monolith",
   "Services/warehouse-service",
 ]
 

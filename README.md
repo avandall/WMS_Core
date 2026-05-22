@@ -1,7 +1,7 @@
 # WMS Monorepo (Microservices Refactor)
 
-Repo này đang được refactor từ monolith sang microservices theo `MICROSERVICES_REFACTOR_PLAN.md`.
-Inter-service communication chuẩn hóa bằng gRPC (API Gateway sẽ làm REST→gRPC).
+Repo này đã chuyển sang hướng microservices gRPC-first theo `MICROSERVICES_REFACTOR_PLAN.md`.
+API Gateway là public REST entrypoint và gọi các service nội bộ qua gRPC.
 
 ## Roadmap
 
@@ -13,23 +13,25 @@ Trạng thái theo roadmap dài hạn: `docs/roadmap.md`
 .
 ├── Services/
 │   ├── api-gateway/        # (Scaffold ban đầu)
-│   ├── identity-service/   # (Scaffold ban đầu)
-│   ├── customer-service/   # (Placeholder)
-│   ├── product-service/    # (Placeholder)
-│   ├── warehouse-service/  # (Placeholder)
-│   ├── inventory-service/  # (Placeholder)
-│   ├── documents-service/  # (Placeholder)
-│   ├── audit-service/      # (Placeholder)
-│   ├── reporting-service/  # (Placeholder)
-│   ├── ai-service/         # (Placeholder)
-│   └── wms-monolith/       # Toàn bộ code monolith hiện tại
+│   ├── identity-service/   # Identity gRPC
+│   ├── customer-service/   # Customer gRPC
+│   ├── product-service/    # Product gRPC
+│   ├── warehouse-service/  # Warehouse gRPC
+│   ├── inventory-service/  # Inventory gRPC
+│   ├── documents-service/  # Documents gRPC
+│   ├── audit-service/      # Audit gRPC + event consumer
+│   ├── reporting-service/  # Reporting gRPC
+│   ├── ai-service/         # AI gRPC, opt-in Compose profile
+│   └── wms-monolith/       # Archived reference only, not default workspace/CI
 └── Libraries/
-    └── shared-utils/       # Shared library (scaffold ban đầu)
+    └── shared-utils/       # Shared library
 ```
 
-## Chạy monolith (tạm thời)
+## Monolith archive
 
-Monolith chỉ còn dùng để tham chiếu code/so sánh và chạy test guard. Entrypoint chạy chính thức là `Services/api-gateway/`.
+`Services/wms-monolith/` chỉ còn là archive tham chiếu trong Phase 16. Nó không còn nằm trong
+root `uv` workspace, CI mặc định, root compose, hoặc proto generation target. Xem
+`docs/monolith_retirement.md`.
 
 ## gRPC protos
 
@@ -38,7 +40,7 @@ Monolith chỉ còn dùng để tham chiếu code/so sánh và chạy test guard
 
 ## Phase 2
 
-Chi tiết Phase 2 gRPC + monolith façade routing: `docs/phase2_grpc.md`
+Chi tiết Phase 2 gRPC: `docs/phase2_grpc.md`
 
 ## Run (local)
 
