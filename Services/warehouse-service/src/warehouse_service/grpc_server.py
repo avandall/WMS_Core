@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import grpc
 from app.shared.core.database import init_db
 from shared_utils.observability import grpc_observability_interceptor
+from shared_utils.security import add_configured_grpc_port
 
 from warehouse_service.grpc_servicer import (
     WarehouseOperationsServiceServicer,
@@ -22,6 +23,6 @@ def serve(*, host: str = "0.0.0.0", port: int = 50054) -> None:
     )
     add_WarehouseServiceServicer_to_server(WarehouseServiceServicer(), server)
     add_WarehouseOperationsServiceServicer_to_server(WarehouseOperationsServiceServicer(), server)
-    server.add_insecure_port(f"{host}:{port}")
+    add_configured_grpc_port(server, host, port)
     server.start()
     server.wait_for_termination()

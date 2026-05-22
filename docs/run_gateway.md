@@ -26,6 +26,9 @@ Root compose also starts Redis Streams as `event-bus` for async domain events. S
 Gateway and gRPC services propagate W3C `traceparent` and keep `x-request-id` for human
 correlation. See `docs/observability.md` for the Phase 12 baseline.
 
+Gateway security headers, explicit CORS configuration, request body limits, and opt-in gRPC
+TLS are documented in `docs/security.md`.
+
 ## 3) Notes
 
 - Identity gRPC is used for token validation (`ValidateToken`).

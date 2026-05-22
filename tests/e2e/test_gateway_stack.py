@@ -26,6 +26,8 @@ def test_gateway_health_metrics_and_openapi() -> None:
         assert health.status_code == 200
         assert health.json() == {"status": "healthy"}
         assert TRACEPARENT_RE.match(health.headers["traceparent"])
+        assert health.headers["x-content-type-options"] == "nosniff"
+        assert health.headers["x-frame-options"] == "DENY"
 
         metrics = client.get("/metrics")
         assert metrics.status_code == 200

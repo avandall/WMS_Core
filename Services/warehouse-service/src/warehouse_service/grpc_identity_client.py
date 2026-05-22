@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-import grpc
+from shared_utils.security import configured_grpc_channel
 
 from warehouse_service.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
 
@@ -23,7 +23,7 @@ def _identity_addr() -> str:
 
 def validate_token(access_token: str, *, request_id: str | None = None) -> IdentityUser | None:
     metadata = [("x-request-id", request_id)] if request_id else None
-    with grpc.insecure_channel(_identity_addr()) as channel:
+    with configured_grpc_channel(_identity_addr()) as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = stub.ValidateToken(
             identity_pb2.ValidateTokenRequest(access_token=access_token),

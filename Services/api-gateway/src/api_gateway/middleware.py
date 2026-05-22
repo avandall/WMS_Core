@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 import uuid
@@ -8,6 +9,33 @@ from fastapi import HTTPException
 from fastapi import Request
 
 from api_gateway.observability import METRICS, child_trace_context, json_log, parse_traceparent
+
+
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    return response
+
+
+async def request_body_limit_middleware(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH"}:
+        try:
+            max_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", "1048576"))
+        except ValueError:
+            max_bytes = 1048576
+        content_length = request.headers.get("content-length")
+        if max_bytes > 0 and content_length:
+            try:
+                body_bytes = int(content_length)
+            except ValueError:
+                body_bytes = 0
+            if body_bytes > max_bytes:
+                raise HTTPException(status_code=413, detail="Request body too large")
+    return await call_next(request)
 
 
 async def request_id_middleware(request: Request, call_next):
@@ -61,15 +89,25 @@ async def request_id_middleware(request: Request, call_next):
 _rate_state: dict[str, tuple[float, int]] = {}
 
 
+def _rate_limit_client(request: Request) -> str:
+    authorization = request.headers.get("authorization")
+    if authorization:
+        digest = hashlib.sha256(authorization.encode("utf-8")).hexdigest()[:16]
+        return f"auth:{digest}"
+    return request.client.host if request.client else "unknown"
+
+
 async def rate_limit_middleware(request: Request, call_next):
-    # Simple in-memory fixed-window rate limiter. Good enough for dev; replace with Redis later.
-    rps = float(os.getenv("RATE_LIMIT_RPS", "10"))
+    try:
+        rps = float(os.getenv("RATE_LIMIT_RPS", "10"))
+    except ValueError:
+        rps = 10.0
     if rps <= 0:
         return await call_next(request)
 
     now = time.monotonic()
     window = 1.0
-    client = request.client.host if request.client else "unknown"
+    client = f"{_rate_limit_client(request)}:{request.url.path}"
 
     start, count = _rate_state.get(client, (now, 0))
     if now - start >= window:

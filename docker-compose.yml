@@ -3,11 +3,19 @@ name: wms-monorepo
 x-service-env: &service-env
   PYTHONUNBUFFERED: "1"
   IDENTITY_GRPC_ADDR: identity-service:50051
-  SECRET_KEY: wms-local-dev-secret
+  SECRET_KEY: ${SECRET_KEY:-wms-local-dev-secret}
   EVENT_BUS_URL: redis://event-bus:6379/0
   EVENT_STREAM: wms.events
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
   OTEL_TRACES_EXPORTER: otlp
+  GRPC_TLS_ENABLED: ${GRPC_TLS_ENABLED:-0}
+  GRPC_TLS_CERT_FILE: ${GRPC_TLS_CERT_FILE:-}
+  GRPC_TLS_KEY_FILE: ${GRPC_TLS_KEY_FILE:-}
+  GRPC_TLS_CLIENT_CA_FILE: ${GRPC_TLS_CLIENT_CA_FILE:-}
+  GRPC_CLIENT_TLS_ENABLED: ${GRPC_CLIENT_TLS_ENABLED:-0}
+  GRPC_CLIENT_ROOT_CERT_FILE: ${GRPC_CLIENT_ROOT_CERT_FILE:-}
+  GRPC_CLIENT_CERT_FILE: ${GRPC_CLIENT_CERT_FILE:-}
+  GRPC_CLIENT_KEY_FILE: ${GRPC_CLIENT_KEY_FILE:-}
 
 x-grpc-healthcheck: &grpc-healthcheck
   interval: 10s
@@ -46,6 +54,10 @@ services:
       DOCUMENTS_GRPC_ADDR: documents-service:50056
       AUDIT_GRPC_ADDR: audit-service:50057
       REPORTING_GRPC_ADDR: reporting-service:50058
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-0}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-1048576}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
       # ai-service is intentionally opt-in because its ML dependency image is heavy.
       # Enable it with: docker compose --profile ai up -d
       AI_GRPC_ADDR: ai-service:50059

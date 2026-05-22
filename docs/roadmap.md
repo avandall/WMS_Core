@@ -17,7 +17,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 10: Data Ownership & Datastores — DONE (per-service local datastore baseline + ownership guards)
 - Phase 11: Event Bus & Async Workflows — DONE (Redis Streams baseline + audit consumer)
 - Phase 12: Production Observability (OpenTelemetry) — DONE (W3C trace context + OTLP-ready baseline)
-- Phase 13: Security Hardening (Prod) — TODO
+- Phase 13: Security Hardening (Prod) — DONE (gateway hardening + opt-in gRPC mTLS baseline)
 - Phase 14: Resilience & SLO Readiness — TODO
 - Phase 15: Release/Deployment & Ops — TODO
 
@@ -111,18 +111,21 @@ Goal: trace + metrics + logs thống nhất end-to-end.
 Goal: production-grade security posture.
 
 - Internal traffic security:
-  - mTLS for gRPC (service-to-service)
+  - DONE: Add opt-in mTLS support for gRPC servers and clients via env (`GRPC_TLS_ENABLED`, `GRPC_CLIENT_TLS_ENABLED`)
   - Network policies / service mesh (optional)
 - AuthN/AuthZ:
   - Centralize authz policy in gateway (fine-grained scopes/roles)
   - Consider token introspection + key rotation strategy (JWKS or shared signing strategy)
 - Secrets management:
-  - Use Vault/Cloud secrets manager (no `.env` secrets committed)
+  - DONE: Move compose `SECRET_KEY` to env interpolation with a local-dev default
+  - Production must use Vault/Cloud secrets manager (no `.env` secrets committed)
 - Request hardening:
-  - Input validation everywhere (DTOs)
-  - Rate limit policy (per route/user), abuse prevention
+  - DONE: Replace wildcard credentialed CORS with explicit env-configured origins
+  - DONE: Add gateway security headers and request body limit
+  - DONE: Scope rate limit by route and authorization token hash/IP
 - Auditability:
-  - Ensure all privileged actions are auditable with request-id correlation
+  - DONE: Keep `x-request-id` and `traceparent` on gateway responses and downstream gRPC metadata
+- Deferred: certificate rotation, service mesh/network policies, JWKS/key rotation, and full privileged-action audit policy belong to deployment/ops hardening.
 
 ## Phase 14: Resilience & SLO Readiness
 

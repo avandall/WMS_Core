@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api_gateway.errors import grpc_http_exception
 from api_gateway.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
+from api_gateway.grpc_security import configured_grpc_channel
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -42,7 +43,7 @@ def get_current_user(
     if traceparent:
         metadata.append(("traceparent", traceparent))
     try:
-        with grpc.insecure_channel(_identity_addr()) as channel:
+        with configured_grpc_channel(_identity_addr()) as channel:
             stub = identity_pb2_grpc.IdentityServiceStub(channel)
             resp = stub.ValidateToken(
                 identity_pb2.ValidateTokenRequest(access_token=token),
