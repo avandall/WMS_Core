@@ -42,6 +42,10 @@ def test_kubernetes_base_is_present_and_deployable() -> None:
 
     assert (DEPLOY_DIR / "README.md").exists()
     assert "kubectl apply -k deploy/kubernetes/base" in (DEPLOY_DIR / "README.md").read_text()
+    assert "kubectl kustomize deploy/kubernetes/base" in (DEPLOY_DIR / "README.md").read_text()
+    assert "kubectl apply -k deploy/kubernetes/base --dry-run=server" in (
+        DEPLOY_DIR / "README.md"
+    ).read_text()
 
 
 def test_active_services_have_release_images_and_probes() -> None:

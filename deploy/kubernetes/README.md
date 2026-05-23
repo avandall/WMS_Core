@@ -25,6 +25,34 @@ kubectl apply -k deploy/kubernetes/base
 Before applying to production, replace `base/secrets.example.yaml` with values from the
 cluster secret manager or an ExternalSecret equivalent. Do not commit real secret values.
 
+## Local k3s Validation
+
+This repo can validate the deployment package against a local k3s API server without
+creating application workloads:
+
+```bash
+systemctl status k3s
+kubectl get nodes
+kubectl kustomize deploy/kubernetes/base
+kubectl create namespace wms
+kubectl apply -k deploy/kubernetes/base --dry-run=server
+kubectl delete namespace wms
+```
+
+The namespace create/delete pair is only for dry-run validation. Kubernetes server-side
+dry-run does not persist the namespace resource rendered in the same kustomize batch, so
+the namespace must exist before validating namespaced objects.
+
+Useful k3s service commands:
+
+```bash
+sudo systemctl start k3s
+sudo systemctl stop k3s
+sudo systemctl restart k3s
+sudo systemctl enable k3s
+sudo systemctl disable k3s
+```
+
 ## Images
 
 The base uses `wms/<service>:RELEASE_VERSION` placeholders. Set real image tags with
