@@ -22,7 +22,7 @@ Roadmap dựa trên `MICROSERVICES_REFACTOR_PLAN.md`, nhưng cập nhật theo t
 - Phase 15: Release/Deployment & Ops — DONE (release contract + ops runbooks + CI cleanup)
 - Phase 16: Monolith Retirement & Codebase Simplification — DONE (monolith archived outside active workspace/CI)
 - Phase 17: Production Deployment Automation — DONE
-- Phase 18: Advanced Async/Analytics Workflows — TODO
+- Phase 18: Advanced Async/Analytics Workflows — DONE
 
 ## Phase 6: Harden API Gateway (Core)
 
@@ -188,8 +188,9 @@ Goal: biến release contract thành deployment artifact thật.
 
 Goal: hoàn thiện các workflow async/read-model còn deferred.
 
-- Durable Redis consumer groups with retry/dead-letter queues
-- Reporting read-model consumers
-- AI reindex/replay consumer pipeline
-- Event replay tooling and idempotency verification
-- Cross-service analytics/search read-model hardening
+- DONE: Added shared durable Redis consumer group helper with retry reclaim and DLQ support
+- DONE: Migrated audit consumption to durable group semantics
+- DONE: Added reporting read-model event consumer with `event_id` idempotency
+- DONE: Added opt-in AI reindex queue consumer behind the existing AI profile
+- DONE: Added replay tooling with dry-run/idempotency visibility
+- DONE: Hardened analytics/read-model ownership through service-owned tables and DLQ streams

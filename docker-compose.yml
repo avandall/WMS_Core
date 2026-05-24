@@ -244,6 +244,8 @@ services:
       AUDIT_EVENT_CONSUMER_BLOCK_MS: ${AUDIT_EVENT_CONSUMER_BLOCK_MS:-5000}
       AUDIT_EVENT_CONSUMER_BATCH_SIZE: ${AUDIT_EVENT_CONSUMER_BATCH_SIZE:-20}
       AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH: ${AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH:-10000}
+      AUDIT_EVENT_CONSUMER_GROUP: ${AUDIT_EVENT_CONSUMER_GROUP:-audit-service}
+      AUDIT_EVENT_DLQ_STREAM: ${AUDIT_EVENT_DLQ_STREAM:-wms.events.audit.dlq}
     depends_on:
       event-bus:
         condition: service_healthy
@@ -266,7 +268,10 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-reporting.db
-      INIT_DB_TABLES: products,customers,warehouses,inventory,warehouse_inventory,documents,document_items,customer_purchases
+      INIT_DB_TABLES: products,customers,warehouses,inventory,warehouse_inventory,documents,document_items,customer_purchases,reporting_read_model_events
+      REPORTING_READ_MODEL_CONSUMER_ENABLED: ${REPORTING_READ_MODEL_CONSUMER_ENABLED:-1}
+      REPORTING_READ_MODEL_CONSUMER_GROUP: ${REPORTING_READ_MODEL_CONSUMER_GROUP:-reporting-service}
+      REPORTING_READ_MODEL_DLQ_STREAM: ${REPORTING_READ_MODEL_DLQ_STREAM:-wms.events.reporting.dlq}
     depends_on:
       event-bus:
         condition: service_healthy
@@ -291,6 +296,9 @@ services:
       <<: *service-env
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
+      AI_REINDEX_CONSUMER_ENABLED: ${AI_REINDEX_CONSUMER_ENABLED:-0}
+      AI_REINDEX_QUEUE_PATH: ${AI_REINDEX_QUEUE_PATH:-/tmp/wms-ai-reindex-queue.jsonl}
+      AI_REINDEX_DLQ_STREAM: ${AI_REINDEX_DLQ_STREAM:-wms.events.ai.dlq}
     depends_on:
       event-bus:
         condition: service_healthy

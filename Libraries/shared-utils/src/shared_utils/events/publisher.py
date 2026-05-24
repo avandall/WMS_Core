@@ -6,7 +6,7 @@ import socket
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 
 
@@ -107,21 +107,124 @@ class RedisStreamClient:
         if result is None:
             return []
 
+        return self._events_from_xread_result(result)
+
+    def xgroup_create(self, stream: str, group: str, *, start_id: str = "0", mkstream: bool = True) -> None:
+        parts: list[object] = ["XGROUP", "CREATE", stream, group, start_id]
+        if mkstream:
+            parts.append("MKSTREAM")
+        try:
+            self.execute(*parts)
+        except RedisProtocolError as exc:
+            if "BUSYGROUP" not in str(exc):
+                raise
+
+    def xreadgroup(
+        self,
+        stream: str,
+        group: str,
+        consumer: str,
+        *,
+        block_ms: int,
+        count: int,
+        message_id: str = ">",
+    ) -> list[tuple[str, EventEnvelope]]:
+        result = self.execute(
+            "XREADGROUP",
+            "GROUP",
+            group,
+            consumer,
+            "COUNT",
+            count,
+            "BLOCK",
+            block_ms,
+            "STREAMS",
+            stream,
+            message_id,
+        )
+        if result is None:
+            return []
+        return self._events_from_xread_result(result)
+
+    def xack(self, stream: str, group: str, message_id: str) -> int:
+        return int(self.execute("XACK", stream, group, message_id) or 0)
+
+    def xpending_range(
+        self,
+        stream: str,
+        group: str,
+        *,
+        start_id: str = "-",
+        end_id: str = "+",
+        count: int = 10,
+        consumer: str | None = None,
+    ) -> list[dict[str, Any]]:
+        parts: list[object] = ["XPENDING", stream, group, start_id, end_id, count]
+        if consumer:
+            parts.append(consumer)
+        result = self.execute(*parts)
+        if not result:
+            return []
+        pending = []
+        for row in result:
+            if len(row) >= 4:
+                pending.append(
+                    {
+                        "message_id": str(row[0]),
+                        "consumer": str(row[1]),
+                        "idle_ms": int(row[2]),
+                        "deliveries": int(row[3]),
+                    }
+                )
+        return pending
+
+    def xautoclaim(
+        self,
+        stream: str,
+        group: str,
+        consumer: str,
+        *,
+        min_idle_ms: int,
+        start_id: str = "0-0",
+        count: int = 10,
+    ) -> list[tuple[str, EventEnvelope]]:
+        result = self.execute(
+            "XAUTOCLAIM",
+            stream,
+            group,
+            consumer,
+            min_idle_ms,
+            start_id,
+            "COUNT",
+            count,
+        )
+        if not result or len(result) < 2:
+            return []
+        return self._events_from_rows(result[1])
+
+    @staticmethod
+    def _events_from_rows(rows: list[Any]) -> list[tuple[str, EventEnvelope]]:
+        events: list[tuple[str, EventEnvelope]] = []
+        for row in rows:
+            message_id = str(row[0])
+            fields = row[1]
+            field_map = {
+                str(fields[i]): str(fields[i + 1])
+                for i in range(0, len(fields), 2)
+                if i + 1 < len(fields)
+            }
+            raw_event = field_map.get("event")
+            if raw_event:
+                events.append((message_id, EventEnvelope.from_json(raw_event)))
+        return events
+
+    @classmethod
+    def _events_from_xread_result(cls, result: list[Any]) -> list[tuple[str, EventEnvelope]]:
         events: list[tuple[str, EventEnvelope]] = []
         for stream_rows in result:
             if not stream_rows or len(stream_rows) < 2:
                 continue
-            for row in stream_rows[1]:
-                message_id = str(row[0])
-                fields = row[1]
-                field_map = {
-                    str(fields[i]): str(fields[i + 1])
-                    for i in range(0, len(fields), 2)
-                    if i + 1 < len(fields)
-                }
-                raw_event = field_map.get("event")
-                if raw_event:
-                    events.append((message_id, EventEnvelope.from_json(raw_event)))
+            events.extend(cls._events_from_rows(stream_rows[1]))
         return events
 
     def _read_line(self, sock: socket.socket) -> bytes:
@@ -175,6 +278,89 @@ class RedisStreamEventPublisher:
             self.client.xadd(self.stream, envelope)
         except Exception:
             self.fallback.publish(event_type=event_type, payload=payload)
+
+
+@dataclass(slots=True)
+class DurableRedisStreamConsumer:
+    client: RedisStreamClient
+    stream: str
+    group: str
+    consumer: str
+    handler: Callable[[str, EventEnvelope], None]
+    dlq_stream: str
+    block_ms: int = 5000
+    batch_size: int = 20
+    max_attempts: int = 3
+    reclaim_idle_ms: int = 60000
+    group_start_id: str = "0"
+
+    def ensure_group(self) -> None:
+        self.client.xgroup_create(self.stream, self.group, start_id=self.group_start_id, mkstream=True)
+
+    def poll_once(self) -> int:
+        self.ensure_group()
+        processed = 0
+        for message_id, envelope in self._read_batch():
+            self._handle(message_id, envelope)
+            processed += 1
+        return processed
+
+    def _read_batch(self) -> list[tuple[str, EventEnvelope]]:
+        reclaimed = self.client.xautoclaim(
+            self.stream,
+            self.group,
+            self.consumer,
+            min_idle_ms=self.reclaim_idle_ms,
+            count=self.batch_size,
+        )
+        if reclaimed:
+            return reclaimed
+        return self.client.xreadgroup(
+            self.stream,
+            self.group,
+            self.consumer,
+            block_ms=self.block_ms,
+            count=self.batch_size,
+        )
+
+    def _handle(self, message_id: str, envelope: EventEnvelope) -> None:
+        try:
+            self.handler(message_id, envelope)
+        except Exception as exc:
+            if self._delivery_count(message_id) >= self.max_attempts:
+                self._dead_letter(message_id, envelope, exc)
+            raise
+        else:
+            self.client.xack(self.stream, self.group, message_id)
+
+    def _delivery_count(self, message_id: str) -> int:
+        rows = self.client.xpending_range(
+            self.stream,
+            self.group,
+            start_id=message_id,
+            end_id=message_id,
+            count=1,
+            consumer=self.consumer,
+        )
+        if not rows:
+            return 1
+        return int(rows[0].get("deliveries") or 1)
+
+    def _dead_letter(self, message_id: str, envelope: EventEnvelope, exc: Exception) -> None:
+        payload = dict(envelope.payload)
+        payload.update(
+            {
+                "dead_letter_reason": str(exc),
+                "original_event_id": envelope.event_id,
+                "original_stream": self.stream,
+                "original_stream_id": message_id,
+            }
+        )
+        self.client.xadd(
+            self.dlq_stream,
+            build_event(source=f"{self.group}-dlq", event_type=envelope.type, payload=payload),
+        )
+        self.client.xack(self.stream, self.group, message_id)
 
 
 def get_publisher(service: str) -> EventPublisher:

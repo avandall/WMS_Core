@@ -90,6 +90,7 @@ def import_all_models():
         "app.modules.inventory.infrastructure.models.position_inventory",
         "app.modules.positions.infrastructure.models.position",
         "app.modules.products.infrastructure.models.product",
+        "app.modules.reporting.infrastructure.models.read_model_event",
         "app.modules.users.infrastructure.models.user",
         "app.modules.warehouses.infrastructure.models.warehouse",
     ]

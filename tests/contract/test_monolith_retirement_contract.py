@@ -40,4 +40,4 @@ def test_roadmap_marks_phase_16_done_and_tracks_followups() -> None:
 
     assert "Phase 16: Monolith Retirement & Codebase Simplification — DONE" in source
     assert "Phase 17: Production Deployment Automation — DONE" in source
-    assert "Phase 18: Advanced Async/Analytics Workflows — TODO" in source
+    assert "Phase 18: Advanced Async/Analytics Workflows — DONE" in source

@@ -1,6 +1,7 @@
 __all__ = [
     "EventEnvelope",
     "EventPublisher",
+    "DurableRedisStreamConsumer",
     "NoopEventPublisher",
     "RedisStreamClient",
     "RedisStreamEventPublisher",
@@ -12,6 +13,7 @@ __all__ = [
 from .publisher import (
     EventEnvelope,
     EventPublisher,
+    DurableRedisStreamConsumer,
     NoopEventPublisher,
     RedisStreamClient,
     RedisStreamEventPublisher,
