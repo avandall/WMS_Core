@@ -78,6 +78,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 created_by=request.created_by or "system",
                 note=request.note or None,
             )
+            db.commit()
             self._publisher.publish(
                 event_type="DocumentUploaded",
                 payload={
@@ -107,6 +108,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 created_by=request.created_by or "system",
                 note=request.note or None,
             )
+            db.commit()
             self._publisher.publish(
                 event_type="DocumentUploaded",
                 payload={
@@ -137,6 +139,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 note=request.note or None,
                 customer_id=int(request.customer_id) if request.customer_id else None,
             )
+            db.commit()
             self._publisher.publish(
                 event_type="DocumentUploaded",
                 payload={
@@ -168,6 +171,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 created_by=request.created_by or "system",
                 note=request.note or None,
             )
+            db.commit()
             self._publisher.publish(
                 event_type="DocumentUploaded",
                 payload={
@@ -246,6 +250,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
         service, db = self._service()
         try:
             service.delete_document(int(request.document_id))
+            db.commit()
             return documents_pb2.DeleteDocumentResponse(
                 message=f"Document {int(request.document_id)} deleted successfully"
             )

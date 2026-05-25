@@ -7,6 +7,7 @@ import uuid
 
 from fastapi import HTTPException
 from fastapi import Request
+from shared_utils.observability.otel import start_span
 
 from api_gateway.observability import METRICS, child_trace_context, json_log, parse_traceparent
 
@@ -48,7 +49,17 @@ async def request_id_middleware(request: Request, call_next):
     start = time.monotonic()
     status_code = 500
     try:
-        response = await call_next(request)
+        with start_span(
+            service_name="api-gateway",
+            span_name=f"{request.method} {request.url.path}",
+            trace_context=trace_context,
+            attributes={
+                "http.request.method": request.method,
+                "url.path": request.url.path,
+                "wms.request_id": request_id,
+            },
+        ):
+            response = await call_next(request)
         status_code = response.status_code
         response.headers["X-Request-ID"] = request_id
         response.headers["traceparent"] = trace_context.traceparent

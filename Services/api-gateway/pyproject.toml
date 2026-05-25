@@ -7,6 +7,7 @@ dependencies = [
   "uvicorn>=0.40.0",
   "grpcio>=1.80.0",
   "protobuf>=6.31.1",
+  "shared-utils",
 ]
 
 [project.scripts]

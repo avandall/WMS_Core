@@ -35,4 +35,26 @@ Root compose exports:
 - `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317`
 - `OTEL_TRACES_EXPORTER=otlp`
 
-The current baseline is dependency-light and W3C-compatible. Adding the OpenTelemetry SDK/exporter later should not require changing propagation contracts.
+Root compose runs Jaeger all-in-one as `otel-collector`, so services can export OTLP directly while
+keeping the existing endpoint name.
+
+Jaeger UI:
+
+- `http://localhost:16686`
+
+To inspect one request:
+
+1. Send the request with a human-friendly `X-Request-ID`, for example `jaeger-customers-001`.
+2. Open Jaeger UI.
+3. Select the service, for example `api-gateway`.
+4. Click **Find Traces**.
+5. Open the trace and inspect the span tree.
+
+Example span tree for `GET /api/v1/customers`:
+
+- `GET /api/v1/customers` from `api-gateway`
+- `/wms.identity.v1.IdentityService/ValidateToken` from `identity-service`
+- `/wms.customer.v1.CustomerService/ListCustomers` from `customer-service`
+
+`x-request-id` remains the human-friendly log correlation id. Jaeger/OTLP uses the W3C
+`traceparent` trace id to group spans visually.

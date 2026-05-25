@@ -233,6 +233,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "grpcio" },
     { name = "protobuf" },
+    { name = "shared-utils" },
     { name = "uvicorn" },
 ]
 
@@ -241,6 +242,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "grpcio", specifier = ">=1.80.0" },
     { name = "protobuf", specifier = ">=6.31.1" },
+    { name = "shared-utils", editable = "Libraries/shared-utils" },
     { name = "uvicorn", specifier = ">=0.40.0" },
 ]
 
@@ -3382,12 +3384,18 @@ name = "shared-utils"
 version = "0.1.0"
 source = { editable = "Libraries/shared-utils" }
 dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-sdk" },
     { name = "pydantic" },
     { name = "pyjwt" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "opentelemetry-api", specifier = ">=1.41.0" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.41.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.41.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyjwt", specifier = ">=2.8.0" },
 ]

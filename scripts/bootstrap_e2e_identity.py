@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import os
+import sys
+
+# Add the identity service to the path
+sys.path.insert(0, "/home/avandall/project/WMS-Project-main/Services/identity-service/src")
 
 from app.modules.users.application.services.user_service import UserService
 from app.modules.users.infrastructure.repositories.user_repo import UserRepo
@@ -13,6 +17,10 @@ def main() -> None:
     email = os.getenv("E2E_ADMIN_EMAIL", "gateway-e2e-admin@example.com")
     password = os.getenv("E2E_ADMIN_PASSWORD", "GatewayE2EAdmin123!")
     role = os.getenv("E2E_ADMIN_ROLE", "admin")
+
+    # Set DATABASE_URL for the identity service
+    os.environ["DATABASE_URL"] = "sqlite:////tmp/wms-identity.db"
+    os.environ["SECRET_KEY"] = "wms-local-dev-secret"
 
     init_db()
     db = SessionLocal()

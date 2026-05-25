@@ -6,6 +6,7 @@ from collections.abc import Callable
 import grpc
 
 from .http import METRICS, json_log
+from .otel import start_span
 from .trace import child_trace_context, parse_traceparent, set_trace_context
 
 
@@ -27,7 +28,17 @@ class GrpcObservabilityInterceptor(grpc.ServerInterceptor):
             start = time.monotonic()
             status = "OK"
             try:
-                return handler.unary_unary(request, context)
+                with start_span(
+                    service_name=self.service,
+                    span_name=method,
+                    trace_context=trace_context,
+                    attributes={
+                        "rpc.system": "grpc",
+                        "rpc.method": method,
+                        "wms.request_id": request_id,
+                    },
+                ):
+                    return handler.unary_unary(request, context)
             except Exception as exc:
                 status = _grpc_error_name(exc)
                 json_log(
