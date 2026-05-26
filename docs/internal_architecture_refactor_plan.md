@@ -30,6 +30,7 @@ Phase B completed service ownership cleanup:
 - `identity-service`: kept users and removed the non-owned positions module.
 - `product-service`: kept products and removed inventory module/table ownership.
 - `customer-service`: kept customers and removed unused shared reporting orchestration.
+- `audit-service`: kept audit and removed unused shared reporting orchestration.
 
 ## Target Architecture
 
