@@ -277,7 +277,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-reporting.db
-      INIT_DB_TABLES: products,customers,warehouses,inventory,warehouse_inventory,documents,document_items,customer_purchases,reporting_read_model_events
+      INIT_DB_TABLES: reporting_read_model_events
       REPORTING_READ_MODEL_CONSUMER_ENABLED: ${REPORTING_READ_MODEL_CONSUMER_ENABLED:-1}
       REPORTING_READ_MODEL_CONSUMER_GROUP: ${REPORTING_READ_MODEL_CONSUMER_GROUP:-reporting-service}
       REPORTING_READ_MODEL_DLQ_STREAM: ${REPORTING_READ_MODEL_DLQ_STREAM:-wms.events.reporting.dlq}
