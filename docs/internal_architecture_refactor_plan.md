@@ -306,12 +306,16 @@ Acceptance:
 
 ## Phase I: API Gateway BFF Cleanup
 
+Status: DONE.
+
 Goal: keep gateway as transport orchestration only.
 
-- Keep auth, validation, rate limits, tracing, request IDs, and gRPC error mapping.
-- Move any WMS business decision into the owning service.
-- Keep response composition explicit and covered by contract tests.
-- Keep OpenAPI contract tests aligned with gateway routes after any endpoint movement.
+- Kept auth, validation, rate limits, tracing, request IDs, and gRPC error mapping in gateway.
+- Added a central gRPC call wrapper for retry/error mapping at the transport boundary.
+- Moved response presentation into gateway presenters so route handlers stay orchestration-focused.
+- Added contract tests that prevent gateway imports of service domain/application/infrastructure
+  modules and WMS repositories.
+- Kept OpenAPI routes stable for the existing REST/gRPC surface.
 
 Acceptance:
 

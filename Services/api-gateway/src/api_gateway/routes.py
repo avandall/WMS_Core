@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import grpc
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -21,6 +19,14 @@ from api_gateway.grpc_clients import (
     warehouse_stub,
 )
 from api_gateway.permissions import Permission
+from api_gateway.presenters import (
+    audit_event_to_dict,
+    customer_to_dict,
+    document_to_dict,
+    parse_json,
+    product_to_dict,
+    warehouse_to_dict,
+)
 from api_gateway.schemas import (
     AIQueryPayload,
     CustomerDebtPayload,
@@ -70,6 +76,20 @@ GRPC_TIMEOUT_SLOW = _timeout("GRPC_TIMEOUT_SLOW", 30.0)
 GRPC_TIMEOUT_AI = _timeout("GRPC_TIMEOUT_AI", 60.0)
 
 
+def _grpc_call(fn, request_message, *, request: Request, timeout: float, idempotent: bool = False):
+    try:
+        if idempotent:
+            return call_idempotent(
+                fn,
+                request_message,
+                timeout=timeout,
+                metadata=_md(request),
+            )
+        return fn(request_message, timeout=timeout, metadata=_md(request))
+    except grpc.RpcError as exc:
+        raise grpc_http_exception(exc)
+
+
 # ---- Customers ----
 @router.get(
     "/customers",
@@ -77,24 +97,14 @@ GRPC_TIMEOUT_AI = _timeout("GRPC_TIMEOUT_AI", 60.0)
 )
 def list_customers(request: Request):
     with customer_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListCustomers,
             customer_pb2.ListCustomersRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return [
-        {
-            "customer_id": int(c.customer_id),
-            "name": c.name,
-            "email": c.email,
-            "phone": c.phone,
-            "address": c.address,
-            "debt_balance": float(c.debt_balance),
-            "created_at": c.created_at,
-        }
-        for c in resp.customers
-    ]
+    return [customer_to_dict(c) for c in resp.customers]
 
 
 @router.post(
@@ -103,25 +113,18 @@ def list_customers(request: Request):
 )
 def create_customer(payload: CustomerPayload, request: Request):
     with customer_stub() as stub:
-        resp = stub.CreateCustomer(
+        resp = _grpc_call(
+            stub.CreateCustomer,
             customer_pb2.CreateCustomerRequest(
                 name=payload.name,
                 email=payload.email,
                 phone=payload.phone,
                 address=payload.address,
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
         )
-    return {
-        "customer_id": int(resp.customer_id),
-        "name": resp.name,
-        "email": resp.email,
-        "phone": resp.phone,
-        "address": resp.address,
-        "debt_balance": float(resp.debt_balance),
-        "created_at": resp.created_at,
-    }
+    return customer_to_dict(resp)
 
 
 @router.get(
@@ -129,25 +132,15 @@ def create_customer(payload: CustomerPayload, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_CUSTOMERS))],
 )
 def get_customer(customer_id: int, request: Request):
-    try:
-        with customer_stub() as stub:
-            c = call_idempotent(
-                stub.GetCustomer,
-                customer_pb2.GetCustomerRequest(customer_id=customer_id),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Customer not found")
-    return {
-        "customer_id": int(c.customer_id),
-        "name": c.name,
-        "email": c.email,
-        "phone": c.phone,
-        "address": c.address,
-        "debt_balance": float(c.debt_balance),
-        "created_at": c.created_at,
-    }
+    with customer_stub() as stub:
+        c = _grpc_call(
+            stub.GetCustomer,
+            customer_pb2.GetCustomerRequest(customer_id=customer_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return customer_to_dict(c)
 
 
 @router.patch(
@@ -155,30 +148,20 @@ def get_customer(customer_id: int, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_CUSTOMERS))],
 )
 def update_customer(customer_id: int, payload: CustomerPayload, request: Request):
-    try:
-        with customer_stub() as stub:
-            c = stub.UpdateCustomer(
-                customer_pb2.UpdateCustomerRequest(
-                    customer_id=customer_id,
-                    name=payload.name,
-                    email=payload.email,
-                    phone=payload.phone,
-                    address=payload.address,
-                ),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Customer not found")
-    return {
-        "customer_id": int(c.customer_id),
-        "name": c.name,
-        "email": c.email,
-        "phone": c.phone,
-        "address": c.address,
-        "debt_balance": float(c.debt_balance),
-        "created_at": c.created_at,
-    }
+    with customer_stub() as stub:
+        c = _grpc_call(
+            stub.UpdateCustomer,
+            customer_pb2.UpdateCustomerRequest(
+                customer_id=customer_id,
+                name=payload.name,
+                email=payload.email,
+                phone=payload.phone,
+                address=payload.address,
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    return customer_to_dict(c)
 
 
 @router.patch(
@@ -187,10 +170,11 @@ def update_customer(customer_id: int, payload: CustomerPayload, request: Request
 )
 def update_debt(customer_id: int, payload: CustomerDebtPayload, request: Request):
     with customer_stub() as stub:
-        resp = stub.UpdateDebt(
+        resp = _grpc_call(
+            stub.UpdateDebt,
             customer_pb2.UpdateDebtRequest(customer_id=customer_id, amount=payload.amount),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
         )
     return {"message": resp.message, "delta": float(resp.delta)}
 
@@ -201,11 +185,12 @@ def update_debt(customer_id: int, payload: CustomerDebtPayload, request: Request
 )
 def list_purchases(customer_id: int, request: Request):
     with customer_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListPurchases,
             customer_pb2.ListPurchasesRequest(customer_id=customer_id),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
     return [
         {
@@ -225,14 +210,14 @@ def list_purchases(customer_id: int, request: Request):
 )
 def list_products(request: Request):
     with product_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListProducts,
-            product_pb2.ListProductsRequest(), timeout=GRPC_TIMEOUT_DEFAULT, metadata=_md(request)
+            product_pb2.ListProductsRequest(),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
         )
-    return [
-        {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
-        for p in resp.products
-    ]
+    return [product_to_dict(p) for p in resp.products]
 
 
 @router.post(
@@ -241,17 +226,18 @@ def list_products(request: Request):
 )
 def create_product(payload: ProductPayload, request: Request):
     with product_stub() as stub:
-        resp = stub.CreateProduct(
+        resp = _grpc_call(
+            stub.CreateProduct,
             product_pb2.CreateProductRequest(
                 product_id=payload.product_id,
                 name=payload.name,
                 price=payload.price,
                 description=payload.description,
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
         )
-    return {"product_id": int(resp.product_id), "name": resp.name, "price": float(resp.price), "description": resp.description}
+    return product_to_dict(resp)
 
 
 @router.get(
@@ -259,17 +245,15 @@ def create_product(payload: ProductPayload, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_PRODUCTS))],
 )
 def get_product(product_id: int, request: Request):
-    try:
-        with product_stub() as stub:
-            p = call_idempotent(
-                stub.GetProduct,
-                product_pb2.GetProductRequest(product_id=product_id),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Product not found")
-    return {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
+    with product_stub() as stub:
+        p = _grpc_call(
+            stub.GetProduct,
+            product_pb2.GetProductRequest(product_id=product_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return product_to_dict(p)
 
 
 @router.put(
@@ -277,21 +261,19 @@ def get_product(product_id: int, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
 def update_product(product_id: int, payload: ProductPayload, request: Request):
-    try:
-        with product_stub() as stub:
-            p = stub.UpdateProduct(
-                product_pb2.UpdateProductRequest(
-                    product_id=product_id,
-                    name=payload.name,
-                    price=payload.price,
-                    description=payload.description,
-                ),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Product not found")
-    return {"product_id": int(p.product_id), "name": p.name, "price": float(p.price), "description": p.description}
+    with product_stub() as stub:
+        p = _grpc_call(
+            stub.UpdateProduct,
+            product_pb2.UpdateProductRequest(
+                product_id=product_id,
+                name=payload.name,
+                price=payload.price,
+                description=payload.description,
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    return product_to_dict(p)
 
 
 @router.delete(
@@ -299,15 +281,13 @@ def update_product(product_id: int, payload: ProductPayload, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
 def delete_product(product_id: int, request: Request):
-    try:
-        with product_stub() as stub:
-            resp = stub.DeleteProduct(
-                product_pb2.DeleteProductRequest(product_id=product_id),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Product not found")
+    with product_stub() as stub:
+        resp = _grpc_call(
+            stub.DeleteProduct,
+            product_pb2.DeleteProductRequest(product_id=product_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
     return {"message": resp.message}
 
 
@@ -318,21 +298,14 @@ def delete_product(product_id: int, request: Request):
 )
 def list_warehouses(request: Request):
     with warehouse_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListWarehouses,
             warehouse_pb2.ListWarehousesRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return [
-        {
-            "warehouse_id": int(w.warehouse_id),
-            "name": w.location,
-            "location": w.location,
-            "inventory": [{"product_id": int(i.product_id), "quantity": int(i.quantity)} for i in w.inventory],
-        }
-        for w in resp.warehouses
-    ]
+    return [warehouse_to_dict(w) for w in resp.warehouses]
 
 
 @router.post(
@@ -341,12 +314,13 @@ def list_warehouses(request: Request):
 )
 def create_warehouse(payload: WarehousePayload, request: Request):
     with warehouse_stub() as stub:
-        w = stub.CreateWarehouse(
+        w = _grpc_call(
+            stub.CreateWarehouse,
             warehouse_pb2.CreateWarehouseRequest(name=payload.name),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
         )
-    return {"warehouse_id": int(w.warehouse_id), "name": w.location, "location": w.location, "inventory": []}
+    return warehouse_to_dict(w)
 
 
 @router.get(
@@ -354,22 +328,15 @@ def create_warehouse(payload: WarehousePayload, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_WAREHOUSES))],
 )
 def get_warehouse(warehouse_id: int, request: Request):
-    try:
-        with warehouse_stub() as stub:
-            w = call_idempotent(
-                stub.GetWarehouse,
-                warehouse_pb2.GetWarehouseRequest(warehouse_id=warehouse_id),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Warehouse not found")
-    return {
-        "warehouse_id": int(w.warehouse_id),
-        "name": w.location,
-        "location": w.location,
-        "inventory": [{"product_id": int(i.product_id), "quantity": int(i.quantity)} for i in w.inventory],
-    }
+    with warehouse_stub() as stub:
+        w = _grpc_call(
+            stub.GetWarehouse,
+            warehouse_pb2.GetWarehouseRequest(warehouse_id=warehouse_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return warehouse_to_dict(w)
 
 
 @router.delete(
@@ -377,15 +344,13 @@ def get_warehouse(warehouse_id: int, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
 )
 def delete_warehouse(warehouse_id: int, request: Request):
-    try:
-        with warehouse_stub() as stub:
-            resp = stub.DeleteWarehouse(
-                warehouse_pb2.DeleteWarehouseRequest(warehouse_id=warehouse_id),
-                timeout=GRPC_TIMEOUT_DEFAULT,
-                metadata=_md(request),
-            )
-    except grpc.RpcError as exc:
-        raise grpc_http_exception(exc, fallback_detail="Warehouse not found")
+    with warehouse_stub() as stub:
+        resp = _grpc_call(
+            stub.DeleteWarehouse,
+            warehouse_pb2.DeleteWarehouseRequest(warehouse_id=warehouse_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
     return {"message": resp.message}
 
 
@@ -395,12 +360,13 @@ def delete_warehouse(warehouse_id: int, request: Request):
 )
 def transfer_all_inventory(warehouse_id: int, payload: WarehouseTransferPayload, request: Request):
     with warehouse_stub() as stub:
-        resp = stub.TransferAllInventory(
+        resp = _grpc_call(
+            stub.TransferAllInventory,
             warehouse_pb2.TransferAllInventoryRequest(
                 warehouse_id=warehouse_id, to_warehouse_id=payload.to_warehouse_id
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
         )
     return {
         "from_warehouse_id": int(resp.from_warehouse_id),
@@ -416,11 +382,12 @@ def transfer_all_inventory(warehouse_id: int, payload: WarehouseTransferPayload,
 )
 def system_overview(request: Request):
     with warehouse_ops_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.GetSystemOverview,
             warehouse_pb2.GetSystemOverviewRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
     return {
         "total_warehouses": int(resp.total_warehouses),
@@ -436,11 +403,12 @@ def system_overview(request: Request):
 )
 def inventory_health(request: Request):
     with warehouse_ops_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.GetInventoryHealth,
             warehouse_pb2.GetInventoryHealthRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
     return {
         "system_health_score": float(resp.system_health_score),
@@ -466,11 +434,12 @@ def inventory_health(request: Request):
 )
 def optimize_distribution(product_id: int, request: Request):
     with warehouse_ops_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.OptimizeDistribution,
             warehouse_pb2.OptimizeDistributionRequest(product_id=product_id),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
     if resp.error:
         raise HTTPException(status_code=404, detail=resp.error)
@@ -492,7 +461,8 @@ def create_import_document(
     request: Request,
 ):
     with documents_stub() as stub:
-        doc = stub.CreateImport(
+        doc = _grpc_call(
+            stub.CreateImport,
             documents_pb2.CreateDocumentRequest(
                 to_warehouse_id=payload.destination_warehouse_id or payload.warehouse_id,
                 items=[
@@ -506,10 +476,10 @@ def create_import_document(
                 created_by=payload.created_by,
                 note=payload.note,
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
         )
-    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+    return document_to_dict(doc)
 
 
 @router.post(
@@ -518,7 +488,8 @@ def create_import_document(
 )
 def create_export_document(payload: DocumentPayload, request: Request):
     with documents_stub() as stub:
-        doc = stub.CreateExport(
+        doc = _grpc_call(
+            stub.CreateExport,
             documents_pb2.CreateDocumentRequest(
                 from_warehouse_id=payload.source_warehouse_id or payload.warehouse_id,
                 items=[
@@ -532,10 +503,10 @@ def create_export_document(payload: DocumentPayload, request: Request):
                 created_by=payload.created_by,
                 note=payload.note,
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
         )
-    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+    return document_to_dict(doc)
 
 
 @router.post(
@@ -544,7 +515,8 @@ def create_export_document(payload: DocumentPayload, request: Request):
 )
 def create_sale_document(payload: DocumentPayload, request: Request):
     with documents_stub() as stub:
-        doc = stub.CreateSale(
+        doc = _grpc_call(
+            stub.CreateSale,
             documents_pb2.CreateDocumentRequest(
                 from_warehouse_id=payload.source_warehouse_id or payload.warehouse_id,
                 customer_id=payload.customer_id,
@@ -559,10 +531,10 @@ def create_sale_document(payload: DocumentPayload, request: Request):
                 created_by=payload.created_by,
                 note=payload.note,
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
         )
-    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+    return document_to_dict(doc)
 
 
 @router.post(
@@ -571,7 +543,8 @@ def create_sale_document(payload: DocumentPayload, request: Request):
 )
 def create_transfer_document(payload: DocumentPayload, request: Request):
     with documents_stub() as stub:
-        doc = stub.CreateTransfer(
+        doc = _grpc_call(
+            stub.CreateTransfer,
             documents_pb2.CreateDocumentRequest(
                 from_warehouse_id=payload.source_warehouse_id,
                 to_warehouse_id=payload.destination_warehouse_id,
@@ -586,10 +559,10 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
                 created_by=payload.created_by,
                 note=payload.note,
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
         )
-    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+    return document_to_dict(doc)
 
 
 @router.post(
@@ -598,10 +571,11 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
 )
 def post_document(document_id: int, payload: PostDocumentPayload, request: Request):
     with documents_stub() as stub:
-        resp = stub.PostDocument(
+        resp = _grpc_call(
+            stub.PostDocument,
             documents_pb2.PostDocumentRequest(document_id=document_id, approved_by=payload.approved_by),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
         )
     return {"message": resp.message}
 
@@ -609,25 +583,27 @@ def post_document(document_id: int, payload: PostDocumentPayload, request: Reque
 @router.get("/documents/{document_id}", dependencies=[Depends(get_current_user)])
 def get_document(document_id: int, request: Request):
     with documents_stub() as stub:
-        doc = call_idempotent(
+        doc = _grpc_call(
             stub.GetDocument,
             documents_pb2.GetDocumentRequest(document_id=document_id),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
     if not doc.document_id:
         raise HTTPException(status_code=404, detail="Document not found")
-    return {"document_id": int(doc.document_id), "doc_type": doc.doc_type, "status": doc.status, "items": [{"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)} for i in doc.items]}
+    return document_to_dict(doc)
 
 
 @router.get("/documents", dependencies=[Depends(get_current_user)])
 def list_documents(request: Request, doc_type: str | None = None, page: int = 1, page_size: int = 20):
     with documents_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListDocuments,
             documents_pb2.ListDocumentsRequest(doc_type=doc_type or "", page=page, page_size=page_size),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
     return [
         {"document_id": int(d.document_id), "doc_type": d.doc_type, "status": d.status}
@@ -638,10 +614,11 @@ def list_documents(request: Request, doc_type: str | None = None, page: int = 1,
 @router.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
 def delete_document(document_id: int, request: Request):
     with documents_stub() as stub:
-        resp = stub.DeleteDocument(
+        resp = _grpc_call(
+            stub.DeleteDocument,
             documents_pb2.DeleteDocumentRequest(document_id=document_id),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
         )
     return {"message": resp.message}
 
@@ -653,26 +630,14 @@ def delete_document(document_id: int, request: Request):
 )
 def list_audit_events(request: Request, limit: int = 100, offset: int = 0):
     with audit_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListEvents,
             audit_pb2.ListEventsRequest(limit=limit, offset=offset),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return [
-        {
-            "id": int(e.id),
-            "request_id": e.request_id,
-            "user_id": int(e.user_id),
-            "action": e.action,
-            "entity_type": e.entity_type,
-            "entity_id": e.entity_id,
-            "warehouse_id": int(e.warehouse_id),
-            "payload": _try_json(e.payload_json),
-            "created_at": e.created_at,
-        }
-        for e in resp.events
-    ]
+    return [audit_event_to_dict(e) for e in resp.events]
 
 
 @router.get(
@@ -681,25 +646,16 @@ def list_audit_events(request: Request, limit: int = 100, offset: int = 0):
 )
 def get_audit_event(event_id: int, request: Request):
     with audit_stub() as stub:
-        e = call_idempotent(
+        e = _grpc_call(
             stub.GetEvent,
             audit_pb2.GetEventRequest(id=event_id),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
     if not e.id:
         raise HTTPException(status_code=404, detail="Audit event not found")
-    return {
-        "id": int(e.id),
-        "request_id": e.request_id,
-        "user_id": int(e.user_id),
-        "action": e.action,
-        "entity_type": e.entity_type,
-        "entity_id": e.entity_id,
-        "warehouse_id": int(e.warehouse_id),
-        "payload": _try_json(e.payload_json),
-        "created_at": e.created_at,
-    }
+    return audit_event_to_dict(e)
 
 
 # ---- Reporting ----
@@ -709,16 +665,17 @@ def get_audit_event(event_id: int, request: Request):
 )
 def report_inventory(request: Request, warehouse_id: int | None = None, low_stock_threshold: int = 10):
     with reporting_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.InventoryReport,
             reporting_pb2.InventoryReportRequest(
                 warehouse_id=int(warehouse_id or 0),
                 low_stock_threshold=int(low_stock_threshold),
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
+    return parse_json(resp.json)
 
 
 @router.get(
@@ -727,13 +684,14 @@ def report_inventory(request: Request, warehouse_id: int | None = None, low_stoc
 )
 def report_inventory_list(request: Request):
     with reporting_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.InventoryList,
             reporting_pb2.InventoryListRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
+    return parse_json(resp.json)
 
 
 @router.get(
@@ -747,17 +705,18 @@ def report_warehouse(
     end_date: str | None = None,
 ):
     with reporting_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.WarehouseReport,
             reporting_pb2.WarehouseReportRequest(
                 warehouse_id=warehouse_id,
                 start_date=start_date or "",
                 end_date=end_date or "",
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
+    return parse_json(resp.json)
 
 
 @router.get(
@@ -766,16 +725,17 @@ def report_warehouse(
 )
 def report_documents(request: Request, start_date: str | None = None, end_date: str | None = None):
     with reporting_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.DocumentsReport,
             reporting_pb2.DocumentsReportRequest(
                 start_date=start_date or "",
                 end_date=end_date or "",
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
+    return parse_json(resp.json)
 
 
 @router.get(
@@ -789,17 +749,18 @@ def report_product(
     end_date: str | None = None,
 ):
     with reporting_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ProductReport,
             reporting_pb2.ProductReportRequest(
                 product_id=product_id,
                 start_date=start_date or "",
                 end_date=end_date or "",
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
+    return parse_json(resp.json)
 
 
 @router.get(
@@ -814,7 +775,7 @@ def report_sales(
     salesperson: str | None = None,
 ):
     with reporting_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.SalesReport,
             reporting_pb2.SalesReportRequest(
                 start_date=start_date or "",
@@ -822,20 +783,22 @@ def report_sales(
                 customer_id=int(customer_id or 0),
                 salesperson=salesperson or "",
             ),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
+    return parse_json(resp.json)
 
 
 # ---- AI ----
 @router.post("/ai/query", dependencies=[Depends(get_current_user)])
 def ai_query(payload: AIQueryPayload, request: Request):
     with ai_stub() as stub:
-        resp = stub.Query(
+        resp = _grpc_call(
+            stub.Query,
             ai_pb2.QueryRequest(question=payload.question, mode=payload.mode),
+            request=request,
             timeout=GRPC_TIMEOUT_AI,
-            metadata=_md(request),
         )
     return {"success": bool(resp.success), "mode": resp.mode, "response": resp.response, "error": resp.error}
 
@@ -843,20 +806,14 @@ def ai_query(payload: AIQueryPayload, request: Request):
 @router.get("/ai/status", dependencies=[Depends(get_current_user)])
 def ai_status(request: Request):
     with ai_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.Status,
             ai_pb2.StatusRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
-    return _try_json(resp.json)
-
-
-def _try_json(value: str):
-    try:
-        return json.loads(value) if value else value
-    except Exception:
-        return value
+    return parse_json(resp.json)
 
 
 # ---- Inventory ----
@@ -866,11 +823,12 @@ def _try_json(value: str):
 )
 def list_inventory(request: Request):
     with inventory_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.ListInventoryItems,
             inventory_pb2.ListInventoryItemsRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
     return [{"product_id": int(i.product_id), "quantity": int(i.quantity)} for i in resp.items]
 
@@ -881,11 +839,12 @@ def list_inventory(request: Request):
 )
 def inventory_by_warehouse(request: Request):
     with inventory_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.GetInventoryByWarehouse,
             inventory_pb2.GetInventoryByWarehouseRequest(),
+            request=request,
             timeout=GRPC_TIMEOUT_SLOW,
-            metadata=_md(request),
+            idempotent=True,
         )
     return [
         {
@@ -904,10 +863,11 @@ def inventory_by_warehouse(request: Request):
 )
 def product_quantity(product_id: int, request: Request):
     with inventory_stub() as stub:
-        resp = call_idempotent(
+        resp = _grpc_call(
             stub.GetProductQuantity,
             inventory_pb2.GetProductQuantityRequest(product_id=product_id),
+            request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
-            metadata=_md(request),
+            idempotent=True,
         )
     return {"product_id": int(resp.product_id), "quantity": int(resp.quantity)}
