@@ -22,7 +22,6 @@ its real WMS ownership without forcing heavy DDD everywhere.
   - `warehouse-service`: documents, inventory, positions, products
   - `inventory-service`: products, warehouses
   - `product-service`: inventory
-  - `identity-service`: positions
   - `reporting-service`: operational-style modules plus reporting
 - `docs/data_ownership.md` and `docs/events.md` are the current ownership/event baselines
   that this plan must keep consistent.
@@ -149,8 +148,7 @@ Goal: remove non-owned internal modules from active services before deeper domai
   - `inventory-service`: keep inventory/reservations/movements; replace product/warehouse modules
     with reference lookups or event-updated snapshots.
   - `product-service`: keep products; remove inventory module ownership.
-  - `identity-service`: keep users; remove positions module ownership unless it becomes an
-    explicit auth/role read model.
+  - `identity-service`: DONE. Kept users and removed the non-owned positions module.
   - `reporting-service`: keep reporting projections and idempotency ledger; convert non-owned
     operational modules into projection models or remove them.
 - Update DB initialization lists so services create only owned tables plus explicitly named read

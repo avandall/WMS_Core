@@ -36,7 +36,7 @@ PHASE_B_ALLOWED_NON_OWNED_MODULES = {
         "users",
         "warehouses",
     },
-    "identity-service": {"positions"},
+    "identity-service": set(),
     "inventory-service": {"products", "warehouses"},
     "product-service": {"inventory"},
     "reporting-service": {"customers", "documents", "inventory", "products", "warehouses"},
