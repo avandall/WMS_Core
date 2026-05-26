@@ -6,31 +6,23 @@ from typing import Dict, List, Optional
 
 from app.shared.core.logging import get_logger
 from app.modules.products.domain.entities.product import Product
-from app.shared.domain.business_exceptions import ValidationError
+from app.shared.domain.business_exceptions import (
+    EntityAlreadyExistsError,
+    EntityNotFoundError,
+    ValidationError,
+)
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
-from app.modules.products.application.commands import (
-    CreateProductCommand,
-    DeleteProductCommand,
-    ProductCommandHandler,
-    UpdateProductCommand,
-)
-from app.modules.products.application.queries import (
-    GetAllProductsQuery,
-    GetProductQuery,
-    ProductQueryHandler,
-)
-from app.modules.products.application.validation import ProductValidator
+from app.modules.products.application.dtos import CreateProduct, UpdateProduct
 
 logger = get_logger(__name__)
 
 
 class ProductService:
-    """Application service for product orchestration following SOLID principles."""
+    """Application service for product catalog CRUD."""
 
-    def __init__(self, product_repo: IProductRepo):
-        self._command_handler = ProductCommandHandler(product_repo)
-        self._query_handler = ProductQueryHandler(product_repo)
-        self._validator = ProductValidator()
+    def __init__(self, product_repo: IProductRepo, session=None):
+        self.product_repo = product_repo
+        self.session = session
 
     def create_product(
         self,
@@ -39,32 +31,36 @@ class ProductService:
         price: Optional[float] = None,
         description: Optional[str] = None,
     ) -> Product:
-        """Create a product using command pattern for SRP compliance."""
-        # Handle backward compatibility for legacy positional arguments
-        if isinstance(product_id, str):
-            legacy_name = product_id
-            legacy_price = name
-            legacy_description = price
-            legacy_product_id = description
-            name = legacy_name
-            price = legacy_price if isinstance(legacy_price, (int, float)) else None
-            description = (
-                legacy_description if isinstance(legacy_description, str) else None
-            )
-            product_id = legacy_product_id if isinstance(legacy_product_id, int) else None
-
-        command = CreateProductCommand(
+        command = CreateProduct(
             product_id=product_id,
             name=name,
             price=price,
             description=description,
         )
-        return self._command_handler.handle_create(command)
+        resolved_product_id = self._resolve_product_id(command.product_id)
+        if self.product_repo.get(resolved_product_id):
+            raise EntityAlreadyExistsError(
+                f"Product with ID {resolved_product_id} already exists"
+            )
+        if command.name is None:
+            raise ValidationError("Product name cannot be empty")
+
+        product = Product(
+            product_id=resolved_product_id,
+            name=command.name,
+            price=command.price or 0.0,
+            description=command.description,
+        )
+        self.product_repo.save(product)
+        self._commit_if_needed()
+        logger.info("Created product: product_id=%s name=%s", resolved_product_id, command.name)
+        return product
 
     def get_product_details(self, product_id: int) -> Product:
-        """Get product details using query pattern."""
-        query = GetProductQuery(product_id=product_id)
-        return self._query_handler.handle_get(query)
+        product = self.product_repo.get(product_id)
+        if not product:
+            raise EntityNotFoundError(f"Product with ID {product_id} not found")
+        return product
 
     def update_product(
         self,
@@ -73,28 +69,37 @@ class ProductService:
         price: Optional[float] = None,
         description: Optional[str] = None,
     ) -> Product:
-        """Update product using command pattern."""
-        command = UpdateProductCommand(
+        command = UpdateProduct(
             product_id=product_id,
             name=name,
             price=price,
             description=description,
         )
-        return self._command_handler.handle_update(command)
+        product = self.get_product_details(command.product_id)
+        if command.name is not None:
+            product.update_name(command.name)
+        if command.price is not None:
+            product.update_price(command.price)
+        if command.description is not None:
+            product.update_description(command.description)
+        self.product_repo.save(product)
+        self._commit_if_needed()
+        return product
 
     def delete_product(self, product_id: int) -> None:
-        """Delete product using command pattern."""
-        command = DeleteProductCommand(product_id=product_id)
-        self._command_handler.handle_delete(command)
+        self.get_product_details(product_id)
+        self.product_repo.delete(product_id)
+        self._commit_if_needed()
 
     def get_all_products(self) -> List[Product]:
-        """Get all products using query pattern."""
-        query = GetAllProductsQuery()
-        return self._query_handler.handle_get_all(query)
+        return list(self.product_repo.get_all().values())
 
     def import_products(self, rows: List[Dict]) -> Dict:
-        """Import products with separated validation logic."""
-        self._validator.validate_csv_rows(rows)
+        """Import products from parsed CSV rows."""
+        required = {"product_id", "name", "price"}
+        for row in rows:
+            if not required.issubset(row.keys()):
+                raise ValidationError("CSV must include product_id,name,price")
         
         created = 0
         updated = 0
@@ -105,26 +110,22 @@ class ProductService:
             price = float(row.get("price", 0))
             description = row.get("description")
             
-            self._validator.validate_import_data(product_id, name, price)
-            
-            existing = self._query_handler.product_repo.get(product_id)
+            existing = self.product_repo.get(product_id)
             if existing:
-                command = UpdateProductCommand(
+                self.update_product(
                     product_id=product_id,
                     name=name,
                     price=price,
                     description=description,
                 )
-                self._command_handler.handle_update(command)
                 updated += 1
             else:
-                command = CreateProductCommand(
+                self.create_product(
                     product_id=product_id,
                     name=name,
                     price=price,
                     description=description,
                 )
-                self._command_handler.handle_create(command)
                 created += 1
                 
         return {"created": created, "updated": updated}
@@ -141,3 +142,15 @@ class ProductService:
             rows.append(row)
         result = self.import_products(rows)
         return {"summary": result, "count": len(rows)}
+
+    def _resolve_product_id(self, product_id: Optional[int]) -> int:
+        if product_id is not None:
+            return product_id
+        all_products = self.product_repo.get_all()
+        if all_products:
+            return max(all_products.keys()) + 1
+        return 1
+
+    def _commit_if_needed(self) -> None:
+        if self.session is not None:
+            self.session.commit()

@@ -32,7 +32,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         session_gen = get_session()
         db = next(session_gen)
         try:
-            service = UserService(UserRepo(db))
+            service = UserService(UserRepo(db), session=db)
             user = service.get_user(user_id)
             return identity_pb2.ValidateTokenResponse(
                 valid=True,
@@ -53,4 +53,3 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
 
 # Convenience re-export so grpc_server can import without depending on generated module naming.
 add_IdentityServiceServicer_to_server = identity_pb2_grpc.add_IdentityServiceServicer_to_server
-

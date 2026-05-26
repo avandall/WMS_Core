@@ -281,6 +281,8 @@ Acceptance:
 
 ## Phase H: Lightweight CRUD Service Cleanup
 
+Status: DONE.
+
 Goal: simplify services that do not need heavy DDD.
 
 Services:
@@ -289,13 +291,13 @@ Services:
 - `product-service`
 - `identity-service`
 
-Actions:
+Actions completed:
 
-- Keep application service + repository pattern.
-- Remove empty domain folders if they do not contain real rules.
-- Keep domain rules only where meaningful, such as SKU uniqueness or auth token policy.
-- Standardize command/query DTOs.
-- Keep authz/identity clients in adapter/application boundaries, not domain.
+- Kept application service + repository pattern for customer, product, and identity.
+- Removed empty domain entity/exception folders that did not contain real rules.
+- Kept meaningful domain rules in product and identity entities.
+- Replaced product command/query handler layers with lightweight application DTOs.
+- Kept identity auth/token policy in the application boundary, not domain.
 
 Acceptance:
 

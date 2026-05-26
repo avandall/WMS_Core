@@ -24,7 +24,7 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
     def _service(self) -> tuple[ProductService, object]:
         session_gen = get_session()
         db = next(session_gen)
-        return ProductService(ProductRepo(db)), db
+        return ProductService(ProductRepo(db), session=db), db
 
     def ListProducts(self, request: product_pb2.ListProductsRequest, context: grpc.ServicerContext):
         service, db = self._service()

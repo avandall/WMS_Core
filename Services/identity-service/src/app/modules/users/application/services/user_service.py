@@ -10,8 +10,9 @@ from app.modules.users.domain.interfaces.user_repo import IUserRepo
 
 
 class UserService:
-    def __init__(self, user_repo: IUserRepo):
+    def __init__(self, user_repo: IUserRepo, session=None):
         self.user_repo = user_repo
+        self.session = session
 
     def create_user(
         self,
@@ -30,7 +31,9 @@ class UserService:
             role=role,
             full_name=full_name,
         )
-        return self.user_repo.save(user)
+        saved = self.user_repo.save(user)
+        self._commit_if_needed()
+        return saved
 
     def authenticate(self, email: str, password: str) -> dict:
         user = self.user_repo.get_by_email(email)
@@ -74,7 +77,9 @@ class UserService:
             full_name=user.full_name,
             is_active=user.is_active,
         )
-        return self.user_repo.save(updated)
+        saved = self.user_repo.save(updated)
+        self._commit_if_needed()
+        return saved
 
     def change_password(self, user_id: int, old_password: str, new_password: str) -> User:
         user = self.get_user(user_id)
@@ -91,8 +96,15 @@ class UserService:
             full_name=user.full_name,
             is_active=user.is_active,
         )
-        return self.user_repo.save(updated)
+        saved = self.user_repo.save(updated)
+        self._commit_if_needed()
+        return saved
 
     def delete_user(self, user_id: int) -> None:
         self.get_user(user_id)
         self.user_repo.delete(user_id)
+        self._commit_if_needed()
+
+    def _commit_if_needed(self) -> None:
+        if self.session is not None:
+            self.session.commit()

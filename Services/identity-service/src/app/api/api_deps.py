@@ -15,5 +15,4 @@ def get_user_repo(db: Session = Depends(get_session)) -> UserRepo:
 
 
 def get_user_service(db: Session = Depends(get_session)) -> UserService:
-    return UserService(user_repo=UserRepo(db))
-
+    return UserService(user_repo=UserRepo(db), session=db)

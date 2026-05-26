@@ -15,4 +15,4 @@ def get_product_repo(db: Session = Depends(get_session)) -> ProductRepo:
 
 
 def get_product_service(db: Session = Depends(get_session)) -> ProductService:
-    return ProductService(product_repo=ProductRepo(db))
+    return ProductService(product_repo=ProductRepo(db), session=db)
