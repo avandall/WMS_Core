@@ -1,39 +1,65 @@
 # Internal Architecture Refactor Plan
 
-This plan starts after the gRPC microservice extraction is complete. The current stack is
-gRPC-first microservices with a pragmatic Clean Architecture/DDD-lite structure inherited
-from the monolith. The next goal is to optimize each service around its real WMS role.
+This plan starts from the current `gRPC` branch where the active runtime is already
+gRPC-first microservices. The legacy `Services/wms-monolith` tree is out of scope for this
+plan. The next goal is to optimize the internal architecture of each active service around
+its real WMS ownership without forcing heavy DDD everywhere.
+
+## Current Baseline
+
+- Runtime services exist for gateway, identity, customer, product, warehouse, inventory,
+  documents, audit, reporting, and AI.
+- The monolith is no longer part of the active architecture. Do not spend refactor effort on
+  `Services/wms-monolith` unless a future migration/reference task explicitly asks for it.
+- Root compose gives each runtime service a service-owned datastore connection.
+- Redis Streams exists as the async event bus with durable consumer groups, DLQ streams, and
+  replay support.
+- `proto/wms/*/v1` is the transport contract source; generated `*_pb2.py` files are build
+  artifacts and should not become architecture boundaries.
+- Some active services still contain internal modules that are not owned by that service. Treat
+  these as service-boundary cleanup targets, not as monolith migration work:
+  - `documents-service`: audit, customers, inventory, positions, products, users, warehouses
+  - `warehouse-service`: documents, inventory, positions, products
+  - `inventory-service`: products, warehouses
+  - `product-service`: inventory
+  - `identity-service`: positions
+  - `reporting-service`: operational-style modules plus reporting
+- `docs/data_ownership.md` and `docs/events.md` are the current ownership/event baselines
+  that this plan must keep consistent.
 
 ## Target Architecture
 
 Use a mixed architecture instead of forcing one pattern everywhere:
 
-| Service | Target pattern | Reason |
-| --- | --- | --- |
-| `api-gateway` | BFF/API composition | Public REST entrypoint, auth, request validation, gRPC error mapping |
-| `identity-service` | Lightweight Clean Architecture | Auth/user/token logic, few domain aggregates |
-| `customer-service` | CRUD + application service | Mostly customer profile and purchase history operations |
-| `product-service` | Catalog CRUD + light domain rules | Product/SKU catalog, validation, lifecycle rules |
-| `warehouse-service` | Tactical DDD | Warehouse/location/bin rules are WMS core concepts |
-| `inventory-service` | Tactical DDD + use cases | Stock movement, reservations, idempotency, consistency rules |
-| `documents-service` | Tactical DDD + aggregate workflow | Draft/post/cancel document lifecycle drives inventory changes |
-| `audit-service` | Event append/read service | Durable event ingestion and audit query surface |
-| `reporting-service` | CQRS/read-model projections | Analytics should read projections, not copy operational models |
-| `ai-service` | Pipeline/adapters | Reindex, retrieval, generation, model/provider adapters |
+| Service | Target pattern | Owned internals | Allowed external view |
+| --- | --- | --- | --- |
+| `api-gateway` | BFF/API composition | REST routes, auth, validation, request IDs, tracing, gRPC error mapping | gRPC clients and response composition only |
+| `identity-service` | Lightweight Clean Architecture | users, auth/token policy, roles/permissions | identity lookup/auth APIs |
+| `customer-service` | CRUD + application service | customer profile and purchase history ownership | customer query APIs/events |
+| `product-service` | Catalog CRUD + light domain rules | products/SKUs/catalog lifecycle | product query APIs/events |
+| `warehouse-service` | Tactical DDD where useful | warehouses, locations/bins, capacity/status metadata | warehouse/location APIs/events |
+| `inventory-service` | Tactical DDD + use cases | stock, reservations, movement ledger, idempotency | product/warehouse references by ID only |
+| `documents-service` | Tactical DDD + aggregate workflow | documents, document items, lifecycle state | product/customer/warehouse references by ID/snapshots only |
+| `audit-service` | Event append/read service | audit event records | event envelopes consumed from Redis Streams |
+| `reporting-service` | CQRS/read-model projections | projection tables and event idempotency ledger | operational snapshots from events only |
+| `ai-service` | Pipeline/adapters | opt-in ingestion, retrieval, generation, provider adapters | projection snapshots/events only |
 
 ## Architecture Rules
 
-- `domain` must not import `application`, `infrastructure`, gRPC, FastAPI, SQLAlchemy sessions, or Redis clients.
-- `application` coordinates use cases and depends on ports/interfaces, not concrete repositories.
-- `infrastructure` implements repository/event-bus/search adapters.
+- A service may write only its owned tables. Cross-service copies are read models or
+  denormalized snapshots, never source-of-truth tables.
+- `domain` must not import `application`, `infrastructure`, gRPC, FastAPI, SQLAlchemy sessions,
+  Redis clients, or generated protobuf modules.
+- `application` coordinates use cases and depends on ports/interfaces, not concrete
+  repositories, transport DTOs, or other service databases.
+- `infrastructure` implements repository, event-bus, database, search, and provider adapters.
 - `grpc`/HTTP adapters translate transport DTOs to application commands/queries.
-- Service-owned data remains mandatory; no cross-service database joins.
-- Events are contracts. Additive event changes require schema versioning and contract tests.
 - API Gateway must not contain WMS business rules.
-- Every refactor phase must include focused tests for changed logic and a regression run that
-  proves the API Gateway/gRPC flow still works.
-- AI must remain outside default dev/test flows. Do not run AI tests, build AI images, or install
-  heavy AI dependencies unless the phase explicitly changes `ai-service`.
+- Events are contracts. Additive event changes require schema versioning and contract tests;
+  breaking changes require a new event type or versioned consumer path.
+- Default dev/test/build flows must not build AI images, install heavy AI dependencies, or run AI
+  tests unless the phase explicitly changes `ai-service`.
+- Generated protobuf files may be regenerated, but hand edits belong in `proto/wms/*/v1`.
 
 ## Testing Policy
 
@@ -41,11 +67,14 @@ Each architecture refactor phase must finish with a verification set appropriate
 radius:
 
 - Unit tests for changed domain/application logic.
-- Contract tests for boundaries, events, API Gateway behavior, and service ownership rules.
+- Import-boundary and ownership contract tests for changed services.
+- Event contract tests for producers, consumers, schema versioning, unknown fields, and replay.
+- API Gateway contract tests when public REST/gRPC behavior or error mapping changes.
 - E2E gateway stack tests when public REST/gRPC behavior, compose config, shared utilities, or
   event flow changes.
 - `docker compose config --quiet` when compose changes.
-- `kubectl kustomize deploy/kubernetes/base` and server dry-run when Kubernetes manifests change.
+- `kubectl kustomize deploy/kubernetes/base` and server dry-run when Kubernetes manifests
+  change.
 - `git diff --check` before commit.
 
 Default test commands must avoid AI:
@@ -82,45 +111,82 @@ Examples:
 
 ```text
 Phase A: add architecture boundary tests
-Phase B: refactor document lifecycle aggregate
-Phase C: harden inventory movement use cases
+Phase B: clean service module ownership
+Phase C: refactor document lifecycle aggregate
 ```
 
-## Phase A: Architecture Baseline
+## Phase A: Architecture Baseline and Guardrails
 
-Goal: make the intended architecture explicit and testable.
+Status: DONE.
 
-- Add `docs/architecture.md` with the target patterns and dependency rules.
-- Add import-boundary contract tests per service category.
-- Add a service template reference under `docs/service_template.md`.
-- Mark which existing modules are legacy carry-over versus target structure.
+Goal: make the intended architecture explicit and testable before moving logic.
+
+- Added `docs/architecture.md` with the target patterns, dependency rules, and module
+  ownership map.
+- Added `docs/service_template.md` with the expected folder shape per service category:
+  BFF, CRUD service, DDD service, event consumer, read-model service, and AI pipeline.
+- Added import-boundary contract tests per service category.
+- Added ownership baseline tests that fail if active services add new non-owned modules or
+  datastore tables before Phase B.
+- Marked generated protobuf packages as allowed transport artifacts, not domain/application
+  dependencies.
 
 Acceptance:
 
 - Contract tests fail if `domain` imports infrastructure or transport code.
-- New contributors can identify the target pattern for each service.
+- Contract tests fail if a service registers non-owned operational modules as owned tables.
+- New contributors can identify the target pattern and owned internals for each service.
 
-## Phase B: Documents Domain Refactor
+## Phase B: Service Ownership Cleanup
+
+Goal: remove non-owned internal modules from active services before deeper domain refactors.
+
+- Trim each service to its owned module set:
+  - `documents-service`: keep documents; replace product/customer/warehouse/user/inventory
+    modules with application ports, gRPC clients, event snapshots, or simple reference DTOs.
+  - `warehouse-service`: keep warehouses/locations; remove document/product/inventory ownership
+    code unless converted to explicit read models.
+  - `inventory-service`: keep inventory/reservations/movements; replace product/warehouse modules
+    with reference lookups or event-updated snapshots.
+  - `product-service`: keep products; remove inventory module ownership.
+  - `identity-service`: keep users; remove positions module ownership unless it becomes an
+    explicit auth/role read model.
+  - `reporting-service`: keep reporting projections and idempotency ledger; convert non-owned
+    operational modules into projection models or remove them.
+- Update DB initialization lists so services create only owned tables plus explicitly named read
+  models.
+- Keep compatibility with existing gRPC APIs while internals move.
+- Add boundary tests that encode the final allowed module list for each service.
+
+Acceptance:
+
+- `find Services/*/src/app/modules -maxdepth 1` shows only owned modules or explicitly named
+  read-model modules.
+- Service startup still initializes required tables without cross-service source-of-truth tables.
+- Gateway stack tests still pass through the existing REST/gRPC flows.
+
+## Phase C: Documents Domain Refactor
 
 Goal: make `documents-service` the owner of document lifecycle rules.
 
-- Introduce `Document` aggregate with states: `draft`, `posted`, `cancelled`.
+- Introduce a `Document` aggregate with states: `draft`, `posted`, `cancelled`.
 - Move posting/cancellation rules out of gRPC servicer into application use cases.
-- Emit typed domain events:
-  - `DocumentCreated`
-  - `DocumentPosted`
-  - `DocumentCancelled`
-  - `InventoryMovementRequested`
+- Keep references to customer/product/warehouse as IDs and immutable document-line snapshots.
+- Emit typed domain events aligned with `docs/events.md`; introduce new names only with event
+  contract tests and migration notes:
+  - current: `DocumentUploaded`, `DocumentPosted`
+  - target additions when implemented: `DocumentCancelled`, `InventoryMovementRequested`
 - Add idempotency key handling for posting.
-- Keep gRPC payload mapping in adapter layer only.
+- Keep gRPC payload mapping in the adapter layer only.
 
 Acceptance:
 
 - Posting the same document/event twice is idempotent.
 - Invalid state transitions are rejected in domain/application tests.
 - gRPC servicer contains transport mapping only.
+- No product/customer/warehouse repository implementation is owned by `documents-service`.
 
-## Phase C: Inventory Domain Refactor
+## Phase D: Inventory Domain Refactor
 
 Goal: make inventory consistency explicit.
 
@@ -133,20 +199,58 @@ Goal: make inventory consistency explicit.
   - `Quantity`
   - `Sku`
   - `WarehouseLocation`
-- Add movement ledger table/model if not already covered by current schema.
-- Publish typed events:
-  - `InventoryAdjusted`
-  - `StockReserved`
-  - `ReservationReleased`
-  - `InventoryMovementApplied`
+- Add or formalize a movement ledger table/model if not already covered by the current schema.
+- Publish typed events aligned with `docs/events.md`; introduce new names only with event
+  contract tests and migration notes:
+  - current: `InventoryAdjusted`, inventory read/list events
+  - target additions when implemented: `StockReserved`, `ReservationReleased`,
+    `InventoryMovementApplied`
 - Enforce idempotency on movement events.
 
 Acceptance:
 
 - Stock movement tests cover positive, negative, duplicate, and rollback cases.
 - Event consumers can replay inventory movement safely.
+- Inventory references product and warehouse by ID/snapshot/API/event only.
 
-## Phase D: Warehouse Domain Refactor
+## Phase E: Event Contract Hardening
+
+Goal: make async integration safe across services before expanding projections.
+
+- Define event schemas in docs and tests for the current event set in `docs/events.md`.
+- Add fixtures for each published event type.
+- Add producer tests that assert required envelope fields and service-owned payload fields.
+- Add consumer tests for unknown fields, duplicate `event_id`, replay metadata, and older schema
+  versions.
+- Document the breaking-change policy and when to create a new event type.
+
+Acceptance:
+
+- Event schema changes require test updates.
+- Consumers tolerate additive fields.
+- Replay through `wms.events.replay` preserves idempotency behavior.
+
+## Phase F: Reporting CQRS Refactor
+
+Goal: turn `reporting-service` into a read-model service.
+
+- Stop expanding non-owned operational modules inside reporting.
+- Keep `reporting_read_model_events` as the idempotency ledger.
+- Create projection tables only for reporting queries that exist or are planned:
+  - `inventory_summary`
+  - `document_summary`
+  - `sales_summary`
+  - `warehouse_activity_summary`
+- Convert Redis consumers into projection handlers.
+- Queries read projection tables only.
+
+Acceptance:
+
+- Reports do not depend on operational repository implementations.
+- Replay can rebuild projections from `wms.events` or `wms.events.replay`.
+- Reporting DB contains projection/read-model tables, not copied source-of-truth modules.
+
+## Phase G: Warehouse Domain Refactor
 
 Goal: separate warehouse/location rules from generic CRUD.
 
@@ -158,43 +262,9 @@ Goal: separate warehouse/location rules from generic CRUD.
 Acceptance:
 
 - Warehouse service does not own inventory movement logic.
-- Inventory service references warehouse by id/location metadata through APIs/events only.
+- Inventory service references warehouse by ID/location metadata through APIs/events only.
 
-## Phase E: Reporting CQRS Refactor
-
-Goal: turn `reporting-service` into a read-model service.
-
-- Stop expanding copied operational modules inside reporting.
-- Create projection tables:
-  - `inventory_summary`
-  - `document_summary`
-  - `sales_summary`
-  - `warehouse_activity_summary`
-- Convert Redis consumers into projection handlers.
-- Queries read projection tables only.
-- Keep `reporting_read_model_events` as the idempotency ledger.
-
-Acceptance:
-
-- Reports do not depend on operational repository implementations.
-- Replay can rebuild projections from `wms.events` or `wms.events.replay`.
-
-## Phase F: Event Contract Hardening
-
-Goal: make async integration safe across services.
-
-- Define event schemas in docs and tests.
-- Add event contract fixtures for each published event type.
-- Add producer tests that assert required fields.
-- Add consumer tests for unknown fields and older schema versions.
-- Document breaking-change policy.
-
-Acceptance:
-
-- Event schema changes require test updates.
-- Consumers tolerate additive fields.
-
-## Phase G: Lightweight CRUD Service Cleanup
+## Phase H: Lightweight CRUD Service Cleanup
 
 Goal: simplify services that do not need heavy DDD.
 
@@ -210,30 +280,32 @@ Actions:
 - Remove empty domain folders if they do not contain real rules.
 - Keep domain rules only where meaningful, such as SKU uniqueness or auth token policy.
 - Standardize command/query DTOs.
+- Keep authz/identity clients in adapter/application boundaries, not domain.
 
 Acceptance:
 
 - CRUD service folders are smaller and easier to scan.
-- No fake abstraction remains solely because the monolith had it.
+- No fake abstraction remains solely because the earlier code layout had it.
 
-## Phase H: API Gateway BFF Cleanup
+## Phase I: API Gateway BFF Cleanup
 
 Goal: keep gateway as transport orchestration only.
 
-- Keep auth, validation, rate limits, tracing, request ids, and gRPC error mapping.
-- Move any WMS business decision into owning service.
+- Keep auth, validation, rate limits, tracing, request IDs, and gRPC error mapping.
+- Move any WMS business decision into the owning service.
 - Keep response composition explicit and covered by contract tests.
+- Keep OpenAPI contract tests aligned with gateway routes after any endpoint movement.
 
 Acceptance:
 
 - Gateway tests assert routing/error mapping.
 - No inventory/document/customer business rules live in gateway.
 
-## Phase I: AI Pipeline Cleanup
+## Phase J: AI Pipeline Cleanup
 
 Goal: keep AI isolated and event-driven.
 
-- Keep AI behind opt-in runtime profile.
+- Keep AI behind the opt-in compose/runtime profile.
 - Keep AI outside default contract/E2E tests and default Docker builds.
 - Add a separate AI test command/profile for phases that explicitly touch AI.
 - Split AI internals into:
@@ -252,15 +324,16 @@ Acceptance:
 
 ## Suggested Order
 
-1. Phase A: Architecture Baseline
-2. Phase B: Documents Domain Refactor
-3. Phase C: Inventory Domain Refactor
-4. Phase F: Event Contract Hardening
-5. Phase E: Reporting CQRS Refactor
-6. Phase D: Warehouse Domain Refactor
-7. Phase G: Lightweight CRUD Service Cleanup
-8. Phase H: API Gateway BFF Cleanup
-9. Phase I: AI Pipeline Cleanup
+1. Phase A: Architecture Baseline and Guardrails
+2. Phase B: Service Ownership Cleanup
+3. Phase C: Documents Domain Refactor
+4. Phase D: Inventory Domain Refactor
+5. Phase E: Event Contract Hardening
+6. Phase F: Reporting CQRS Refactor
+7. Phase G: Warehouse Domain Refactor
+8. Phase H: Lightweight CRUD Service Cleanup
+9. Phase I: API Gateway BFF Cleanup
+10. Phase J: AI Pipeline Cleanup
 
 ## Non-Goals
 
@@ -268,4 +341,5 @@ Acceptance:
 - Do not merge service databases.
 - Do not make AI part of default dev/test.
 - Do not move business logic into API Gateway for convenience.
+- Do not hand-edit generated protobuf Python files.
 - Do not introduce a service mesh before service boundaries are stable.
