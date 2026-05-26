@@ -25,14 +25,18 @@ def test_shared_events_support_consumer_groups_retry_and_dlq() -> None:
     assert "DurableRedisStreamConsumer" in exports
 
 
-def test_audit_reporting_and_ai_consumers_use_durable_groups() -> None:
+def test_audit_inventory_reporting_and_ai_consumers_use_durable_groups() -> None:
     audit = _read("Services/audit-service/src/audit_service/event_consumer.py")
+    inventory = _read("Services/inventory-service/src/inventory_service/event_consumer.py")
     reporting = _read("Services/reporting-service/src/reporting_service/event_consumer.py")
     ai = _read("Services/ai-service/src/ai_service/event_consumer.py")
 
     assert "DurableRedisStreamConsumer" in audit
     assert "AUDIT_EVENT_CONSUMER_GROUP" in audit
     assert "AUDIT_EVENT_DLQ_STREAM" in audit
+    assert "DurableRedisStreamConsumer" in inventory
+    assert "INVENTORY_DLQ_STREAM" in inventory
+    assert "InventoryMovementRequested" in inventory
     assert "DurableRedisStreamConsumer" in reporting
     assert "REPORTING_READ_MODEL_CONSUMER_GROUP" in reporting
     assert "REPORTING_READ_MODEL_DLQ_STREAM" in reporting
@@ -77,6 +81,7 @@ def test_phase_18_docs_and_runtime_config_are_complete() -> None:
 
     assert "Phase 18: Advanced Async/Analytics Workflows — DONE" in roadmap
     assert "wms.events.audit.dlq" in events
+    assert "wms.events.inventory.dlq" in events
     assert "wms.events.reporting.dlq" in events
     assert "wms.events.ai.dlq" in events
     assert "scripts/replay_events.py" in events

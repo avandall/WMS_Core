@@ -111,6 +111,7 @@ class AuditEventConsumer:
             repo = AuditEventRepo(db)
             repo.create_event(
                 action=envelope.type,
+                event_id=envelope.event_id,
                 entity_type=payload.get("entity_type"),
                 entity_id=str(payload["entity_id"]) if payload.get("entity_id") is not None else None,
                 warehouse_id=_int_or_none(payload.get("warehouse_id")),

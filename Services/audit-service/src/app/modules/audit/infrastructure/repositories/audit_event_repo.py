@@ -23,13 +23,19 @@ class AuditEventRepo(TransactionalRepository):
         self,
         *,
         action: str,
+        event_id: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_id: Optional[str] = None,
         warehouse_id: Optional[int] = None,
         payload: Optional[dict[str, Any]] = None,
         user_id: Optional[int] = None,
     ) -> int:
+        if event_id and self.get_by_event_id(event_id):
+            logger.info("Skipping duplicate audit event: event_id=%s", event_id)
+            return 0
+
         event = AuditEventModel(
+            event_id=event_id,
             request_id=request_id_ctx.get(),
             user_id=user_id,
             action=action,
@@ -44,6 +50,15 @@ class AuditEventRepo(TransactionalRepository):
             f"Audit event: action={action} entity_type={entity_type} entity_id={entity_id} warehouse_id={warehouse_id}"
         )
         return event.id
+
+    def get_by_event_id(self, event_id: str) -> Optional[AuditEventModel]:
+        return (
+            self.session.execute(
+                select(AuditEventModel).where(AuditEventModel.event_id == event_id)
+            )
+            .scalars()
+            .one_or_none()
+        )
 
     def get(self, event_id: int) -> Optional[AuditEventModel]:
         return self.session.get(AuditEventModel, event_id)

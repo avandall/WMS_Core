@@ -14,6 +14,7 @@ class AuditEventModel(Base):
     __tablename__ = "audit_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(String(100), nullable=True, unique=True, index=True)
     request_id = Column(String(64), nullable=True, index=True)
     user_id = Column(Integer, nullable=True, index=True)
     action = Column(String(100), nullable=False, index=True)

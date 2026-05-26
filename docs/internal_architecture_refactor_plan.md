@@ -223,14 +223,16 @@ Acceptance:
 
 ## Phase E: Event Contract Hardening
 
+Status: DONE.
+
 Goal: make async integration safe across services before expanding projections.
 
-- Define event schemas in docs and tests for the current event set in `docs/events.md`.
-- Add fixtures for each published event type.
-- Add producer tests that assert required envelope fields and service-owned payload fields.
-- Add consumer tests for unknown fields, duplicate `event_id`, replay metadata, and older schema
-  versions.
-- Document the breaking-change policy and when to create a new event type.
+- Defined event schemas in `docs/events.md` and `tests/fixtures/event_contracts.json`.
+- Added fixtures for each published event type.
+- Added contract tests that assert required envelope fields and service-owned payload fields.
+- Added consumer hardening checks for unknown fields, duplicate `event_id`, replay metadata, and
+  older schema versions.
+- Documented the breaking-change policy and when to create a new event type.
 
 Acceptance:
 
