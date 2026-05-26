@@ -37,7 +37,7 @@ PHASE_B_ALLOWED_NON_OWNED_MODULES = {
         "warehouses",
     },
     "identity-service": set(),
-    "inventory-service": {"products", "warehouses"},
+    "inventory-service": set(),
     "product-service": set(),
     "reporting-service": {"customers", "documents", "inventory", "products", "warehouses"},
     "warehouse-service": {"documents", "inventory", "positions", "products"},
@@ -59,7 +59,7 @@ PHASE_B_ALLOWED_NON_OWNED_INIT_TABLES = {
     "customer-service": set(),
     "documents-service": {"customers", "products", "warehouses"},
     "identity-service": set(),
-    "inventory-service": {"products", "warehouses"},
+    "inventory-service": set(),
     "product-service": set(),
     "reporting-service": {
         "customer_purchases",

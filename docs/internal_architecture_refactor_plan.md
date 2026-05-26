@@ -20,7 +20,6 @@ its real WMS ownership without forcing heavy DDD everywhere.
   these as service-boundary cleanup targets, not as monolith migration work:
   - `documents-service`: audit, customers, inventory, positions, products, users, warehouses
   - `warehouse-service`: documents, inventory, positions, products
-  - `inventory-service`: products, warehouses
   - `reporting-service`: operational-style modules plus reporting
 - `docs/data_ownership.md` and `docs/events.md` are the current ownership/event baselines
   that this plan must keep consistent.
@@ -31,6 +30,8 @@ Phase B completed service ownership cleanup:
 - `product-service`: kept products and removed inventory module/table ownership.
 - `customer-service`: kept customers and removed unused shared reporting orchestration.
 - `audit-service`: kept audit and removed unused shared reporting orchestration.
+- `inventory-service`: kept inventory, moved warehouse stock rows to inventory-owned models,
+  and removed product/warehouse module ownership.
 
 ## Target Architecture
 
@@ -151,8 +152,8 @@ Goal: remove non-owned internal modules from active services before deeper domai
     modules with application ports, gRPC clients, event snapshots, or simple reference DTOs.
   - `warehouse-service`: keep warehouses/locations; remove document/product/inventory ownership
     code unless converted to explicit read models.
-  - `inventory-service`: keep inventory/reservations/movements; replace product/warehouse modules
-    with reference lookups or event-updated snapshots.
+  - `inventory-service`: DONE. Kept inventory, removed product/warehouse modules, and kept
+    warehouse stock rows as inventory-owned ID references.
   - `product-service`: DONE. Kept products and removed inventory module/table ownership.
   - `identity-service`: DONE. Kept users and removed the non-owned positions module.
   - `reporting-service`: keep reporting projections and idempotency ledger; convert non-owned

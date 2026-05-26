@@ -1,6 +1,6 @@
 from typing import List
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.shared.domain.business_exceptions import (
@@ -11,6 +11,7 @@ from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.inventory.infrastructure.models.inventory import InventoryModel
+from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
 
 
 class InventoryRepo(TransactionalRepository, IInventoryRepo):
@@ -57,6 +58,54 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
     def get_all(self) -> List[InventoryItem]:
         rows = self.session.execute(select(InventoryModel)).scalars().all()
         return [self._to_domain(row) for row in rows]
+
+    def get_inventory_by_warehouse_rows(self) -> list[dict]:
+        rows = self.session.execute(
+            select(WarehouseInventoryModel).order_by(
+                WarehouseInventoryModel.warehouse_id,
+                WarehouseInventoryModel.product_id,
+            )
+        ).scalars().all()
+        return [
+            {
+                "product_id": int(row.product_id),
+                "warehouse_id": int(row.warehouse_id),
+                "warehouse_name": str(row.warehouse_id),
+                "quantity": int(row.quantity),
+            }
+            for row in rows
+        ]
+
+    def get_warehouse_distribution(self, product_id: int) -> list[dict]:
+        rows = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == product_id
+            )
+        ).scalars().all()
+        return [
+            {
+                "warehouse_id": int(row.warehouse_id),
+                "warehouse_name": str(row.warehouse_id),
+                "quantity": int(row.quantity),
+            }
+            for row in rows
+        ]
+
+    def get_warehouse_summary(self) -> dict[int, dict]:
+        rows = self.session.execute(
+            select(
+                WarehouseInventoryModel.warehouse_id,
+                func.count(WarehouseInventoryModel.product_id),
+                func.coalesce(func.sum(WarehouseInventoryModel.quantity), 0),
+            ).group_by(WarehouseInventoryModel.warehouse_id)
+        ).all()
+        return {
+            int(warehouse_id): {
+                "total_items": int(total_items),
+                "unique_products": int(unique_products),
+            }
+            for warehouse_id, unique_products, total_items in rows
+        }
 
     def delete(self, product_id: int) -> None:
         row = self.session.get(InventoryModel, product_id)

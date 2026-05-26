@@ -6,8 +6,6 @@ from shared_utils.events import get_publisher
 
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
-from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
-from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
 from app.shared.core.database import get_session
 
 from inventory_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_grpc
@@ -26,11 +24,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
     def _service(self) -> tuple[InventoryService, object]:
         session_gen = get_session()
         db = next(session_gen)
-        service = InventoryService(
-            inventory_repo=InventoryRepo(db),
-            product_repo=ProductRepo(db),
-            warehouse_repo=WarehouseRepo(db),
-        )
+        service = InventoryService(inventory_repo=InventoryRepo(db))
         return service, db
 
     def ListInventoryItems(self, request: inventory_pb2.ListInventoryItemsRequest, context: grpc.ServicerContext):

@@ -202,7 +202,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-inventory.db
-      INIT_DB_TABLES: products,warehouses,inventory,warehouse_inventory
+      INIT_DB_TABLES: inventory,warehouse_inventory
     depends_on:
       event-bus:
         condition: service_healthy

@@ -1,4 +1,4 @@
 from .inventory import InventoryModel
-from .position_inventory import PositionInventoryModel
+from .warehouse_inventory import WarehouseInventoryModel
 
-__all__ = ["InventoryModel", "PositionInventoryModel"]
+__all__ = ["InventoryModel", "WarehouseInventoryModel"]
