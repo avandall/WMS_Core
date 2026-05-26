@@ -82,6 +82,7 @@ def import_all_models():
 
     model_modules = [
         "app.modules.reporting.infrastructure.models.read_model_event",
+        "app.modules.reporting.infrastructure.models.projections",
     ]
     for module in model_modules:
         try:

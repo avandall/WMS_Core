@@ -202,6 +202,9 @@ class InventoryService:
                 "entity_id": document_id,
                 "document_id": document_id,
                 "doc_type": doc_type,
+                "from_warehouse_id": from_warehouse_id,
+                "to_warehouse_id": to_warehouse_id,
+                "items": items,
             },
         )
         return True

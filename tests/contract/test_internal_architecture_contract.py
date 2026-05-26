@@ -42,7 +42,13 @@ OWNED_INIT_TABLES = {
     "identity-service": {"users"},
     "inventory-service": {"inventory", "warehouse_inventory", "inventory_movement_ledger"},
     "product-service": {"products"},
-    "reporting-service": {"reporting_read_model_events"},
+    "reporting-service": {
+        "reporting_read_model_events",
+        "inventory_summary",
+        "document_summary",
+        "sales_summary",
+        "warehouse_activity_summary",
+    },
     "warehouse-service": {"warehouses", "positions"},
 }
 

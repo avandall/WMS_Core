@@ -240,17 +240,18 @@ Acceptance:
 
 ## Phase F: Reporting CQRS Refactor
 
+Status: DONE.
+
 Goal: turn `reporting-service` into a read-model service.
 
-- Stop expanding non-owned operational modules inside reporting.
-- Keep `reporting_read_model_events` as the idempotency ledger.
-- Create projection tables only for reporting queries that exist or are planned:
+- Kept `reporting_read_model_events` as the event idempotency ledger.
+- Added projection tables for existing/planned report queries:
   - `inventory_summary`
   - `document_summary`
   - `sales_summary`
   - `warehouse_activity_summary`
-- Convert Redis consumers into projection handlers.
-- Queries read projection tables only.
+- Converted read-model ingestion into projection handlers for document and inventory events.
+- Reporting gRPC queries read projection tables only.
 
 Acceptance:
 

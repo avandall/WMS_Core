@@ -15,7 +15,7 @@ Root `docker-compose.yml` now gives every service its own datastore connection i
 | `inventory-service` | `sqlite:////tmp/wms-inventory.db` | `inventory`, `warehouse_inventory`, `inventory_movement_ledger` |
 | `documents-service` | `sqlite:////tmp/wms-documents.db` | `documents`, `document_items` |
 | `audit-service` | `sqlite:////tmp/wms-audit.db` | `audit_events` |
-| `reporting-service` | `sqlite:////tmp/wms-reporting.db` | `reporting_read_model_events` |
+| `reporting-service` | `sqlite:////tmp/wms-reporting.db` | `reporting_read_model_events`, `inventory_summary`, `document_summary`, `sales_summary`, `warehouse_activity_summary` |
 | `ai-service` | `sqlite:////tmp/wms-ai.db` plus `/tmp/wms-ai-vector-db` | opt-in via the `ai` profile |
 
 ## Ownership Rules
