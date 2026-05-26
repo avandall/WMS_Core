@@ -18,25 +18,3 @@ class PositionResponse(BaseModel):
     type: str
     description: Optional[str] = None
     is_active: bool
-
-
-class PositionMoveRequest(BaseModel):
-    product_id: int
-    quantity: int = Field(..., gt=0)
-    from_position: str = Field(..., min_length=1, max_length=50)
-    to_position: str = Field(..., min_length=1, max_length=50)
-
-
-class WarehouseTransferPositionRequest(BaseModel):
-    product_id: int
-    quantity: int = Field(..., gt=0)
-    from_warehouse_id: int
-    to_warehouse_id: int
-    from_position: str = Field("SHIPPING", min_length=1, max_length=50)
-    to_position: str = Field("RECEIVING", min_length=1, max_length=50)
-
-
-class PositionInventoryItemResponse(BaseModel):
-    product_id: int
-    quantity: int
-

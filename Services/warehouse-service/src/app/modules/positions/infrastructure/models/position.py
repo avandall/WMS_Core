@@ -35,8 +35,3 @@ class PositionModel(Base):
     )
 
     warehouse = relationship("WarehouseModel", back_populates="positions")
-    inventory_items = relationship(
-        "PositionInventoryModel",
-        back_populates="position",
-        cascade="all, delete-orphan",
-    )

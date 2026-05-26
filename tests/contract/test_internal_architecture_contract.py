@@ -21,7 +21,7 @@ OWNED_MODULES = {
     "inventory-service": {"inventory"},
     "product-service": {"products"},
     "reporting-service": {"reporting"},
-    "warehouse-service": {"warehouses"},
+    "warehouse-service": {"warehouses", "positions"},
 }
 
 PHASE_B_ALLOWED_NON_OWNED_MODULES = {
@@ -40,7 +40,7 @@ PHASE_B_ALLOWED_NON_OWNED_MODULES = {
     "inventory-service": set(),
     "product-service": set(),
     "reporting-service": {"customers", "documents", "inventory", "products", "warehouses"},
-    "warehouse-service": {"documents", "inventory", "positions", "products"},
+    "warehouse-service": set(),
 }
 
 OWNED_INIT_TABLES = {
@@ -71,12 +71,7 @@ PHASE_B_ALLOWED_NON_OWNED_INIT_TABLES = {
         "warehouse_inventory",
         "warehouses",
     },
-    "warehouse-service": {
-        "inventory",
-        "position_inventory",
-        "products",
-        "warehouse_inventory",
-    },
+    "warehouse-service": set(),
 }
 
 DOMAIN_FORBIDDEN_IMPORT_PARTS = {

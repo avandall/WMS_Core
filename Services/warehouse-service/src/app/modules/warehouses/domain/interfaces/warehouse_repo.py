@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 if TYPE_CHECKING:
-    from app.modules.inventory.domain.entities.inventory import InventoryItem
     from app.modules.warehouses.domain.entities.warehouse import Warehouse
 
 
@@ -25,22 +24,6 @@ class IWarehouseRepo(ABC):
 
     @abstractmethod
     def delete(self, warehouse_id: int) -> None:
-        pass
-
-    @abstractmethod
-    def get_warehouse_inventory(self, warehouse_id: int) -> List["InventoryItem"]:
-        pass
-
-    @abstractmethod
-    def add_product_to_warehouse(
-        self, warehouse_id: int, product_id: int, quantity: int
-    ) -> None:
-        pass
-
-    @abstractmethod
-    def remove_product_from_warehouse(
-        self, warehouse_id: int, product_id: int, quantity: int
-    ) -> None:
         pass
 
 

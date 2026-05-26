@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.shared.core.logging import get_logger
@@ -10,13 +10,10 @@ from app.shared.core.transaction import TransactionalRepository
 from app.shared.domain.business_exceptions import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
-    InsufficientStockError,
-    ValidationError,
     WarehouseNotFoundError,
 )
-from app.modules.positions.domain.entities.position import Position, PositionInventoryItem
+from app.modules.positions.domain.entities.position import Position
 from app.modules.positions.infrastructure.models.position import PositionModel
-from app.modules.inventory.infrastructure.models.position_inventory import PositionInventoryModel
 from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
 
 logger = get_logger(__name__)
@@ -35,7 +32,7 @@ def _normalize_code(code: str) -> str:
 
 
 class PositionRepo(TransactionalRepository):
-    """Repository for warehouse positions and position-level inventory."""
+    """Repository for warehouse positions and bin metadata."""
 
     def __init__(self, session: Session):
         super().__init__(session)
@@ -45,12 +42,12 @@ class PositionRepo(TransactionalRepository):
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
 
-        existing_codes = set()
-        for row in self.session.execute(
-            select(PositionModel).where(PositionModel.warehouse_id == warehouse_id)
-        ).scalars().all():
-            existing_codes.add(row.code)
-        # Session uses `autoflush=False`; include pending objects as well.
+        existing_codes = {
+            row.code
+            for row in self.session.execute(
+                select(PositionModel).where(PositionModel.warehouse_id == warehouse_id)
+            ).scalars().all()
+        }
         for obj in list(self.session.new) + list(self.session.dirty):
             if isinstance(obj, PositionModel) and obj.warehouse_id == warehouse_id:
                 existing_codes.add(obj.code)
@@ -71,10 +68,7 @@ class PositionRepo(TransactionalRepository):
             created += 1
 
         if created:
-            logger.info(
-                f"Created {created} default positions for warehouse {warehouse_id}"
-            )
-            # Flush so subsequent queries can see the rows even with `autoflush=False`.
+            logger.info("Created %s default positions for warehouse %s", created, warehouse_id)
             self.session.flush()
             self._commit_if_auto()
 
@@ -161,188 +155,6 @@ class PositionRepo(TransactionalRepository):
                 f"Position {norm_code} not found in warehouse {warehouse_id}"
             )
         return model
-
-    def list_position_inventory(
-        self, warehouse_id: int, code: str
-    ) -> List[PositionInventoryItem]:
-        pos = self.get_position_model(warehouse_id, code)
-        rows = self.session.execute(
-            select(PositionInventoryModel).where(PositionInventoryModel.position_id == pos.id)
-        ).scalars().all()
-        return [
-            PositionInventoryItem(
-                warehouse_id=warehouse_id,
-                position_code=pos.code,
-                product_id=row.product_id,
-                quantity=row.quantity,
-            )
-            for row in rows
-            if row.quantity > 0
-        ]
-
-    def get_total_quantity_for_product(self, warehouse_id: int, product_id: int) -> int:
-        total = (
-            self.session.execute(
-                select(func.coalesce(func.sum(PositionInventoryModel.quantity), 0))
-                .select_from(PositionInventoryModel)
-                .join(PositionModel, PositionModel.id == PositionInventoryModel.position_id)
-                .where(
-                    PositionModel.warehouse_id == warehouse_id,
-                    PositionInventoryModel.product_id == product_id,
-                )
-            ).scalar_one()
-            or 0
-        )
-        return int(total)
-
-    def adjust_position_stock(
-        self, *, position_id: int, product_id: int, delta: int
-    ) -> None:
-        if delta == 0:
-            return
-        if delta < 0:
-            self._remove_from_position(position_id=position_id, product_id=product_id, quantity=-delta)
-        else:
-            self._add_to_position(position_id=position_id, product_id=product_id, quantity=delta)
-
-    def allocate_and_remove(
-        self,
-        *,
-        warehouse_id: int,
-        product_id: int,
-        quantity: int,
-        preferred_position_codes: Optional[List[str]] = None,
-    ) -> List[Tuple[str, int]]:
-        """
-        Remove stock from a warehouse by allocating across multiple positions.
-
-        Returns list of (position_code, removed_qty) allocations.
-        """
-        if quantity <= 0:
-            raise ValidationError("quantity must be positive")
-
-        preferred = [_normalize_code(c) for c in (preferred_position_codes or [])]
-        pos_rows = self.session.execute(
-            select(PositionModel)
-            .where(PositionModel.warehouse_id == warehouse_id, PositionModel.is_active == 1)
-            .order_by(PositionModel.code.asc())
-        ).scalars().all()
-
-        by_code = {p.code: p for p in pos_rows}
-        ordered: list[PositionModel] = []
-        for code in preferred:
-            if code in by_code:
-                ordered.append(by_code.pop(code))
-        # then any remaining, stable order
-        ordered.extend(sorted(by_code.values(), key=lambda p: p.code))
-
-        remaining = quantity
-        allocations: list[Tuple[str, int]] = []
-        for pos in ordered:
-            if remaining <= 0:
-                break
-            available = self._get_position_product_quantity(position_id=pos.id, product_id=product_id)
-            if available <= 0:
-                continue
-            take = min(available, remaining)
-            self._remove_from_position(position_id=pos.id, product_id=product_id, quantity=take)
-            allocations.append((pos.code, take))
-            remaining -= take
-
-        if remaining > 0:
-            raise InsufficientStockError(
-                f"Insufficient position stock for product {product_id} in warehouse {warehouse_id}: missing {remaining}"
-            )
-
-        return allocations
-
-    def _get_pending_row(
-        self, position_id: int, product_id: int
-    ) -> Optional[PositionInventoryModel]:
-        for obj in list(self.session.new) + list(self.session.dirty):
-            if not isinstance(obj, PositionInventoryModel):
-                continue
-            if obj.position_id == position_id and obj.product_id == product_id:
-                return obj
-        return None
-
-    def _get_position_product_quantity(self, *, position_id: int, product_id: int) -> int:
-        pending = self._get_pending_row(position_id, product_id)
-        if pending is not None:
-            return int(pending.quantity)
-
-        row = self.session.execute(
-            select(PositionInventoryModel).where(
-                PositionInventoryModel.position_id == position_id,
-                PositionInventoryModel.product_id == product_id,
-            )
-        ).scalar_one_or_none()
-        return int(row.quantity) if row else 0
-
-    def _add_to_position(self, *, position_id: int, product_id: int, quantity: int) -> None:
-        if quantity <= 0:
-            raise ValidationError("quantity must be positive")
-
-        pending = self._get_pending_row(position_id, product_id)
-        if pending is not None:
-            pending.quantity += quantity
-            pending.updated_at = func.now()
-            self._commit_if_auto()
-            return
-
-        row = self.session.execute(
-            select(PositionInventoryModel).where(
-                PositionInventoryModel.position_id == position_id,
-                PositionInventoryModel.product_id == product_id,
-            )
-        ).scalar_one_or_none()
-
-        if row:
-            row.quantity += quantity
-            row.updated_at = func.now()
-        else:
-            self.session.add(
-                PositionInventoryModel(
-                    position_id=position_id, product_id=product_id, quantity=quantity
-                )
-            )
-        self._commit_if_auto()
-
-    def _remove_from_position(
-        self, *, position_id: int, product_id: int, quantity: int
-    ) -> None:
-        if quantity <= 0:
-            raise ValidationError("quantity must be positive")
-
-        pending = self._get_pending_row(position_id, product_id)
-        if pending is not None:
-            if pending.quantity < quantity:
-                raise InsufficientStockError(
-                    f"Insufficient stock at position {position_id} for product {product_id}"
-                )
-            pending.quantity -= quantity
-            pending.updated_at = func.now()
-            if pending.quantity == 0:
-                self.session.expunge(pending)
-            self._commit_if_auto()
-            return
-
-        row = self.session.execute(
-            select(PositionInventoryModel).where(
-                PositionInventoryModel.position_id == position_id,
-                PositionInventoryModel.product_id == product_id,
-            )
-        ).scalar_one_or_none()
-        if not row or row.quantity < quantity:
-            raise InsufficientStockError(
-                f"Insufficient stock at position {position_id} for product {product_id}"
-            )
-
-        row.quantity -= quantity
-        row.updated_at = func.now()
-        if row.quantity == 0:
-            self.session.delete(row)
-        self._commit_if_auto()
 
     @staticmethod
     def _to_domain(model: PositionModel) -> Position:

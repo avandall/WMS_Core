@@ -31,11 +31,3 @@ class Position(DomainEntity):
     @property
     def identity(self) -> int:
         return self.id
-
-
-@dataclass(frozen=True)
-class PositionInventoryItem:
-    warehouse_id: int
-    position_code: str
-    product_id: int
-    quantity: int

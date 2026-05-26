@@ -181,7 +181,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-warehouse.db
-      INIT_DB_TABLES: products,warehouses,warehouse_inventory,positions,inventory,position_inventory
+      INIT_DB_TABLES: warehouses,positions
     depends_on:
       identity-service:
         condition: service_healthy

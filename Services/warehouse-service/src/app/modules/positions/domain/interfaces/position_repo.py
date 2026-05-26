@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
-    from app.modules.positions.domain.entities.position import Position, PositionInventoryItem
+    from app.modules.positions.domain.entities.position import Position
 
 
 class IPositionRepo(ABC):
@@ -32,35 +32,8 @@ class IPositionRepo(ABC):
         pass
 
     @abstractmethod
-    def list_position_inventory(
-        self, warehouse_id: int, code: str
-    ) -> List["PositionInventoryItem"]:
-        pass
-
-    @abstractmethod
     def get_position_model(self, warehouse_id: int, code: str):
         """Internal helper for services needing DB identity (position id)."""
-        pass
-
-    @abstractmethod
-    def get_total_quantity_for_product(self, warehouse_id: int, product_id: int) -> int:
-        pass
-
-    @abstractmethod
-    def adjust_position_stock(
-        self, *, position_id: int, product_id: int, delta: int
-    ) -> None:
-        pass
-
-    @abstractmethod
-    def allocate_and_remove(
-        self,
-        *,
-        warehouse_id: int,
-        product_id: int,
-        quantity: int,
-        preferred_position_codes: Optional[List[str]] = None,
-    ):
         pass
 
 

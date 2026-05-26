@@ -81,16 +81,7 @@ def import_all_models():
     import importlib
 
     model_modules = [
-        "app.modules.audit.infrastructure.models.audit_event",
-        "app.modules.customers.infrastructure.models.customer",
-        "app.modules.customers.infrastructure.models.customer_purchase",
-        "app.modules.documents.infrastructure.models.document",
-        "app.modules.documents.infrastructure.models.document_item",
-        "app.modules.inventory.infrastructure.models.inventory",
-        "app.modules.inventory.infrastructure.models.position_inventory",
         "app.modules.positions.infrastructure.models.position",
-        "app.modules.products.infrastructure.models.product",
-        "app.modules.users.infrastructure.models.user",
         "app.modules.warehouses.infrastructure.models.warehouse",
     ]
     for module in model_modules:
