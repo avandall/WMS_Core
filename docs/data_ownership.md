@@ -10,12 +10,12 @@ Root `docker-compose.yml` now gives every service its own datastore connection i
 | --- | --- | --- |
 | `identity-service` | `sqlite:////tmp/wms-identity.db` | `users` |
 | `customer-service` | `sqlite:////tmp/wms-customer.db` | `customers` |
-| `product-service` | `sqlite:////tmp/wms-product.db` | `products`, `inventory` |
-| `warehouse-service` | `sqlite:////tmp/wms-warehouse.db` | `products`, `warehouses`, `warehouse_inventory`, `positions`, `inventory`, `position_inventory` |
-| `inventory-service` | `sqlite:////tmp/wms-inventory.db` | `products`, `warehouses`, `inventory`, `warehouse_inventory` |
-| `documents-service` | `sqlite:////tmp/wms-documents.db` | `products`, `customers`, `warehouses`, `documents`, `document_items` |
+| `product-service` | `sqlite:////tmp/wms-product.db` | `products` |
+| `warehouse-service` | `sqlite:////tmp/wms-warehouse.db` | `warehouses`, `positions` |
+| `inventory-service` | `sqlite:////tmp/wms-inventory.db` | `inventory`, `warehouse_inventory`, `inventory_movement_ledger` |
+| `documents-service` | `sqlite:////tmp/wms-documents.db` | `documents`, `document_items` |
 | `audit-service` | `sqlite:////tmp/wms-audit.db` | `audit_events` |
-| `reporting-service` | `sqlite:////tmp/wms-reporting.db` | `products`, `customers`, `warehouses`, `inventory`, `warehouse_inventory`, `documents`, `document_items`, `customer_purchases` |
+| `reporting-service` | `sqlite:////tmp/wms-reporting.db` | `reporting_read_model_events` |
 | `ai-service` | `sqlite:////tmp/wms-ai.db` plus `/tmp/wms-ai-vector-db` | opt-in via the `ai` profile |
 
 ## Ownership Rules
@@ -27,6 +27,6 @@ Root `docker-compose.yml` now gives every service its own datastore connection i
 
 ## Follow-up Work
 
-- Replace remaining legacy read-model refreshes with event consumers in Phase 11.
+- Replace remaining reporting placeholders with projection tables and handlers in Phase F.
 - Add production migration tooling before deployment.
 - Keep reporting/search read models behind explicit service-owned datastore connections.

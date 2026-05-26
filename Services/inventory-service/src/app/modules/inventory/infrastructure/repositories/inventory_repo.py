@@ -1,4 +1,5 @@
-from typing import List
+import json
+from typing import Any, List
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.inventory.infrastructure.models.inventory import InventoryModel
+from app.modules.inventory.infrastructure.models.movement_ledger import InventoryMovementLedgerModel
 from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
 
 
@@ -49,6 +51,42 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         else:
             row = InventoryModel(product_id=product_id, quantity=quantity)
             self.session.add(row)
+        self._commit_if_auto()
+
+    def adjust_quantity(self, product_id: int, quantity_delta: int) -> None:
+        if quantity_delta >= 0:
+            self.add_quantity(product_id, quantity_delta)
+            return
+        self.remove_quantity(product_id, abs(quantity_delta))
+
+    def adjust_warehouse_quantity(
+        self, product_id: int, warehouse_id: int, quantity_delta: int
+    ) -> None:
+        row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == product_id,
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+            )
+        ).scalar_one_or_none()
+
+        if row is None:
+            if quantity_delta < 0:
+                raise InsufficientStockError(
+                    f"Insufficient warehouse stock for product {product_id} in warehouse {warehouse_id}"
+                )
+            row = WarehouseInventoryModel(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                quantity=quantity_delta,
+            )
+            self.session.add(row)
+        else:
+            next_quantity = row.quantity + quantity_delta
+            if next_quantity < 0:
+                raise InsufficientStockError(
+                    f"Insufficient warehouse stock. Available: {row.quantity}, Requested: {abs(quantity_delta)}"
+                )
+            row.quantity = next_quantity
         self._commit_if_auto()
 
     def get_quantity(self, product_id: int) -> int:
@@ -127,6 +165,29 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 f"Insufficient stock. Available: {row.quantity}, Requested: {quantity}"
             )
         row.quantity -= quantity
+        self._commit_if_auto()
+
+    def has_movement_event(self, event_id: str) -> bool:
+        return self.session.get(InventoryMovementLedgerModel, event_id) is not None
+
+    def record_movement_event(
+        self,
+        *,
+        event_id: str,
+        movement_type: str,
+        document_id: int | None,
+        payload: dict[str, Any],
+    ) -> None:
+        if self.has_movement_event(event_id):
+            return
+        self.session.add(
+            InventoryMovementLedgerModel(
+                event_id=event_id,
+                movement_type=movement_type,
+                document_id=document_id,
+                payload_json=json.dumps(payload, sort_keys=True),
+            )
+        )
         self._commit_if_auto()
 
     @staticmethod

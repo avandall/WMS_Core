@@ -24,7 +24,10 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
     def _service(self) -> tuple[InventoryService, object]:
         session_gen = get_session()
         db = next(session_gen)
-        service = InventoryService(inventory_repo=InventoryRepo(db))
+        service = InventoryService(
+            inventory_repo=InventoryRepo(db),
+            event_publisher=self._publisher,
+        )
         return service, db
 
     def ListInventoryItems(self, request: inventory_pb2.ListInventoryItemsRequest, context: grpc.ServicerContext):

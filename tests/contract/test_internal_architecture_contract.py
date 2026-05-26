@@ -40,7 +40,7 @@ OWNED_INIT_TABLES = {
     "customer-service": {"customers"},
     "documents-service": {"documents", "document_items"},
     "identity-service": {"users"},
-    "inventory-service": {"inventory", "warehouse_inventory"},
+    "inventory-service": {"inventory", "warehouse_inventory", "inventory_movement_ledger"},
     "product-service": {"products"},
     "reporting-service": {"reporting_read_model_events"},
     "warehouse-service": {"warehouses", "positions"},

@@ -8,6 +8,9 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DOCUMENTS_SRC = ROOT_DIR / "Services/documents-service/src"
 sys.path.insert(0, str(DOCUMENTS_SRC))
+for module_name in list(sys.modules):
+    if module_name == "app" or module_name.startswith("app."):
+        del sys.modules[module_name]
 
 from app.modules.documents.application.services.document_service import DocumentService
 from app.modules.documents.domain.entities.document import Document, DocumentStatus

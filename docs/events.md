@@ -35,6 +35,9 @@ Events are published as one JSON field named `event` in Redis Streams.
 - `DocumentCancelled`
 - `InventoryMovementRequested`
 - `InventoryAdjusted`
+- `StockReserved`
+- `ReservationReleased`
+- `InventoryMovementApplied`
 - `InventoryListed`
 - `InventoryByWarehouseListed`
 - `InventoryQuantityRead`
@@ -50,6 +53,8 @@ Events are published as one JSON field named `event` in Redis Streams.
 `DocumentCancelled` describe document state changes. `InventoryMovementRequested` is emitted
 after posting so `inventory-service` can apply stock movement idempotently without
 `documents-service` writing inventory tables.
+- `inventory-service` consumes `InventoryMovementRequested`, records the source event in
+  `inventory_movement_ledger`, and emits `InventoryMovementApplied` after stock changes commit.
 
 - `audit-service` starts an in-process Redis Stream consumer group when
   `AUDIT_EVENT_CONSUMER_ENABLED=1`.

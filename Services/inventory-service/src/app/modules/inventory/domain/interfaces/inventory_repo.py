@@ -42,6 +42,31 @@ class IInventoryRepo(ABC):
     def get_warehouse_summary(self) -> dict[int, dict[str, Any]]:
         pass
 
+    @abstractmethod
+    def adjust_quantity(self, product_id: int, quantity_delta: int) -> None:
+        pass
+
+    @abstractmethod
+    def adjust_warehouse_quantity(
+        self, product_id: int, warehouse_id: int, quantity_delta: int
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def has_movement_event(self, event_id: str) -> bool:
+        pass
+
+    @abstractmethod
+    def record_movement_event(
+        self,
+        *,
+        event_id: str,
+        movement_type: str,
+        document_id: int | None,
+        payload: dict[str, Any],
+    ) -> None:
+        pass
+
 
 # Alias for backward compatibility
 InventoryRepo = IInventoryRepo

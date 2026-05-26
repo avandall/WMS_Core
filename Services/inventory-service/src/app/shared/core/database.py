@@ -83,6 +83,7 @@ def import_all_models():
     model_modules = [
         "app.modules.inventory.infrastructure.models.inventory",
         "app.modules.inventory.infrastructure.models.warehouse_inventory",
+        "app.modules.inventory.infrastructure.models.movement_ledger",
     ]
     for module in model_modules:
         try:

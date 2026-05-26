@@ -202,24 +202,18 @@ Acceptance:
 
 ## Phase D: Inventory Domain Refactor
 
+Status: DONE.
+
 Goal: make inventory consistency explicit.
 
-- Add use cases:
-  - `AdjustInventory`
-  - `ReserveStock`
-  - `ReleaseReservation`
-  - `ApplyDocumentMovement`
-- Add value objects:
-  - `Quantity`
-  - `Sku`
-  - `WarehouseLocation`
-- Add or formalize a movement ledger table/model if not already covered by the current schema.
-- Publish typed events aligned with `docs/events.md`; introduce new names only with event
-  contract tests and migration notes:
-  - current: `InventoryAdjusted`, inventory read/list events
-  - target additions when implemented: `StockReserved`, `ReservationReleased`,
-    `InventoryMovementApplied`
-- Enforce idempotency on movement events.
+- Added application use cases: `adjust_inventory`, `reserve_stock`, `release_reservation`, and
+  `apply_document_movement`.
+- Added value objects: `Quantity`, `Sku`, and `WarehouseLocation`.
+- Added `inventory_movement_ledger` as the idempotency ledger for stock movements.
+- `inventory-service` consumes `InventoryMovementRequested` and emits `InventoryMovementApplied`.
+- Published inventory events are aligned with `docs/events.md`: `InventoryAdjusted`,
+  `StockReserved`, `ReservationReleased`, and `InventoryMovementApplied`.
+- Movement event replay is idempotent through deterministic source event IDs.
 
 Acceptance:
 
