@@ -32,6 +32,8 @@ Events are published as one JSON field named `event` in Redis Streams.
 
 - `DocumentUploaded`
 - `DocumentPosted`
+- `DocumentCancelled`
+- `InventoryMovementRequested`
 - `InventoryAdjusted`
 - `InventoryListed`
 - `InventoryByWarehouseListed`
@@ -43,6 +45,11 @@ Events are published as one JSON field named `event` in Redis Streams.
 - `WarehouseDeleted`
 
 ## Consumers
+
+`documents-service` owns document lifecycle events. `DocumentUploaded`, `DocumentPosted`, and
+`DocumentCancelled` describe document state changes. `InventoryMovementRequested` is emitted
+after posting so `inventory-service` can apply stock movement idempotently without
+`documents-service` writing inventory tables.
 
 - `audit-service` starts an in-process Redis Stream consumer group when
   `AUDIT_EVENT_CONSUMER_ENABLED=1`.

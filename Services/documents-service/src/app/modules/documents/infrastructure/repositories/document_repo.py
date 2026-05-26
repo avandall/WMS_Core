@@ -129,6 +129,7 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
         document.date = model.created_at
         document.posted_at = model.posted_at
         document.cancelled_at = model.cancelled_at
+        document.cancelled_by = getattr(model, "cancelled_by", None)
         document.cancellation_reason = model.cancellation_reason
         document.approved_by = model.approved_by
         return document

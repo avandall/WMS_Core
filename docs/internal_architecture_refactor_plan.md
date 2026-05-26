@@ -177,17 +177,21 @@ Acceptance:
 
 ## Phase C: Documents Domain Refactor
 
+Status: DONE.
+
 Goal: make `documents-service` the owner of document lifecycle rules.
 
-- Introduce a `Document` aggregate with states: `draft`, `posted`, `cancelled`.
-- Move posting/cancellation rules out of gRPC servicer into application use cases.
-- Keep references to customer/product/warehouse as IDs and immutable document-line snapshots.
-- Emit typed domain events aligned with `docs/events.md`; introduce new names only with event
-  contract tests and migration notes:
-  - current: `DocumentUploaded`, `DocumentPosted`
-  - target additions when implemented: `DocumentCancelled`, `InventoryMovementRequested`
-- Add idempotency key handling for posting.
-- Keep gRPC payload mapping in the adapter layer only.
+- Kept the `Document` aggregate as the lifecycle owner with `DRAFT`, `POSTED`, and `CANCELLED`
+  states.
+- Moved posting/cancellation rules and event publishing into application use cases.
+- Kept references to customer/product/warehouse as IDs and document-line snapshots.
+- Emits typed document events aligned with `docs/events.md`:
+  - `DocumentUploaded`
+  - `DocumentPosted`
+  - `DocumentCancelled`
+  - `InventoryMovementRequested`
+- Posting is idempotent by document lifecycle and uses deterministic event IDs.
+- gRPC payload mapping stays in the adapter; persistence commits happen in application use cases.
 
 Acceptance:
 

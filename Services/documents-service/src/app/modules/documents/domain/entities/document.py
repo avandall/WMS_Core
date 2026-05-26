@@ -179,13 +179,85 @@ class Document(DomainEntity):
         self.approved_by = approved_by
         self.posted_at = datetime.now()
 
-    def cancel(self) -> None:
+    def cancel(self, cancelled_by: str, reason: Optional[str] = None) -> None:
         if self.status == DocumentStatus.POSTED:
             raise InvalidDocumentStatusError(
                 f"Cannot cancel a posted document {self.document_id}"
             )
+        if self.status == DocumentStatus.CANCELLED:
+            raise InvalidDocumentStatusError(f"Document {self.document_id} is already cancelled")
+        if not isinstance(cancelled_by, str) or not cancelled_by.strip():
+            raise ValidationError("cancelled_by must be a non-empty string")
+
         self.status = DocumentStatus.CANCELLED
         self.cancelled_at = datetime.now()
+        self.cancelled_by = cancelled_by
+        self.cancellation_reason = reason
+
+    def uploaded_event_payload(self, request_id: Optional[str] = None) -> dict:
+        return {
+            "event_id": f"documents:{self.document_id}:uploaded",
+            "request_id": request_id,
+            "entity_type": "document",
+            "entity_id": self.document_id,
+            "document_id": self.document_id,
+            "doc_type": self.doc_type.value,
+            "status": self.status.value,
+            "customer_id": self.customer_id,
+            "from_warehouse_id": self.from_warehouse_id,
+            "to_warehouse_id": self.to_warehouse_id,
+            "items": self._item_snapshots(),
+        }
+
+    def posted_event_payload(self, request_id: Optional[str] = None) -> dict:
+        return {
+            "event_id": f"documents:{self.document_id}:posted",
+            "request_id": request_id,
+            "entity_type": "document",
+            "entity_id": self.document_id,
+            "document_id": self.document_id,
+            "doc_type": self.doc_type.value,
+            "status": self.status.value,
+            "approved_by": self.approved_by,
+            "posted_at": self.posted_at.isoformat() if self.posted_at else None,
+        }
+
+    def inventory_movement_requested_payload(self, request_id: Optional[str] = None) -> dict:
+        return {
+            "event_id": f"documents:{self.document_id}:inventory-movement-requested",
+            "request_id": request_id,
+            "entity_type": "document",
+            "entity_id": self.document_id,
+            "document_id": self.document_id,
+            "doc_type": self.doc_type.value,
+            "from_warehouse_id": self.from_warehouse_id,
+            "to_warehouse_id": self.to_warehouse_id,
+            "items": self._item_snapshots(),
+        }
+
+    def cancelled_event_payload(self, request_id: Optional[str] = None) -> dict:
+        return {
+            "event_id": f"documents:{self.document_id}:cancelled",
+            "request_id": request_id,
+            "entity_type": "document",
+            "entity_id": self.document_id,
+            "document_id": self.document_id,
+            "doc_type": self.doc_type.value,
+            "status": self.status.value,
+            "cancelled_by": self.cancelled_by,
+            "cancelled_at": self.cancelled_at.isoformat() if self.cancelled_at else None,
+            "reason": self.cancellation_reason,
+        }
+
+    def _item_snapshots(self) -> list[dict]:
+        return [
+            {
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+            }
+            for item in self.items
+        ]
 
     def _ensure_draft_status(self) -> None:
         if self.status != DocumentStatus.DRAFT:

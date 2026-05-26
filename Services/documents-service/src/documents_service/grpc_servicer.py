@@ -27,6 +27,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
         service = DocumentService(
             document_repo=DocumentRepo(db),
             session=db,
+            event_publisher=self._publisher,
         )
         return service, db
 
@@ -65,17 +66,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 ],
                 created_by=request.created_by or "system",
                 note=request.note or None,
-            )
-            db.commit()
-            self._publisher.publish(
-                event_type="DocumentUploaded",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "document",
-                    "entity_id": int(doc.document_id),
-                    "doc_type": "IMPORT",
-                    "document_id": int(doc.document_id),
-                },
+                request_id=self._request_id(context),
             )
             return self._to_proto(doc)
         finally:
@@ -95,17 +86,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 ],
                 created_by=request.created_by or "system",
                 note=request.note or None,
-            )
-            db.commit()
-            self._publisher.publish(
-                event_type="DocumentUploaded",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "document",
-                    "entity_id": int(doc.document_id),
-                    "doc_type": "EXPORT",
-                    "document_id": int(doc.document_id),
-                },
+                request_id=self._request_id(context),
             )
             return self._to_proto(doc)
         finally:
@@ -126,18 +107,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 created_by=request.created_by or "system",
                 note=request.note or None,
                 customer_id=int(request.customer_id) if request.customer_id else None,
-            )
-            db.commit()
-            self._publisher.publish(
-                event_type="DocumentUploaded",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "document",
-                    "entity_id": int(doc.document_id),
-                    "doc_type": "SALE",
-                    "document_id": int(doc.document_id),
-                    "customer_id": int(request.customer_id) if request.customer_id else None,
-                },
+                request_id=self._request_id(context),
             )
             return self._to_proto(doc)
         finally:
@@ -158,17 +128,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 ],
                 created_by=request.created_by or "system",
                 note=request.note or None,
-            )
-            db.commit()
-            self._publisher.publish(
-                event_type="DocumentUploaded",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "document",
-                    "entity_id": int(doc.document_id),
-                    "doc_type": "TRANSFER",
-                    "document_id": int(doc.document_id),
-                },
+                request_id=self._request_id(context),
             )
             return self._to_proto(doc)
         finally:
@@ -180,16 +140,10 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
     def PostDocument(self, request: documents_pb2.PostDocumentRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            service.post_document(int(request.document_id), request.approved_by or "system")
-            self._publisher.publish(
-                event_type="DocumentPosted",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "document",
-                    "entity_id": int(request.document_id),
-                    "document_id": int(request.document_id),
-                    "approved_by": request.approved_by,
-                },
+            service.post_document(
+                int(request.document_id),
+                request.approved_by or "system",
+                request_id=self._request_id(context),
             )
             return documents_pb2.PostDocumentResponse(
                 message=f"Document {int(request.document_id)} posted successfully"
@@ -238,7 +192,6 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
         service, db = self._service()
         try:
             service.delete_document(int(request.document_id))
-            db.commit()
             return documents_pb2.DeleteDocumentResponse(
                 message=f"Document {int(request.document_id)} deleted successfully"
             )

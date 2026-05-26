@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from app.modules.documents.application.ports import (
+    DocumentEventPublisher,
+    NoopDocumentEventPublisher,
+)
 from app.modules.documents.domain.entities.document import (
     Document,
     DocumentProduct,
@@ -22,9 +25,11 @@ class DocumentService:
         self,
         document_repo: IDocumentRepo,
         session: Optional[Any] = None,
+        event_publisher: Optional[DocumentEventPublisher] = None,
     ):
         self.document_repo = document_repo
         self.session = session
+        self.event_publisher = event_publisher or NoopDocumentEventPublisher()
         self._doc_id_generator = document_id_generator()
 
     def create_import_document(
@@ -33,6 +38,7 @@ class DocumentService:
         items: List[Dict[str, Any]],
         created_by: str,
         note: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
             document_id=self._doc_id_generator(),
@@ -43,6 +49,8 @@ class DocumentService:
             note=note,
         )
         self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
         return document
 
     def create_export_document(
@@ -51,6 +59,7 @@ class DocumentService:
         items: List[Dict[str, Any]],
         created_by: str,
         note: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
             document_id=self._doc_id_generator(),
@@ -61,6 +70,8 @@ class DocumentService:
             note=note,
         )
         self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
         return document
 
     def create_sale_document(
@@ -70,6 +81,7 @@ class DocumentService:
         created_by: str,
         note: Optional[str] = None,
         customer_id: Optional[int] = None,
+        request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
             document_id=self._doc_id_generator(),
@@ -81,6 +93,8 @@ class DocumentService:
             customer_id=customer_id,
         )
         self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
         return document
 
     def create_transfer_document(
@@ -90,6 +104,7 @@ class DocumentService:
         items: List[Dict[str, Any]],
         created_by: str,
         note: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
             document_id=self._doc_id_generator(),
@@ -101,33 +116,56 @@ class DocumentService:
             note=note,
         )
         self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
         return document
 
-    def post_document(self, document_id: int, approved_by: str) -> Document:
-        document = self._get_document_for_processing(document_id)
+    def post_document(
+        self,
+        document_id: int,
+        approved_by: str,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        document = self.get_document(document_id)
+        if document.status == DocumentStatus.CANCELLED:
+            raise InvalidDocumentStatusError(f"Cannot post cancelled document {document_id}")
+        if document.status == DocumentStatus.POSTED:
+            if approved_by and document.approved_by and approved_by != document.approved_by:
+                raise InvalidDocumentStatusError(
+                    f"Document {document_id} has already been posted by {document.approved_by}"
+                )
+            self._publish_document_posted(document, request_id)
+            return document
+
         document.post(approved_by)
         self.document_repo.save(document)
-        if self.session:
-            self.session.commit()
+        self._commit_if_needed()
+        self._publish_document_posted(document, request_id)
         return document
 
     def cancel_document(
-        self, document_id: int, cancelled_by: str, reason: Optional[str] = None
+        self,
+        document_id: int,
+        cancelled_by: str,
+        reason: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> Document:
         document = self.document_repo.get(document_id)
         if not document:
             raise DocumentNotFoundError(f"Document {document_id} not found")
-        if document.status == DocumentStatus.POSTED:
-            raise InvalidDocumentStatusError(f"Cannot cancel a posted document {document_id}")
-        if document.status == DocumentStatus.CANCELLED:
-            raise InvalidDocumentStatusError(f"Document {document_id} is already cancelled")
 
-        document.status = DocumentStatus.CANCELLED
-        document.cancelled_by = cancelled_by
-        document.cancelled_at = datetime.now()
-        document.cancellation_reason = reason
+        document.cancel(cancelled_by, reason)
         self.document_repo.save(document)
+        self._commit_if_needed()
+        self.event_publisher.publish(
+            event_type="DocumentCancelled",
+            payload=document.cancelled_event_payload(request_id),
+        )
         return document
+
+    def _commit_if_needed(self) -> None:
+        if self.session:
+            self.session.commit()
 
     def get_document_with_details(self, document_id: int) -> Dict[str, Any]:
         document = self.get_document(document_id)
@@ -183,16 +221,31 @@ class DocumentService:
                 f"Cannot delete document with status {document.status.value}. Only DRAFT documents can be deleted."
             )
         self.document_repo.delete(document_id)
+        self._commit_if_needed()
 
-    def _get_document_for_processing(self, document_id: int) -> Document:
-        document = self.document_repo.get(document_id)
-        if not document:
-            raise DocumentNotFoundError(f"Document {document_id} not found")
-        if document.status != DocumentStatus.DRAFT:
-            raise InvalidDocumentStatusError(
-                f"Document {document_id} is not in DRAFT status"
-            )
-        return document
+    def _publish_document_uploaded(
+        self,
+        document: Document,
+        request_id: Optional[str] = None,
+    ) -> None:
+        self.event_publisher.publish(
+            event_type="DocumentUploaded",
+            payload=document.uploaded_event_payload(request_id),
+        )
+
+    def _publish_document_posted(
+        self,
+        document: Document,
+        request_id: Optional[str] = None,
+    ) -> None:
+        self.event_publisher.publish(
+            event_type="DocumentPosted",
+            payload=document.posted_event_payload(request_id),
+        )
+        self.event_publisher.publish(
+            event_type="InventoryMovementRequested",
+            payload=document.inventory_movement_requested_payload(request_id),
+        )
 
     def _validate_and_convert_items(self, items: List[Dict[str, Any]]) -> List[DocumentProduct]:
         if not items:
