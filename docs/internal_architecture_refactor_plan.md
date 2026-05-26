@@ -16,9 +16,9 @@ its real WMS ownership without forcing heavy DDD everywhere.
   replay support.
 - `proto/wms/*/v1` is the transport contract source; generated `*_pb2.py` files are build
   artifacts and should not become architecture boundaries.
-- Some active services still contain internal modules that are not owned by that service. Treat
-  these as service-boundary cleanup targets, not as monolith migration work:
-  - `warehouse-service`: documents, inventory, products
+- Phase B removed the known non-owned internal modules from active services. Future non-owned
+  module additions should fail the ownership guardrail tests before they become part of the
+  runtime baseline.
 - `docs/data_ownership.md` and `docs/events.md` are the current ownership/event baselines
   that this plan must keep consistent.
 
@@ -147,6 +147,8 @@ Acceptance:
 - New contributors can identify the target pattern and owned internals for each service.
 
 ## Phase B: Service Ownership Cleanup
+
+Status: DONE.
 
 Goal: remove non-owned internal modules from active services before deeper domain refactors.
 
