@@ -25,6 +25,12 @@ its real WMS ownership without forcing heavy DDD everywhere.
 - `docs/data_ownership.md` and `docs/events.md` are the current ownership/event baselines
   that this plan must keep consistent.
 
+Phase B completed service ownership cleanup:
+
+- `identity-service`: kept users and removed the non-owned positions module.
+- `product-service`: kept products and removed inventory module/table ownership.
+- `customer-service`: kept customers and removed unused shared reporting orchestration.
+
 ## Target Architecture
 
 Use a mixed architecture instead of forcing one pattern everywhere:
