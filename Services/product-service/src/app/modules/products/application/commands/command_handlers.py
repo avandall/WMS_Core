@@ -9,7 +9,6 @@ from app.shared.domain.business_exceptions import (
     EntityNotFoundError,
     ValidationError,
 )
-from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from .product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
 
@@ -19,9 +18,8 @@ logger = get_logger(__name__)
 class ProductCommandHandler:
     """Handles product-related commands following SRP."""
 
-    def __init__(self, product_repo: IProductRepo, inventory_repo: IInventoryRepo):
+    def __init__(self, product_repo: IProductRepo):
         self.product_repo = product_repo
-        self.inventory_repo = inventory_repo
 
     def handle_create(self, command: CreateProductCommand) -> Product:
         """Handle product creation command."""
@@ -38,7 +36,6 @@ class ProductCommandHandler:
         )
         
         self.product_repo.save(product)
-        self.inventory_repo.add_quantity(product_id, 0)
         
         logger.info(f"Created product: product_id={product_id} name={command.name}")
         return product
@@ -59,16 +56,8 @@ class ProductCommandHandler:
 
     def handle_delete(self, command: DeleteProductCommand) -> None:
         """Handle product deletion command."""
-        product = self._get_product_or_raise(command.product_id)
-        current_quantity = self.inventory_repo.get_quantity(command.product_id)
-        
-        if current_quantity > 0:
-            raise ValidationError(
-                f"Cannot delete product {command.product_id}: still has {current_quantity} items in inventory"
-            )
-            
+        self._get_product_or_raise(command.product_id)
         self.product_repo.delete(command.product_id)
-        self.inventory_repo.delete(command.product_id)
 
     def _validate_create_command(self, command: CreateProductCommand) -> None:
         """Validate create command parameters."""

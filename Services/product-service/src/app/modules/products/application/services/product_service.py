@@ -7,7 +7,6 @@ from typing import Dict, List, Optional
 from app.shared.core.logging import get_logger
 from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import ValidationError
-from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.modules.products.application.commands import (
     CreateProductCommand,
@@ -28,8 +27,8 @@ logger = get_logger(__name__)
 class ProductService:
     """Application service for product orchestration following SOLID principles."""
 
-    def __init__(self, product_repo: IProductRepo, inventory_repo: IInventoryRepo):
-        self._command_handler = ProductCommandHandler(product_repo, inventory_repo)
+    def __init__(self, product_repo: IProductRepo):
+        self._command_handler = ProductCommandHandler(product_repo)
         self._query_handler = ProductQueryHandler(product_repo)
         self._validator = ProductValidator()
 
@@ -87,21 +86,6 @@ class ProductService:
         """Delete product using command pattern."""
         command = DeleteProductCommand(product_id=product_id)
         self._command_handler.handle_delete(command)
-
-    def get_product_with_inventory(self, product_id: int) -> dict:
-        """Get product with inventory information - facade method."""
-        product = self.get_product_details(product_id)
-        quantity = self._command_handler.inventory_repo.get_quantity(product_id)
-        return {"product": product, "current_inventory": quantity}
-
-    def list_products_with_inventory(self) -> List[dict]:
-        """List all products with inventory - facade method."""
-        products = []
-        all_products = self._query_handler.product_repo.get_all()
-        for product_id, product in all_products.items():
-            quantity = self._command_handler.inventory_repo.get_quantity(product_id)
-            products.append({"product": product, "current_inventory": quantity})
-        return products
 
     def get_all_products(self) -> List[Product]:
         """Get all products using query pattern."""

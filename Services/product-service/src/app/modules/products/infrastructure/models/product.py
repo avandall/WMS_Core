@@ -8,7 +8,6 @@ from sqlalchemy import (
     Index,
     String,
 )
-from sqlalchemy.orm import relationship
 
 from app.shared.core.database import Base
 
@@ -24,11 +23,4 @@ class ProductModel(Base):
     __table_args__ = (
         CheckConstraint('price >= 0', name='check_product_price_positive'),
         Index('ix_products_name', 'name'),
-    )
-
-    inventory = relationship(
-        "InventoryModel",
-        back_populates="product",
-        uselist=False,
-        cascade="all, delete-orphan",
     )

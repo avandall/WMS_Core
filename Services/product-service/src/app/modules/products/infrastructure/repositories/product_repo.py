@@ -6,7 +6,6 @@ from app.modules.products.domain.entities.product import Product
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.modules.products.infrastructure.models.product import ProductModel
-from app.modules.inventory.infrastructure.models.inventory import InventoryModel
 
 
 class ProductRepo(TransactionalRepository, IProductRepo):
@@ -49,11 +48,6 @@ class ProductRepo(TransactionalRepository, IProductRepo):
         model = self.session.get(ProductModel, product_id)
         if not model:
             raise KeyError("Product not found")
-
-        # Remove total inventory row if it exists to maintain consistency
-        inventory_row = self.session.get(InventoryModel, product_id)
-        if inventory_row:
-            self.session.delete(inventory_row)
 
         self.session.delete(model)
         self._commit_if_auto()

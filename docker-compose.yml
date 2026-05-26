@@ -158,7 +158,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-product.db
-      INIT_DB_TABLES: products,inventory
+      INIT_DB_TABLES: products
     depends_on:
       event-bus:
         condition: service_healthy

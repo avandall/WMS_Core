@@ -4,7 +4,6 @@ import grpc
 
 from shared_utils.events import get_publisher
 
-from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
 from app.modules.products.application.services.product_service import ProductService
 from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
 from app.shared.core.database import get_session
@@ -25,7 +24,7 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
     def _service(self) -> tuple[ProductService, object]:
         session_gen = get_session()
         db = next(session_gen)
-        return ProductService(ProductRepo(db), InventoryRepo(db)), db
+        return ProductService(ProductRepo(db)), db
 
     def ListProducts(self, request: product_pb2.ListProductsRequest, context: grpc.ServicerContext):
         service, db = self._service()
