@@ -324,19 +324,23 @@ Acceptance:
 
 ## Phase J: AI Pipeline Cleanup
 
+Status: DONE.
+
 Goal: keep AI isolated and event-driven.
 
-- Keep AI behind the opt-in compose/runtime profile.
-- Keep AI outside default contract/E2E tests and default Docker builds.
-- Add a separate AI test command/profile for phases that explicitly touch AI.
-- Split AI internals into:
+- Kept AI behind the opt-in compose/runtime profile.
+- Kept AI outside default contract/E2E tests and default Docker builds.
+- Kept a separate AI test command/profile for phases that explicitly touch AI.
+- Split AI service internals into:
   - ingestion
   - indexing
   - retrieval
   - generation
   - provider adapters
-- Replace the baseline JSONL reindex queue with a durable job table or queue when needed.
-- Consume read-model snapshots/events, not operational service databases.
+- Wrapped the baseline JSONL reindex queue behind an AI-owned `ReindexJobStore` boundary so it
+  can be replaced with a durable job table or queue when needed.
+- Converted event envelopes/projection snapshots into replayable AI reindex jobs instead of
+  reading operational service databases.
 
 Acceptance:
 

@@ -150,12 +150,15 @@ src/
     event_consumer.py
     grpc_server.py
     grpc_servicer.py
+    pipeline/
+      ingestion.py
+      indexing.py
+      retrieval.py
+      generation.py
+      providers.py
   ai_engine/
-    ingestion/
-    indexing/
     retrieval/
     generation/
-    providers/
 ```
 
 Rules:

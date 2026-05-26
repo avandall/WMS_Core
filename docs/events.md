@@ -100,7 +100,10 @@ after posting so `inventory-service` can apply stock movement idempotently witho
   `REPORTING_READ_MODEL_CONSUMER_ENABLED=1`. It stores event envelopes in
   `reporting_read_model_events` with a unique `event_id`.
 - `ai-service` remains opt-in and can start an AI reindex queue consumer when both the compose
-  `ai` profile and `AI_REINDEX_CONSUMER_ENABLED=1` are enabled.
+  `ai` profile and `AI_REINDEX_CONSUMER_ENABLED=1` are enabled. The consumer converts event
+  envelopes or projection snapshots into AI-owned reindex jobs, including `source_event_id`,
+  `stream_id`, and optional `replay_of_event_id` so reindex can be replayed without reading
+  operational service databases.
 
 ## Durable Processing
 

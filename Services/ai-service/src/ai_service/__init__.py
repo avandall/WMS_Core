@@ -9,4 +9,10 @@ if str(_gen_path) not in sys.path:
 
 __all__ = ["create_app"]
 
-from .app import create_app
+
+def __getattr__(name: str):
+    if name == "create_app":
+        from ai_service.app import create_app
+
+        return create_app
+    raise AttributeError(name)

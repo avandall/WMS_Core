@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
 import os
 import threading
 import time
-from pathlib import Path
 
+from ai_service.pipeline import EventIngestor, JsonlReindexJobStore, ReindexJobStore
 from shared_utils.events import DurableRedisStreamConsumer, EventEnvelope, RedisStreamClient
 
 
@@ -31,8 +30,11 @@ class AIReindexConsumer:
         max_attempts: int = 3,
         reclaim_idle_ms: int = 60000,
         group_start_id: str = "0",
+        ingestor: EventIngestor | None = None,
+        job_store: ReindexJobStore | None = None,
     ):
-        self.queue_path = Path(queue_path)
+        self.ingestor = ingestor or EventIngestor()
+        self.job_store = job_store or JsonlReindexJobStore(queue_path)
         self.consumer = DurableRedisStreamConsumer(
             client=RedisStreamClient(event_bus_url, timeout=max(block_ms / 1000 + 1, 2)),
             stream=stream,
@@ -52,7 +54,6 @@ class AIReindexConsumer:
         self._stop.set()
 
     def run_forever(self) -> None:
-        self.queue_path.parent.mkdir(parents=True, exist_ok=True)
         while not self._stop.is_set():
             try:
                 self.consumer.poll_once()
@@ -60,16 +61,7 @@ class AIReindexConsumer:
                 time.sleep(2)
 
     def _enqueue_reindex(self, message_id: str, envelope: EventEnvelope) -> None:
-        payload = {
-            "event_id": envelope.event_id,
-            "event_type": envelope.type,
-            "stream_id": message_id,
-            "source": envelope.source,
-            "occurred_at": envelope.occurred_at,
-            "payload": envelope.payload,
-        }
-        with self.queue_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        self.job_store.enqueue(self.ingestor.to_reindex_job(message_id=message_id, envelope=envelope))
 
 
 def start_ai_reindex_consumer_thread() -> threading.Thread | None:
