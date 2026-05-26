@@ -4,14 +4,8 @@ import grpc
 
 from shared_utils.events import get_publisher
 
-from app.modules.audit.infrastructure.repositories.audit_event_repo import AuditEventRepo
-from app.modules.customers.infrastructure.repositories.customer_repo import CustomerRepo
 from app.modules.documents.application.services.document_service import DocumentService
 from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
-from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
-from app.modules.positions.infrastructure.repositories.position_repo import PositionRepo
-from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
-from app.modules.warehouses.infrastructure.repositories.warehouse_repo import WarehouseRepo
 from app.shared.core.database import get_session
 
 from documents_service.gen.wms.documents.v1 import documents_pb2, documents_pb2_grpc
@@ -32,12 +26,6 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
         db = next(session_gen)
         service = DocumentService(
             document_repo=DocumentRepo(db),
-            warehouse_repo=WarehouseRepo(db),
-            product_repo=ProductRepo(db),
-            inventory_repo=InventoryRepo(db),
-            customer_repo=CustomerRepo(db),
-            position_repo=PositionRepo(db),
-            audit_event_repo=AuditEventRepo(db),
             session=db,
         )
         return service, db

@@ -18,7 +18,6 @@ its real WMS ownership without forcing heavy DDD everywhere.
   artifacts and should not become architecture boundaries.
 - Some active services still contain internal modules that are not owned by that service. Treat
   these as service-boundary cleanup targets, not as monolith migration work:
-  - `documents-service`: audit, customers, inventory, positions, products, users, warehouses
   - `warehouse-service`: documents, inventory, products
   - `reporting-service`: operational-style modules plus reporting
 - `docs/data_ownership.md` and `docs/events.md` are the current ownership/event baselines
@@ -34,6 +33,8 @@ Phase B completed service ownership cleanup:
   and removed product/warehouse module ownership.
 - `warehouse-service`: kept warehouses/positions and removed document/product/inventory module
   ownership.
+- `documents-service`: kept documents and removed audit/customer/inventory/position/product/user/
+  warehouse module ownership.
 
 ## Target Architecture
 
@@ -150,8 +151,8 @@ Acceptance:
 Goal: remove non-owned internal modules from active services before deeper domain refactors.
 
 - Trim each service to its owned module set:
-  - `documents-service`: keep documents; replace product/customer/warehouse/user/inventory
-    modules with application ports, gRPC clients, event snapshots, or simple reference DTOs.
+  - `documents-service`: DONE. Kept documents and replaced product/customer/warehouse/user/
+    inventory ownership with stored IDs and event-driven follow-up work for Phase C.
   - `warehouse-service`: DONE. Kept warehouses/positions and removed
     document/product/inventory ownership code.
   - `inventory-service`: DONE. Kept inventory, removed product/warehouse modules, and kept

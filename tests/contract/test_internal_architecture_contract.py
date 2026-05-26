@@ -27,15 +27,7 @@ OWNED_MODULES = {
 PHASE_B_ALLOWED_NON_OWNED_MODULES = {
     "audit-service": set(),
     "customer-service": set(),
-    "documents-service": {
-        "audit",
-        "customers",
-        "inventory",
-        "positions",
-        "products",
-        "users",
-        "warehouses",
-    },
+    "documents-service": set(),
     "identity-service": set(),
     "inventory-service": set(),
     "product-service": set(),
@@ -57,7 +49,7 @@ OWNED_INIT_TABLES = {
 PHASE_B_ALLOWED_NON_OWNED_INIT_TABLES = {
     "audit-service": set(),
     "customer-service": set(),
-    "documents-service": {"customers", "products", "warehouses"},
+    "documents-service": set(),
     "identity-service": set(),
     "inventory-service": set(),
     "product-service": set(),

@@ -225,7 +225,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: sqlite:////tmp/wms-documents.db
-      INIT_DB_TABLES: products,customers,warehouses,documents,document_items
+      INIT_DB_TABLES: documents,document_items
     depends_on:
       event-bus:
         condition: service_healthy
