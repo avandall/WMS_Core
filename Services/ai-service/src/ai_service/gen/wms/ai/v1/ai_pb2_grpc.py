@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from wms.ai.v1 import ai_pb2 as wms_dot_ai_dot_v1_dot_ai__pb2
+from . import ai_pb2 as wms_dot_ai_dot_v1_dot_ai__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__

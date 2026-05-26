@@ -127,6 +127,9 @@ def main() -> int:
     print("Spans:")
     for span in spans:
         print(f"  - {span}")
+    if status >= 400:
+        print(f"\nRequest returned HTTP {status}; trace was captured, but the endpoint failed.")
+        return 2
     return 0
 
 

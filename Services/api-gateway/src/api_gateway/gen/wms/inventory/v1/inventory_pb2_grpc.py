@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from wms.inventory.v1 import inventory_pb2 as wms_dot_inventory_dot_v1_dot_inventory__pb2
+from . import inventory_pb2 as wms_dot_inventory_dot_v1_dot_inventory__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__

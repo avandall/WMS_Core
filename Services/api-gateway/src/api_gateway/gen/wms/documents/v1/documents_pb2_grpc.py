@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from wms.documents.v1 import documents_pb2 as wms_dot_documents_dot_v1_dot_documents__pb2
+from . import documents_pb2 as wms_dot_documents_dot_v1_dot_documents__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__

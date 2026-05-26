@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from wms.audit.v1 import audit_pb2 as wms_dot_audit_dot_v1_dot_audit__pb2
+from . import audit_pb2 as wms_dot_audit_dot_v1_dot_audit__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__

@@ -32,5 +32,3 @@ class ProductModel(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
-    warehouse_items = relationship("WarehouseInventoryModel", back_populates="product")
-    document_items = relationship("DocumentItemModel", back_populates="product")

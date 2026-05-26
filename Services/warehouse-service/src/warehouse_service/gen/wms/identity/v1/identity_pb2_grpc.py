@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from wms.identity.v1 import identity_pb2 as wms_dot_identity_dot_v1_dot_identity__pb2
+from . import identity_pb2 as wms_dot_identity_dot_v1_dot_identity__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
