@@ -145,8 +145,8 @@
   },
   "WarehouseCreated": {
     "source": "warehouse-service",
-    "required_payload": ["entity_type", "entity_id", "warehouse_id"],
-    "fixture_payload": {"event_id": "fixture:warehouse:20:created", "entity_type": "warehouse", "entity_id": 20, "warehouse_id": 20}
+    "required_payload": ["entity_type", "entity_id", "warehouse_id", "location"],
+    "fixture_payload": {"event_id": "fixture:warehouse:20:created", "entity_type": "warehouse", "entity_id": 20, "warehouse_id": 20, "location": "Main Warehouse"}
   },
   "WarehouseDeleted": {
     "source": "warehouse-service",

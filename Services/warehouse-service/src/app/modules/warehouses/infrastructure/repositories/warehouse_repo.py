@@ -58,6 +58,12 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         rows = self.session.execute(select(WarehouseModel)).scalars().all()
         return {row.warehouse_id: self._to_domain(row) for row in rows}
 
+    def location_exists(self, location: str, *, excluding_warehouse_id: int | None = None) -> bool:
+        stmt = select(WarehouseModel).where(WarehouseModel.location == location)
+        if excluding_warehouse_id is not None:
+            stmt = stmt.where(WarehouseModel.warehouse_id != excluding_warehouse_id)
+        return self.session.execute(stmt).scalar_one_or_none() is not None
+
     def delete(self, warehouse_id: int) -> None:
         model = self.session.get(WarehouseModel, warehouse_id)
         if model:

@@ -26,6 +26,10 @@ class IWarehouseRepo(ABC):
     def delete(self, warehouse_id: int) -> None:
         pass
 
+    @abstractmethod
+    def location_exists(self, location: str, *, excluding_warehouse_id: int | None = None) -> bool:
+        pass
+
 
 # Alias for backward compatibility
 WarehouseRepo = IWarehouseRepo

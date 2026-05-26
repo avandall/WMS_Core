@@ -15,11 +15,14 @@ class PositionService:
     def __init__(
         self,
         position_repo: IPositionRepo,
+        session=None,
     ):
         self.position_repo = position_repo
+        self.session = session
 
     def ensure_defaults(self, warehouse_id: int) -> None:
         self.position_repo.ensure_default_positions(warehouse_id)
+        self._commit_if_needed()
 
     def create_position(
         self,
@@ -37,6 +40,7 @@ class PositionService:
             type=type,
             description=description,
         )
+        self._commit_if_needed()
         logger.info(
             f"Position created: warehouse_id={warehouse_id} code={position.code} type={position.type}"
         )
@@ -50,3 +54,10 @@ class PositionService:
             warehouse_id, include_inactive=include_inactive
         )
 
+    def get_position(self, warehouse_id: int, code: str) -> Position:
+        self.position_repo.ensure_default_positions(warehouse_id)
+        return self.position_repo.get_position(warehouse_id, code)
+
+    def _commit_if_needed(self) -> None:
+        if self.session is not None:
+            self.session.commit()

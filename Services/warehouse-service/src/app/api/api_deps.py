@@ -21,8 +21,8 @@ def get_position_repo(db: Session = Depends(get_session)) -> PositionRepo:
 
 
 def get_warehouse_service(db: Session = Depends(get_session)) -> WarehouseService:
-    return WarehouseService(warehouse_repo=WarehouseRepo(db))
+    return WarehouseService(warehouse_repo=WarehouseRepo(db), session=db)
 
 
 def get_position_service(db: Session = Depends(get_session)) -> PositionService:
-    return PositionService(position_repo=PositionRepo(db))
+    return PositionService(position_repo=PositionRepo(db), session=db)

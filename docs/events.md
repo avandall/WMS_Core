@@ -71,7 +71,7 @@ Current required payload fields:
 | `ProductCreated` | `product-service` | `entity_type`, `entity_id`, `product_id` |
 | `ProductUpdated` | `product-service` | `entity_type`, `entity_id`, `product_id` |
 | `ProductDeleted` | `product-service` | `entity_type`, `entity_id`, `product_id` |
-| `WarehouseCreated` | `warehouse-service` | `entity_type`, `entity_id`, `warehouse_id` |
+| `WarehouseCreated` | `warehouse-service` | `entity_type`, `entity_id`, `warehouse_id`, `location` |
 | `WarehouseDeleted` | `warehouse-service` | `entity_type`, `entity_id`, `warehouse_id` |
 
 ## Breaking Change Policy

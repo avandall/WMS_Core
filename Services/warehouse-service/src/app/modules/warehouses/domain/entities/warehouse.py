@@ -5,10 +5,10 @@ from typing import Dict, List
 from app.shared.domain.business_exceptions import (
     EntityAlreadyExistsError,
     InvalidIDError,
-    ValidationError,
     WarehouseNotFoundError,
 )
 from app.shared.domain.entity import DomainEntity
+from app.modules.warehouses.domain.value_objects import WarehouseLocation
 
 
 class Warehouse(DomainEntity):
@@ -32,10 +32,7 @@ class Warehouse(DomainEntity):
 
     @staticmethod
     def _validate_location(location: str) -> None:
-        if not isinstance(location, str) or not location.strip():
-            raise ValidationError("location must be a non-empty string")
-        if len(location) > 200:
-            raise ValidationError("location must be at most 200 characters")
+        WarehouseLocation(location)
 
     def get_inventory_summary(self) -> dict:
         return {
@@ -46,8 +43,14 @@ class Warehouse(DomainEntity):
         }
 
     def update_location(self, new_location: str) -> None:
-        self._validate_location(new_location)
-        self.location = new_location
+        self.location = WarehouseLocation(new_location).value
+
+    def location_metadata(self) -> dict:
+        return {
+            "warehouse_id": self.warehouse_id,
+            "location": self.location,
+            "owns_inventory_quantity": False,
+        }
 
     @property
     def identity(self) -> int:

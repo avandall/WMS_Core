@@ -263,12 +263,16 @@ Acceptance:
 
 ## Phase G: Warehouse Domain Refactor
 
+Status: DONE.
+
 Goal: separate warehouse/location rules from generic CRUD.
 
-- Model warehouse locations/bins as domain concepts.
-- Add capacity/status rules only if the current workflow needs them.
-- Expose application use cases for warehouse creation, location updates, and lookup.
-- Keep inventory quantities in `inventory-service`; warehouse owns structure/location metadata.
+- Modeled warehouse locations and bins as domain value objects: `WarehouseLocation`,
+  `BinCode`, and `PositionType`.
+- Kept capacity/status rules out until a concrete workflow needs persisted capacity state.
+- Exposed application use cases for warehouse creation, location updates, location metadata
+  lookup, and position lookup.
+- Kept inventory quantities in `inventory-service`; warehouse owns structure/location metadata.
 
 Acceptance:
 

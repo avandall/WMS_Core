@@ -24,7 +24,7 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
     def _service(self) -> tuple[WarehouseService, object]:
         session_gen = get_session()
         db = next(session_gen)
-        return WarehouseService(WarehouseRepo(db)), db
+        return WarehouseService(WarehouseRepo(db), session=db), db
 
     def ListWarehouses(self, request: warehouse_pb2.ListWarehousesRequest, context: grpc.ServicerContext):
         service, db = self._service()
@@ -176,7 +176,7 @@ class WarehouseOperationsServiceServicer(warehouse_pb2_grpc.WarehouseOperationsS
                 product_id=int(request.product_id),
                 product_name="",
                 distribution=[],
-                recommendations=[],
+                recommendations=["Inventory distribution is owned by inventory/reporting projections"],
             )
         finally:
             try:
