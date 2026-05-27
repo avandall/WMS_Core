@@ -528,17 +528,18 @@ Acceptance:
 
 ## Phase R: Backup, Restore, and Disaster Recovery
 
-Status: TODO.
+Status: DONE.
 
 Goal: make the service-owned datastore model recoverable under real failure scenarios.
 
-- Define backup ownership, retention, encryption, and restore order for each service datastore.
-- Define Redis Streams persistence, snapshot, and restore expectations for `wms.events`, replay
+- Defined backup ownership, retention, encryption, and restore order for each service datastore.
+- Defined Redis Streams persistence, snapshot, and restore expectations for `wms.events`, replay
   streams, and DLQ streams.
-- Add restore rehearsal steps for identity, inventory, documents, reporting projections, and the
+- Added `docs/disaster_recovery.md`, a DR manifest example, and `scripts/dr_rehearsal.py` with
+  restore rehearsal steps for identity, inventory, documents, reporting projections, and the
   event bus.
-- Document RPO/RTO targets by service and by business workflow.
-- Add recovery checks that verify auth works, document posting is not duplicated, inventory totals
+- Documented RPO/RTO targets by service and by business workflow.
+- Added recovery checks that verify auth works, document posting is not duplicated, inventory totals
   reconcile, and reporting projections can be rebuilt.
 
 Acceptance:

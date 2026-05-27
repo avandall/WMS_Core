@@ -175,3 +175,9 @@ PYTHONPATH=Libraries/shared-utils/src python3 scripts/drain_dlq.py \
 
 The drain tool adds `replay_of_event_id`, `replay_of_dlq_stream`, and
 `replay_of_dlq_stream_id` metadata so consumers can preserve idempotency.
+
+## Disaster Recovery
+
+Redis stream snapshots and restore offsets are part of the disaster recovery record. See
+`docs/disaster_recovery.md` and `deploy/kubernetes/examples/disaster-recovery-manifest.example.json`
+for the expected `wms.events`, `wms.events.replay`, and service-owned DLQ stream evidence.

@@ -96,6 +96,8 @@ Deployment package:
 - Load/chaos release gate checklist: `deploy/kubernetes/examples/load-chaos-checks.md`
 - Production data cutover runbook: `docs/production_cutover.md`
 - Production cutover rehearsal manifest: `deploy/kubernetes/examples/production-cutover-manifest.example.json`
+- Disaster recovery runbook: `docs/disaster_recovery.md`
+- Disaster recovery rehearsal manifest: `deploy/kubernetes/examples/disaster-recovery-manifest.example.json`
 
 Rollout order:
 
@@ -173,6 +175,13 @@ AI reindex:
 1. Enable the `ai` profile only for the reindex window.
 2. Rebuild/reload vector data from the service-owned document/product sources.
 3. Disable the profile again if AI is not part of normal dev/test.
+
+Disaster recovery:
+
+1. Follow `docs/disaster_recovery.md` to restore service-owned datastore snapshots.
+2. Restore Redis stream snapshots and record `wms.events`, `wms.events.replay`, and DLQ offsets.
+3. Run `scripts/dr_rehearsal.py --dry-run` against the DR manifest before opening traffic.
+4. Validate auth, document idempotency, inventory totals, and reporting projection rebuild.
 
 ## API And Proto Versioning
 

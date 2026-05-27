@@ -1,0 +1,54 @@
+{
+  "release_version": "RELEASE_VERSION",
+  "databases": {
+    "identity": "sqlite:////tmp/wms-dr/identity.db",
+    "customer": "sqlite:////tmp/wms-dr/customer.db",
+    "product": "sqlite:////tmp/wms-dr/product.db",
+    "warehouse": "sqlite:////tmp/wms-dr/warehouse.db",
+    "inventory": "sqlite:////tmp/wms-dr/inventory.db",
+    "documents": "sqlite:////tmp/wms-dr/documents.db",
+    "audit": "sqlite:////tmp/wms-dr/audit.db",
+    "reporting": "sqlite:////tmp/wms-dr/reporting.db"
+  },
+  "datastore_backups": {
+    "identity-service": {"owner": "identity-service", "retention": "35d", "encrypted": true, "restore_order": 1, "snapshot_id": "identity-snapshot-id"},
+    "customer-service": {"owner": "customer-service", "retention": "35d", "encrypted": true, "restore_order": 2, "snapshot_id": "customer-snapshot-id"},
+    "product-service": {"owner": "product-service", "retention": "35d", "encrypted": true, "restore_order": 3, "snapshot_id": "product-snapshot-id"},
+    "warehouse-service": {"owner": "warehouse-service", "retention": "35d", "encrypted": true, "restore_order": 4, "snapshot_id": "warehouse-snapshot-id"},
+    "inventory-service": {"owner": "inventory-service", "retention": "35d", "encrypted": true, "restore_order": 5, "snapshot_id": "inventory-snapshot-id"},
+    "documents-service": {"owner": "documents-service", "retention": "35d", "encrypted": true, "restore_order": 6, "snapshot_id": "documents-snapshot-id"},
+    "audit-service": {"owner": "audit-service", "retention": "90d", "encrypted": true, "restore_order": 7, "snapshot_id": "audit-snapshot-id"},
+    "reporting-service": {"owner": "reporting-service", "retention": "14d", "encrypted": true, "restore_order": 8, "snapshot_id": "reporting-snapshot-id"}
+  },
+  "redis_stream_backups": {
+    "wms.events": {"snapshot_id": "events-snapshot-id", "offset": "0-0", "retention": "14d"},
+    "wms.events.replay": {"snapshot_id": "replay-snapshot-id", "offset": "0-0", "retention": "7d"},
+    "wms.events.audit.dlq": {"snapshot_id": "audit-dlq-snapshot-id", "offset": "0-0", "retention": "14d"},
+    "wms.events.inventory.dlq": {"snapshot_id": "inventory-dlq-snapshot-id", "offset": "0-0", "retention": "14d"},
+    "wms.events.reporting.dlq": {"snapshot_id": "reporting-dlq-snapshot-id", "offset": "0-0", "retention": "14d"},
+    "wms.events.ai.dlq": {"snapshot_id": "ai-dlq-snapshot-id", "offset": "0-0", "retention": "7d"}
+  },
+  "rpo_rto": {
+    "auth": {"rpo": "15m", "rto": "30m"},
+    "document_posting": {"rpo": "15m", "rto": "60m"},
+    "inventory_reconcile": {"rpo": "15m", "rto": "60m"},
+    "reporting_rebuild": {"rpo": "60m", "rto": "4h"}
+  },
+  "restore_order": [
+    "restore service datastores",
+    "restore Redis stream snapshots",
+    "start identity-service",
+    "start product/customer/warehouse services",
+    "start documents-service and inventory-service",
+    "replay wms.events to the captured offset",
+    "rebuild reporting projections from wms.events or wms.events.replay",
+    "start api-gateway",
+    "run validation checks"
+  ],
+  "validation_checks": [
+    {"name": "auth users restored", "service": "identity-service", "target_db": "identity", "sql": "select count(*) from users", "expected": 1},
+    {"name": "document posting idempotency ledger restored", "service": "documents-service", "target_db": "documents", "sql": "select count(*) from documents where status = 'POSTED'", "expected": 1},
+    {"name": "inventory totals reconcile", "service": "inventory-service", "target_db": "inventory", "sql": "select coalesce(sum(quantity), 0) from inventory", "expected": 7},
+    {"name": "reporting projection rebuilt", "service": "reporting-service", "target_db": "reporting", "sql": "select count(*) from reporting_read_model_events", "expected": 1}
+  ]
+}
