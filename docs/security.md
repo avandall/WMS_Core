@@ -72,7 +72,18 @@ Rotation paths:
 - Database credentials: rotate one service-owned datastore credential at a time after its
   migration job succeeds.
 
-## Remaining Production Work
+## Security Governance
 
-- Fine-grained authz scopes should keep living at the API Gateway boundary.
-- Kubernetes network policies or service mesh policy can be added in Phase 17 deployment work.
+Fine-grained authz scopes, role matrix ownership, audit requirements, dependency/license scanning,
+and rotation rehearsals are documented in `docs/security_governance.md`.
+
+The enforceable policy source is `deploy/kubernetes/examples/security-governance-policy.json` and
+can be checked with:
+
+```bash
+python3 scripts/security_governance_check.py \
+  --policy deploy/kubernetes/examples/security-governance-policy.json
+```
+
+Kubernetes network policies or service mesh policy can be added after the current governance
+baseline is accepted.

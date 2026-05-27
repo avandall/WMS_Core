@@ -61,6 +61,8 @@ Pull requests and pushes validate:
 - `kubectl kustomize deploy/kubernetes/base`
 - generated proto drift through `scripts/gen_protos.py` and `git diff --exit-code`
 - production cutover manifest dry-run
+- security governance policy validation
+- dependency review on pull requests
 
 Release candidates additionally build all non-AI runtime images, keep the AI image behind the
 explicit `run_ai_image` workflow input, generate SBOM output, run a vulnerability scan, and upload
@@ -98,6 +100,7 @@ Deployment package:
 - Production cutover rehearsal manifest: `deploy/kubernetes/examples/production-cutover-manifest.example.json`
 - Disaster recovery runbook: `docs/disaster_recovery.md`
 - Disaster recovery rehearsal manifest: `deploy/kubernetes/examples/disaster-recovery-manifest.example.json`
+- Security governance policy: `deploy/kubernetes/examples/security-governance-policy.json`
 
 Rollout order:
 

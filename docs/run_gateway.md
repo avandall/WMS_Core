@@ -29,6 +29,9 @@ correlation. See `docs/observability.md` for the Phase 12 baseline.
 Gateway security headers, explicit CORS configuration, request body limits, and opt-in gRPC
 TLS are documented in `docs/security.md`.
 
+Gateway authorization governance, role matrix, audit requirements, and dependency/license
+scanning policy are documented in `docs/security_governance.md`.
+
 Timeouts, bounded retries, the gateway circuit breaker, SLO targets, and audit-consumer
 backpressure are documented in `docs/resilience.md`.
 

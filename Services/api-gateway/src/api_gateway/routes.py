@@ -580,7 +580,10 @@ def post_document(document_id: int, payload: PostDocumentPayload, request: Reque
     return {"message": resp.message}
 
 
-@router.get("/documents/{document_id}", dependencies=[Depends(get_current_user)])
+@router.get(
+    "/documents/{document_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],
+)
 def get_document(document_id: int, request: Request):
     with documents_stub() as stub:
         doc = _grpc_call(
@@ -595,7 +598,10 @@ def get_document(document_id: int, request: Request):
     return document_to_dict(doc)
 
 
-@router.get("/documents", dependencies=[Depends(get_current_user)])
+@router.get(
+    "/documents",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],
+)
 def list_documents(request: Request, doc_type: str | None = None, page: int = 1, page_size: int = 20):
     with documents_stub() as stub:
         resp = _grpc_call(
@@ -611,7 +617,10 @@ def list_documents(request: Request, doc_type: str | None = None, page: int = 1,
     ]
 
 
-@router.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
+@router.delete(
+    "/documents/{document_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_DOCUMENTS))],
+)
 def delete_document(document_id: int, request: Request):
     with documents_stub() as stub:
         resp = _grpc_call(

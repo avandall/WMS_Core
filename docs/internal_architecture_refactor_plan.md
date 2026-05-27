@@ -551,19 +551,19 @@ Acceptance:
 
 ## Phase S: Security Governance and Authorization Hardening
 
-Status: TODO.
+Status: DONE.
 
 Goal: move from baseline security wiring to enforceable production security governance.
 
-- Define fine-grained authorization scopes/permissions at the API Gateway boundary for WMS
+- Defined fine-grained authorization scopes/permissions at the API Gateway boundary for WMS
   workflows.
-- Add tests for admin-only actions, warehouse/inventory/document permissions, and token expiry or
+- Added tests for admin-only actions, warehouse/inventory/document permissions, and token expiry or
   rotation behavior.
-- Define secret rotation cadence for JWT signing keys, gRPC mTLS certificates, database
+- Defined secret rotation cadence for JWT signing keys, gRPC mTLS certificates, database
   credentials, and external provider keys.
-- Add audit requirements for privileged operations, failed auth attempts, data export, and manual
+- Added audit requirements for privileged operations, failed auth attempts, data export, and manual
   inventory adjustments.
-- Add dependency/license scanning policy and remediation ownership for shared libraries and each
+- Added dependency/license scanning policy and remediation ownership for shared libraries and each
   service image.
 
 Acceptance:

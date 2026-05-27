@@ -40,6 +40,11 @@ jobs:
           git diff --exit-code -- Services proto scripts/gen_protos.py
       - name: Production cutover dry-run
         run: python3 scripts/cutover_rehearsal.py --manifest deploy/kubernetes/examples/production-cutover-manifest.example.json --dry-run
+      - name: Security governance policy
+        run: python3 scripts/security_governance_check.py --policy deploy/kubernetes/examples/security-governance-policy.json
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
 
   gateway-stack-smoke:
     runs-on: ubuntu-latest
