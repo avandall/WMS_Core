@@ -470,11 +470,11 @@ Acceptance:
 
 ## Phase P: Production Data Cutover and Backfill
 
-Status: TODO.
+Status: DONE.
 
 Goal: prove the refactored services can take over real production data, not only local/dev data.
 
-- Define the source-to-target mapping for each owned datastore:
+- Defined the source-to-target mapping for each owned datastore:
   - users/auth data to `identity-service`
   - customers to `customer-service`
   - products/SKUs to `product-service`
@@ -483,13 +483,15 @@ Goal: prove the refactored services can take over real production data, not only
   - documents and document items to `documents-service`
   - audit history to `audit-service`
   - reporting projections to `reporting-service` rebuild/backfill
-- Add dry-run cutover scripts or documented commands that can validate row counts, key mappings,
-  foreign-ID references, and snapshot fields before writing target databases.
-- Define the cutover order, read-only window, rollback point, and post-cutover reconciliation
+- Added `docs/production_cutover.md`, a manifest example, and `scripts/cutover_rehearsal.py` so
+  dry-run cutover rehearsals can validate row counts, key mappings, foreign-ID references, and
+  snapshot fields before writing target databases.
+- Defined the cutover order, read-only window, rollback point, and post-cutover reconciliation
   checks.
-- Add backfill/replay commands for reporting and AI read models without reading operational
+- Added backfill/replay commands for reporting and AI read models without reading operational
   service databases directly.
-- Record which data is migrated, rebuilt from events, manually seeded, or intentionally dropped.
+- Recorded which data is migrated, rebuilt from events, manually seeded, or intentionally dropped
+  in the production cutover runbook and rehearsal manifest.
 
 Acceptance:
 
@@ -585,6 +587,7 @@ Acceptance:
 13. Phase M: Transactional Event Delivery Hardening
 14. Phase N: Deployment, Observability, and Security Hardening
 15. Phase O: Monolith Archive Exit
+
 16. Phase P: Production Data Cutover and Backfill
 17. Phase Q: CI/CD Release Enforcement
 18. Phase R: Backup, Restore, and Disaster Recovery

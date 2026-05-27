@@ -39,6 +39,9 @@ Production deployment artifacts are under `deploy/kubernetes`.
 
 Monolith retirement status and fixture ownership are documented in `docs/monolith_retirement.md`.
 
+Production data cutover, backfill, reconciliation, and rollback rehearsal steps are documented in
+`docs/production_cutover.md`.
+
 Durable event consumers, DLQ streams, reporting read-model ingestion, AI reindex queues, and
 event replay tooling are documented in `docs/events.md`.
 

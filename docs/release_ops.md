@@ -69,6 +69,8 @@ Deployment package:
 - SLO alert examples: `deploy/kubernetes/examples/slo-alerts.yaml`
 - Saved observability queries: `deploy/kubernetes/examples/observability-queries.md`
 - Load/chaos release gate checklist: `deploy/kubernetes/examples/load-chaos-checks.md`
+- Production data cutover runbook: `docs/production_cutover.md`
+- Production cutover rehearsal manifest: `deploy/kubernetes/examples/production-cutover-manifest.example.json`
 
 Rollout order:
 
@@ -101,6 +103,21 @@ migration stream per service-owned datastore:
 Kubernetes migration jobs call each service-owned `*-migrate` command before runtime startup.
 Runtime table bootstrap is local/dev only and is enabled in root compose through
 `LOCAL_DB_BOOTSTRAP_ENABLED=1`; production deployment must keep that variable unset or false.
+
+## Production Data Cutover
+
+Use `docs/production_cutover.md` and
+`deploy/kubernetes/examples/production-cutover-manifest.example.json` before shifting real data to
+the service-owned datastores. The rehearsal must capture source/target database snapshots, Redis
+event offsets, release image tags, reconciliation output, and rollback notes.
+
+Baseline rehearsal command:
+
+```bash
+python3 scripts/cutover_rehearsal.py \
+  --manifest deploy/kubernetes/examples/production-cutover-manifest.example.json \
+  --dry-run
+```
 
 ## Runbooks
 
