@@ -29,8 +29,9 @@ Trạng thái theo roadmap dài hạn: `docs/roadmap.md`
 
 ## Monolith archive
 
-`Services/wms-monolith/` chỉ còn là archive tham chiếu trong Phase 16. Nó không còn nằm trong
-root `uv` workspace, CI mặc định, root compose, hoặc proto generation target. Xem
+`Services/wms-monolith/` đã được đóng băng thành archive tham chiếu. Nó không còn nằm trong
+root `uv` workspace, CI mặc định, root compose, proto generation target, migration, fixture,
+hoặc release workflow. Rollback reference tag: `phase-o-monolith-archive-exit`. Xem
 `docs/monolith_retirement.md`.
 
 ## gRPC protos

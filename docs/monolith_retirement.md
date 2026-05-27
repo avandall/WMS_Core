@@ -1,11 +1,12 @@
 # Monolith Retirement
 
-Phase 16 removes the monolith from the active development path while keeping it as an
-archive for parity checks and historical reference.
+Phase 16 removes the monolith from the active development path. Phase O freezes the remaining
+tree as a read-only archive with an explicit rollback reference.
 
 ## Status
 
-`Services/wms-monolith/` is archived reference code. It is intentionally not part of:
+`Services/wms-monolith/` is archived reference code and is now frozen read-only reference code.
+It is intentionally not part of:
 
 - root `uv` workspace members
 - default CI jobs
@@ -18,15 +19,21 @@ packages and local datastores.
 
 ## Retirement Decision
 
-The final delete/archive decision should happen after:
+Decision: keep `Services/wms-monolith/` as read-only reference until the next accepted tagged
+service release, then delete it in a dedicated commit if no rollback/parity investigation is open.
+The rollback reference tag is `phase-o-monolith-archive-exit`.
+
+Phase O confirms:
 
 1. API Gateway OpenAPI parity is accepted for the required business workflows.
 2. Service-owned seed/dev fixtures replace monolith seed scripts.
 3. Production deployment automation exists for service migrations and rollback.
-4. The team confirms no dashboard or operational script imports monolith internals.
+4. No active script, CI job, Compose service, or deployment manifest imports or executes
+   monolith internals.
 
-Until then, changes to `Services/wms-monolith/` should be rare and explicitly labeled as
-archive/reference maintenance.
+Changes to `Services/wms-monolith/` must be rare and explicitly labeled as archive/reference
+maintenance. Do not add new runtime features, migrations, fixtures, generated protos, CI jobs, or
+deployment scripts under this tree.
 
 ## Fixture Ownership
 
@@ -60,3 +67,7 @@ AI remains explicit:
 ```bash
 docker compose --profile ai up -d ai-service
 ```
+
+Do not start work from monolith commands such as `Services/wms-monolith/start.sh`,
+`Services/wms-monolith/run_tests.sh`, or `Services/wms-monolith/scripts/seed.py`; those are
+historical archive commands only.

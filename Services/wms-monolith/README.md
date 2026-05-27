@@ -1,21 +1,28 @@
-# Warehouse Management System (WMS)
+# Warehouse Management System (WMS) Monolith Archive
 
-A warehouse management system built with Python, FastAPI, and Clean Architecture.
+This directory is frozen reference code from the pre-gRPC monolith. It is not an active
+entrypoint for development, test, deployment, fixture, migration, or CI.
 
-## Quick Start
+Active work starts from the root microservice workspace:
 
-**Development** (with sample data):
+- API Gateway: `Services/api-gateway/`
+- Domain services: `Services/*-service/`
+- Protobuf contracts: `proto/`
+- Deployment artifacts: `docker-compose.yml` and `deploy/kubernetes/`
+- Release/run documentation: `docs/run_gateway.md` and `docs/release_ops.md`
+
+See `docs/monolith_retirement.md` for the archive policy and rollback reference.
+
+## Historical Commands
+
+The commands below are retained only to explain how this archive used to run. Do not use them
+for active development or release validation.
+
 ```bash
 ./start.sh dev
-```
-
-**Production** (minimal data):
-```bash
 ./start.sh prod
-```
-
-# Seed sample data (see scripts/seed.py for details)
 python3 ./scripts/seed.py
+```
 
 ## Access
 
@@ -34,7 +41,16 @@ python3 ./scripts/seed.py
 
 ## Development
 
-**Setup:**
+Use the root microservice workspace for current development:
+
+```bash
+uv run --group dev pytest -q tests/contract
+tests/e2e/run_gateway_stack_tests.sh
+docker compose up -d
+```
+
+Historical monolith-only setup, retained for archive inspection:
+
 ```bash
 uv sync  # or: pip install -r requirements.txt
 pytest   # run tests
@@ -63,6 +79,8 @@ docker compose down -v
 - Real-time stock level monitoring
 
 ## Architecture
+
+Archived architecture:
 
 - **Framework**: FastAPI + PostgreSQL
 - **Pattern**: Clean Architecture with DDD

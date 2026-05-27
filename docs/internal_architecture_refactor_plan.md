@@ -449,17 +449,19 @@ Acceptance:
 
 ## Phase O: Monolith Archive Exit
 
-Status: TODO.
+Status: DONE.
 
 Goal: decide whether the archived monolith can be frozen, moved, or deleted.
 
-- Confirm API Gateway parity for required business workflows.
-- Confirm service-owned migrations and fixtures have replaced monolith operational dependencies.
-- Confirm no active scripts, docs, CI jobs, compose services, or deployment manifests import or
-  execute monolith internals.
-- Decide the archive policy: keep as read-only reference, move outside the active repo, or delete
-  after a tagged release.
-- Update contributor docs so new work starts from services, gateway, proto, and deployment
+- Confirmed API Gateway parity for required business workflows through gateway contract and E2E
+  gates.
+- Confirmed service-owned migrations and fixtures have replaced monolith operational dependencies.
+- Confirmed no active scripts, CI jobs, compose services, or deployment manifests import or execute
+  monolith internals.
+- Chose the archive policy: keep `Services/wms-monolith/` as frozen read-only reference until the
+  next accepted tagged service release; delete it later in a dedicated commit if no rollback/parity
+  investigation is open. Rollback reference tag: `phase-o-monolith-archive-exit`.
+- Updated contributor docs so new work starts from services, gateway, proto, and deployment
   artifacts only.
 
 Acceptance:
