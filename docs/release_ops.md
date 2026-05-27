@@ -49,6 +49,31 @@ syft wms/api-gateway:$RELEASE_VERSION -o spdx-json > sbom-api-gateway.spdx.json
 Every production release should attach one SBOM per image and record the git SHA,
 `uv.lock` hash, and generated proto commit.
 
+## CI/CD Release Enforcement
+
+Release gates are automated in `.github/workflows/release-gates.yml`.
+
+Pull requests and pushes validate:
+
+- default contract tests
+- gateway E2E smoke through `tests/e2e/run_gateway_stack_tests.sh`
+- `docker compose config --quiet`
+- `kubectl kustomize deploy/kubernetes/base`
+- generated proto drift through `scripts/gen_protos.py` and `git diff --exit-code`
+- production cutover manifest dry-run
+
+Release candidates additionally build all non-AI runtime images, keep the AI image behind the
+explicit `run_ai_image` workflow input, generate SBOM output, run a vulnerability scan, and upload
+`release-artifact.json`.
+
+Release artifact command:
+
+```bash
+python3 scripts/release_artifact.py --release-version "$RELEASE_VERSION" --output release-artifact.json
+```
+
+Artifact format and retention expectations are documented in `docs/release_artifact.md`.
+
 ## Deployment Contract
 
 Minimum platform requirements:

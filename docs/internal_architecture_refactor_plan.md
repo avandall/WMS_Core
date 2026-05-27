@@ -503,17 +503,19 @@ Acceptance:
 
 ## Phase Q: CI/CD Release Enforcement
 
-Status: TODO.
+Status: DONE.
 
 Goal: turn documented release gates into automated checks that block unsafe releases.
 
-- Add CI jobs for default contract tests, gateway E2E smoke, compose config validation, kustomize
-  render, Kubernetes server dry-run where a target cluster is available, and generated proto drift.
-- Add release build checks for all non-AI runtime images and keep AI image checks behind an
+- Added CI jobs for Contract tests, gateway E2E smoke, compose config validation,
+  kustomize render, production cutover dry-run, and generated proto drift.
+- Added release build checks for all non-AI runtime images and kept AI image checks behind an
   explicit opt-in/profile.
-- Add SBOM and vulnerability scan steps for release images.
-- Enforce migration-job presence and service-owned datastore configuration before deployment.
-- Publish release artifacts with the commit SHA, image tags, migration command list, and rollback
+- Added SBOM and vulnerability scan steps for release images.
+- Enforced migration-job presence and service-owned datastore configuration through existing
+  deployment and migration contract tests in the release gates.
+- Added `scripts/release_artifact.py` and `docs/release_artifact.md` to publish release artifacts
+  with the commit SHA, image tags, migration command list, and rollback
   notes.
 
 Acceptance:
