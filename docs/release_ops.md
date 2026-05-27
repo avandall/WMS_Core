@@ -116,6 +116,13 @@ Replay events:
 3. Re-run the consumer from the selected `AUDIT_EVENT_CONSUMER_START_ID`.
 4. Confirm idempotency with `event_id` in audit payload.
 
+DLQ drain:
+
+1. Fix or roll back the failing consumer handler.
+2. Run `scripts/drain_dlq.py --dry-run` against the service-owned DLQ stream.
+3. Drain into `wms.events.replay`.
+4. Confirm duplicate `event_id` handling before resuming normal consumer reads.
+
 AI reindex:
 
 1. Enable the `ai` profile only for the reindex window.

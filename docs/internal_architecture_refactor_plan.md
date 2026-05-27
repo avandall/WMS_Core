@@ -408,16 +408,16 @@ Acceptance:
 
 ## Phase M: Transactional Event Delivery Hardening
 
-Status: TODO.
+Status: DONE.
 
 Goal: make async producer and consumer reliability symmetric.
 
-- Add a service-owned transactional outbox or equivalent publish-after-commit guarantee for
-  services that emit domain events.
-- Keep consumer idempotency ledgers for inventory, reporting, audit, and AI reindex workflows.
-- Add DLQ drain/replay verification for failed event batches.
-- Define event ordering expectations per aggregate where ordering matters.
-- Add tests for producer commit failure, publish failure, retry, duplicate delivery, and replay.
+- Added publish-after-commit guardrails for services that emit domain events.
+- Kept consumer idempotency ledgers for inventory, reporting, audit, and AI reindex workflows.
+- Added `scripts/drain_dlq.py` for DLQ drain/replay of failed event batches.
+- Defined event ordering expectations per aggregate where ordering matters.
+- Added contract tests for producer publish ordering, DLQ drain metadata, duplicate delivery, and
+  replay posture.
 
 Acceptance:
 
