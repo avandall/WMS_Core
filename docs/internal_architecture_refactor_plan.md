@@ -347,6 +347,124 @@ Acceptance:
 - Dev/test stays fast without AI.
 - AI reindex can be replayed from events or projection snapshots.
 
+## Remaining Gaps After Phase K Audit
+
+The internal service architecture cleanup is complete through Phase K, but the following work is
+still intentionally outside the completed architecture cleanup phases:
+
+- Production migration runners are still placeholders; local/dev table bootstrap must not become
+  the production migration strategy.
+- Event publishing is durable on the consumer side, but producers still need an explicit
+  transactional outbox strategy before production-grade async guarantees.
+- Gateway/API parity has contract coverage, but the final business-flow parity sign-off against
+  the archived monolith has not been recorded in this plan.
+- Kubernetes/deployment artifacts exist as a baseline and should be revalidated after the
+  architecture refactor, especially datastore, event-consumer, and AI opt-in boundaries.
+- Service-owned seed/dev fixtures still need a final ownership pass before the monolith archive
+  can be deleted or frozen permanently.
+
+## Phase K: Refactor Completion Audit
+
+Status: DONE.
+
+Goal: close the architecture refactor with one explicit, repeatable validation pass.
+
+- Ran full default contract and E2E verification from the root compose stack through
+  `tests/e2e/run_gateway_stack_tests.sh`.
+- Validated gateway OpenAPI/proto contract coverage through the default contract suite.
+- Rechecked service ownership docs against actual compose datastore URLs, initialized tables, and
+  module folders.
+- Verified event replay posture for audit, inventory, reporting, and AI consumers through
+  documented replay commands and contract tests.
+- Recorded the final phase commit list and rollback points in `docs/refactor_completion_audit.md`.
+
+Acceptance:
+
+- Default verification passes without AI build/start.
+- `docs/data_ownership.md`, `docs/events.md`, and this plan agree with the current source.
+- Any remaining intentional gaps are listed as Phase L-O work, not hidden in stale docs.
+
+## Phase L: Production Migration and Fixture Ownership
+
+Status: TODO.
+
+Goal: replace local bootstrap assumptions with service-owned production migration paths.
+
+- Add a real migration runner per datastore-owning service.
+- Replace Kubernetes migration-job placeholder commands with the service-owned migration commands.
+- Keep `create_all` or equivalent table bootstrap local/dev only.
+- Move seed/dev fixtures out of monolith-owned scripts into service-owned fixture entrypoints.
+- Add contract tests that production config does not rely on local SQLite defaults or runtime
+  table creation.
+
+Acceptance:
+
+- Every datastore-owning service has a migration command documented and wired into deployment
+  examples.
+- Production rollout can apply migrations before service startup.
+- Monolith seed scripts are no longer required for active service dev/test flows.
+
+## Phase M: Transactional Event Delivery Hardening
+
+Status: TODO.
+
+Goal: make async producer and consumer reliability symmetric.
+
+- Add a service-owned transactional outbox or equivalent publish-after-commit guarantee for
+  services that emit domain events.
+- Keep consumer idempotency ledgers for inventory, reporting, audit, and AI reindex workflows.
+- Add DLQ drain/replay verification for failed event batches.
+- Define event ordering expectations per aggregate where ordering matters.
+- Add tests for producer commit failure, publish failure, retry, duplicate delivery, and replay.
+
+Acceptance:
+
+- No domain event is acknowledged as published before the owning transaction commits.
+- Replaying an event range is idempotent across all active consumers.
+- DLQ recovery is documented and tested at least at contract/integration level.
+
+## Phase N: Deployment, Observability, and Security Hardening
+
+Status: TODO.
+
+Goal: make the refactored service boundaries deployable and operable.
+
+- Revalidate Kubernetes manifests after the final service boundary changes.
+- Replace secret placeholders with environment-specific secret-manager wiring.
+- Verify mTLS/JWT/key-rotation paths for gateway-to-service traffic.
+- Add dashboards or saved queries for request rate, error rate, latency, Redis stream lag, DLQ
+  depth, and consumer replay status.
+- Run release smoke, load, and chaos checks from the deployment examples.
+- Keep `ai-service` out of the default deployment unless an environment explicitly enables it.
+
+Acceptance:
+
+- `kubectl kustomize deploy/kubernetes/base` and server dry-run pass for the target cluster.
+- Release gates cover health, auth, one core customer flow, one document/inventory flow, and
+  async consumer lag.
+- AI remains opt-in in both compose and deployment artifacts.
+
+## Phase O: Monolith Archive Exit
+
+Status: TODO.
+
+Goal: decide whether the archived monolith can be frozen, moved, or deleted.
+
+- Confirm API Gateway parity for required business workflows.
+- Confirm service-owned migrations and fixtures have replaced monolith operational dependencies.
+- Confirm no active scripts, docs, CI jobs, compose services, or deployment manifests import or
+  execute monolith internals.
+- Decide the archive policy: keep as read-only reference, move outside the active repo, or delete
+  after a tagged release.
+- Update contributor docs so new work starts from services, gateway, proto, and deployment
+  artifacts only.
+
+Acceptance:
+
+- The team has an explicit monolith archive/delete decision with a rollback reference tag.
+- Active development workflows no longer mention monolith commands except historical reference.
+- Contract tests continue to guard against monolith re-entry into active runtime paths.
+
 ## Suggested Order
 
 1. Phase A: Architecture Baseline and Guardrails
@@ -359,6 +477,11 @@ Acceptance:
 8. Phase H: Lightweight CRUD Service Cleanup
 9. Phase I: API Gateway BFF Cleanup
 10. Phase J: AI Pipeline Cleanup
+11. Phase K: Refactor Completion Audit
+12. Phase L: Production Migration and Fixture Ownership
+13. Phase M: Transactional Event Delivery Hardening
+14. Phase N: Deployment, Observability, and Security Hardening
+15. Phase O: Monolith Archive Exit
 
 ## Non-Goals
 

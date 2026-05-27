@@ -27,6 +27,8 @@ Root `docker-compose.yml` now gives every service its own datastore connection i
 
 ## Follow-up Work
 
-- Replace remaining reporting placeholders with projection tables and handlers in Phase F.
-- Add production migration tooling before deployment.
+- Phase L owns production migration tooling and service-owned seed/dev fixtures.
+- Phase M owns transactional event publishing hardening for services that emit domain events.
+- Phase O owns the final monolith archive/delete decision after active service fixtures and
+  migrations are independent.
 - Keep reporting/search read models behind explicit service-owned datastore connections.
