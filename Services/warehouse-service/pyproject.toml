@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 warehouse-grpc = "warehouse_service.main:main_grpc"
 warehouse-http = "warehouse_service.main:main"
+warehouse-migrate = "warehouse_service.bootstrap:migrate"
+warehouse-fixtures = "warehouse_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

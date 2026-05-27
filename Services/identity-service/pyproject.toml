@@ -20,6 +20,8 @@ dependencies = [
 [project.scripts]
 identity-grpc = "identity_service.main:main_grpc"
 identity-http = "identity_service.main:main"
+identity-migrate = "identity_service.bootstrap:migrate"
+identity-fixtures = "identity_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

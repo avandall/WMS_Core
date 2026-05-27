@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 customer-grpc = "customer_service.main:main_grpc"
 customer-http = "customer_service.main:main"
+customer-migrate = "customer_service.bootstrap:migrate"
+customer-fixtures = "customer_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

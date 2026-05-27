@@ -13,7 +13,7 @@ spec:
       containers:
         - name: migrate
           image: wms/identity-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-identity-service-migration-command"]
+          command: ["identity-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -36,7 +36,7 @@ spec:
       containers:
         - name: migrate
           image: wms/customer-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-customer-service-migration-command"]
+          command: ["customer-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -59,7 +59,7 @@ spec:
       containers:
         - name: migrate
           image: wms/product-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-product-service-migration-command"]
+          command: ["product-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -82,7 +82,7 @@ spec:
       containers:
         - name: migrate
           image: wms/warehouse-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-warehouse-service-migration-command"]
+          command: ["warehouse-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -105,7 +105,7 @@ spec:
       containers:
         - name: migrate
           image: wms/inventory-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-inventory-service-migration-command"]
+          command: ["inventory-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -128,7 +128,7 @@ spec:
       containers:
         - name: migrate
           image: wms/documents-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-documents-service-migration-command"]
+          command: ["documents-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -151,7 +151,7 @@ spec:
       containers:
         - name: migrate
           image: wms/audit-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-audit-service-migration-command"]
+          command: ["audit-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -174,7 +174,7 @@ spec:
       containers:
         - name: migrate
           image: wms/reporting-service:RELEASE_VERSION
-          command: ["sh", "-c", "replace-with-reporting-service-migration-command"]
+          command: ["reporting-migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:

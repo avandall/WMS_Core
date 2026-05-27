@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 audit-grpc = "audit_service.main:main_grpc"
 audit-http = "audit_service.main:main"
+audit-migrate = "audit_service.bootstrap:migrate"
+audit-fixtures = "audit_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

@@ -85,7 +85,7 @@ def test_migration_jobs_exist_per_service_without_ai_or_monolith() -> None:
         assert f"name: {service}-migration" in migration_jobs
         assert f"image: wms/{service}:RELEASE_VERSION" in migration_jobs
 
-    assert "replace-with-" in migration_jobs
+    assert "replace-with-" not in migration_jobs
     assert "ai-service" not in migration_jobs
     assert "wms-monolith" not in migration_jobs
 

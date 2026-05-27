@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 product-grpc = "product_service.main:main_grpc"
 product-http = "product_service.main:main"
+product-migrate = "product_service.bootstrap:migrate"
+product-fixtures = "product_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

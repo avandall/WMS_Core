@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 inventory-grpc = "inventory_service.main:main_grpc"
 inventory-http = "inventory_service.main:main"
+inventory-migrate = "inventory_service.bootstrap:migrate"
+inventory-fixtures = "inventory_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

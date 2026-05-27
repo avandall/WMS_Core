@@ -7,8 +7,8 @@ the gRPC-first stack without the retired monolith and without the opt-in AI serv
 
 - `base/`: deployable Kubernetes base for API Gateway, gRPC services, Redis Streams, and
   OpenTelemetry Collector.
-- `examples/migration-jobs.yaml`: per-service migration job templates. Replace the command
-  with each service-owned migration runner before production use.
+- `examples/migration-jobs.yaml`: per-service migration jobs wired to each service-owned
+  `*-migrate` command.
 - `examples/slo-alerts.yaml`: PrometheusRule examples for availability, latency, and
   error-rate alerts.
 - `examples/load-chaos-checks.md`: release gate checklist for smoke, load, and chaos checks.

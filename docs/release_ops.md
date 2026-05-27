@@ -95,9 +95,9 @@ migration stream per service-owned datastore:
 | reporting-service | read-model/reporting schema |
 | ai-service | vector/index metadata schema |
 
-Phase 17 provides Kubernetes job templates for these service-owned migration streams.
-Replace each placeholder command with the real migration runner before production use.
-Production deployment must not rely on `create_all`.
+Kubernetes migration jobs call each service-owned `*-migrate` command before runtime startup.
+Runtime table bootstrap is local/dev only and is enabled in root compose through
+`LOCAL_DB_BOOTSTRAP_ENABLED=1`; production deployment must keep that variable unset or false.
 
 ## Runbooks
 

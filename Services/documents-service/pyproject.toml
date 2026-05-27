@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 documents-grpc = "documents_service.main:main_grpc"
 documents-http = "documents_service.main:main"
+documents-migrate = "documents_service.bootstrap:migrate"
+documents-fixtures = "documents_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

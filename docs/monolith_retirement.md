@@ -30,19 +30,20 @@ archive/reference maintenance.
 
 ## Fixture Ownership
 
-Remaining seed data should move to service-owned fixtures:
+Remaining seed data should move to service-owned fixtures. Phase L adds service-owned fixture
+entrypoints so active dev/test flows no longer need monolith seed scripts:
 
-| Fixture area | Target owner |
-| --- | --- |
-| users/auth | identity-service |
-| customers/purchases | customer-service |
-| products/catalog | product-service |
-| warehouses/positions | warehouse-service |
-| inventory stock | inventory-service |
-| documents/document_items | documents-service |
-| audit examples | audit-service |
-| reporting read models | reporting-service |
-| AI/vector examples | ai-service |
+| Fixture area | Target owner | Fixture command |
+| --- | --- | --- |
+| users/auth | identity-service | `identity-fixtures` |
+| customers/purchases | customer-service | `customer-fixtures` |
+| products/catalog | product-service | `product-fixtures` |
+| warehouses/positions | warehouse-service | `warehouse-fixtures` |
+| inventory stock | inventory-service | `inventory-fixtures` |
+| documents/document_items | documents-service | `documents-fixtures` |
+| audit examples | audit-service | `audit-fixtures` |
+| reporting read models | reporting-service | `reporting-fixtures` |
+| AI/vector examples | ai-service | future opt-in `ai-fixtures` when AI fixture data is needed |
 
 ## Contributor Entry Points
 

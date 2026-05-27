@@ -62,6 +62,14 @@ def _init_db_tables():
     return [Base.metadata.tables[name] for name in table_names if name in Base.metadata.tables] or None
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _schema_bootstrap_enabled() -> bool:
+    return _truthy_env("LOCAL_DB_BOOTSTRAP_ENABLED") or _truthy_env("SERVICE_MIGRATION_MODE")
+
+
 def get_session():
     db = SessionLocal()
     try:
@@ -93,6 +101,9 @@ def import_all_models():
 def init_db() -> None:
     try:
         import_all_models()
+        if not _schema_bootstrap_enabled():
+            logger.info("Skipping runtime table bootstrap; run the service migration command before startup")
+            return
 
         if engine.dialect.name == "postgresql":
             lock_id = 471999

@@ -19,6 +19,8 @@ dependencies = [
 [project.scripts]
 reporting-grpc = "reporting_service.main:main_grpc"
 reporting-http = "reporting_service.main:main"
+reporting-migrate = "reporting_service.bootstrap:migrate"
+reporting-fixtures = "reporting_service.bootstrap:fixtures"
 
 [build-system]
 requires = ["hatchling"]

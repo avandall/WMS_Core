@@ -386,15 +386,17 @@ Acceptance:
 
 ## Phase L: Production Migration and Fixture Ownership
 
-Status: TODO.
+Status: DONE.
 
 Goal: replace local bootstrap assumptions with service-owned production migration paths.
 
-- Add a real migration runner per datastore-owning service.
-- Replace Kubernetes migration-job placeholder commands with the service-owned migration commands.
-- Keep `create_all` or equivalent table bootstrap local/dev only.
-- Move seed/dev fixtures out of monolith-owned scripts into service-owned fixture entrypoints.
-- Add contract tests that production config does not rely on local SQLite defaults or runtime
+- Added `*-migrate` commands for each datastore-owning service.
+- Replaced Kubernetes migration-job placeholder commands with service-owned migration commands.
+- Kept runtime table bootstrap local/dev only through `LOCAL_DB_BOOTSTRAP_ENABLED=1` in compose;
+  production runtime manifests keep that variable unset.
+- Added `*-fixtures` entrypoints so active seed/dev fixture ownership is service-owned instead of
+  monolith-owned.
+- Added contract tests that production config does not rely on local SQLite defaults or runtime
   table creation.
 
 Acceptance:
