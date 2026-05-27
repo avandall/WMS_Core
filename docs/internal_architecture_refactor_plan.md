@@ -427,17 +427,18 @@ Acceptance:
 
 ## Phase N: Deployment, Observability, and Security Hardening
 
-Status: TODO.
+Status: DONE.
 
 Goal: make the refactored service boundaries deployable and operable.
 
-- Revalidate Kubernetes manifests after the final service boundary changes.
-- Replace secret placeholders with environment-specific secret-manager wiring.
-- Verify mTLS/JWT/key-rotation paths for gateway-to-service traffic.
-- Add dashboards or saved queries for request rate, error rate, latency, Redis stream lag, DLQ
-  depth, and consumer replay status.
-- Run release smoke, load, and chaos checks from the deployment examples.
-- Keep `ai-service` out of the default deployment unless an environment explicitly enables it.
+- Revalidated Kubernetes manifests after the final service boundary changes.
+- Added environment-specific secret-manager wiring example for `wms-secrets` and `wms-grpc-mtls`.
+- Verified and documented mTLS/JWT/key-rotation paths for gateway-to-service traffic.
+- Added saved PromQL queries for request rate, error rate, latency, Redis stream lag, DLQ depth,
+  and consumer replay status.
+- Expanded release smoke, load, and chaos checks to cover auth, customer flow,
+  document/inventory flow, and async lag gates.
+- Kept `ai-service` out of the default deployment unless an environment explicitly enables it.
 
 Acceptance:
 

@@ -59,8 +59,20 @@ RATE_LIMIT_RPS=10
 Root compose uses a local `SECRET_KEY` default for dev convenience. Production must set
 `SECRET_KEY` through the platform secret manager and should avoid committing `.env` secrets.
 
+Kubernetes production releases should source `wms-secrets` and `wms-grpc-mtls` from the platform
+secret manager. `deploy/kubernetes/examples/secret-manager-external-secrets.yaml` shows the
+expected ExternalSecret shape.
+
+Rotation paths:
+
+- gRPC mTLS: rotate `tls.crt`, `tls.key`, and `ca.crt` in the secret manager, then roll backend
+  service pods and API Gateway after volume refresh.
+- JWT signing key: rotate `SECRET_KEY` in a maintenance window and roll identity-service plus
+  API Gateway together so token validation stays consistent.
+- Database credentials: rotate one service-owned datastore credential at a time after its
+  migration job succeeds.
+
 ## Remaining Production Work
 
-- Certificate provisioning/rotation belongs in deployment automation.
 - Fine-grained authz scopes should keep living at the API Gateway boundary.
 - Kubernetes network policies or service mesh policy can be added in Phase 17 deployment work.

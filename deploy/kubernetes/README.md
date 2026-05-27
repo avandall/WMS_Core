@@ -12,6 +12,10 @@ the gRPC-first stack without the retired monolith and without the opt-in AI serv
 - `examples/slo-alerts.yaml`: PrometheusRule examples for availability, latency, and
   error-rate alerts.
 - `examples/load-chaos-checks.md`: release gate checklist for smoke, load, and chaos checks.
+- `examples/observability-queries.md`: saved PromQL queries for request rate, errors, latency,
+  Redis stream lag, DLQ depth, and replay status.
+- `examples/secret-manager-external-secrets.yaml`: ExternalSecret example for secret-manager
+  backed `wms-secrets` and `wms-grpc-mtls`.
 
 ## Apply
 
@@ -23,7 +27,8 @@ kubectl apply -k deploy/kubernetes/base
 ```
 
 Before applying to production, replace `base/secrets.example.yaml` with values from the
-cluster secret manager or an ExternalSecret equivalent. Do not commit real secret values.
+cluster secret manager or an ExternalSecret equivalent such as
+`examples/secret-manager-external-secrets.yaml`. Do not commit real secret values.
 
 ## Local k3s Validation
 
@@ -68,6 +73,8 @@ kubectl kustomize deploy/kubernetes/base \
 
 The base expects gRPC mTLS cert material in `wms-grpc-mtls`. Cert rotation should be handled
 by the cluster secret manager or cert-manager and rolled through Kubernetes volume updates.
+JWT signing material comes from `wms-secrets.SECRET_KEY`; rotate it through the same secret
+manager flow and roll gateway/identity pods together during the rotation window.
 
 ## AI
 

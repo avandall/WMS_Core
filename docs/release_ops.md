@@ -64,8 +64,10 @@ Deployment package:
 
 - Kubernetes base: `deploy/kubernetes/base`
 - Secret/cert placeholders: `deploy/kubernetes/base/secrets.example.yaml`
+- Secret-manager wiring example: `deploy/kubernetes/examples/secret-manager-external-secrets.yaml`
 - Migration job templates: `deploy/kubernetes/examples/migration-jobs.yaml`
 - SLO alert examples: `deploy/kubernetes/examples/slo-alerts.yaml`
+- Saved observability queries: `deploy/kubernetes/examples/observability-queries.md`
 - Load/chaos release gate checklist: `deploy/kubernetes/examples/load-chaos-checks.md`
 
 Rollout order:
@@ -74,7 +76,8 @@ Rollout order:
 2. Deploy shared infrastructure: event bus, secret/cert volumes, observability collector.
 3. Deploy backend gRPC services.
 4. Deploy API Gateway last.
-5. Run smoke tests against `/health`, `/openapi.json`, and one authenticated customer flow.
+5. Run smoke tests against `/health`, `/openapi.json`, one authenticated customer flow, one
+   document/inventory flow, and async consumer lag/DLQ gates.
 
 Rollback rule: rollback gateway first, then downstream services in reverse rollout order.
 

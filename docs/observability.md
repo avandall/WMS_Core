@@ -17,6 +17,8 @@ Phase 12 standardizes trace context, metrics, and structured logs across the gRP
 - API Gateway exposes Prometheus-style metrics at `/metrics`.
 - Service HTTP scaffolds expose `/metrics`.
 - gRPC server interceptors record request counts and duration summaries in the shared metrics registry.
+- Saved production queries live in `deploy/kubernetes/examples/observability-queries.md` and cover
+  request rate, error rate, latency, Redis stream lag, DLQ depth, and replay status.
 
 ## Logs
 

@@ -96,11 +96,18 @@ def test_observability_slo_and_release_gates_are_documented() -> None:
     checks = (EXAMPLES_DIR / "load-chaos-checks.md").read_text()
     release_ops = _read("docs/release_ops.md")
     roadmap = _read("docs/roadmap.md")
+    observability_queries = (EXAMPLES_DIR / "observability-queries.md").read_text()
+    external_secrets = (EXAMPLES_DIR / "secret-manager-external-secrets.yaml").read_text()
 
     assert "kind: Deployment" in otel
     assert "otel/opentelemetry-collector-contrib" in otel
     assert "PrometheusRule" in slo_alerts
     assert "WmsGatewayHighErrorRate" in slo_alerts
+    assert "WmsEventDlqDepthNonZero" in slo_alerts
     assert "k6 run load/customer-flow.js" in checks
+    assert "Auth Gate" in checks
+    assert "Core Business Gates" in checks
+    assert "redis_stream_length" in observability_queries
+    assert "kind: ExternalSecret" in external_secrets
     assert "deploy/kubernetes/base" in release_ops
     assert "Phase 17: Production Deployment Automation — DONE" in roadmap
