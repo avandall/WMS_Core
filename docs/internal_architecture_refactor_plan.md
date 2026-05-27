@@ -347,21 +347,19 @@ Acceptance:
 - Dev/test stays fast without AI.
 - AI reindex can be replayed from events or projection snapshots.
 
-## Remaining Gaps After Phase K Audit
+## Closed Gaps After Phase K Audit
 
-The internal service architecture cleanup is complete through Phase K, but the following work is
-still intentionally outside the completed architecture cleanup phases:
+The Phase K audit found work that was intentionally outside the first architecture cleanup pass.
+Those gaps are now covered by Phase L-O:
 
-- Production migration runners are still placeholders; local/dev table bootstrap must not become
-  the production migration strategy.
-- Event publishing is durable on the consumer side, but producers still need an explicit
-  transactional outbox strategy before production-grade async guarantees.
-- Gateway/API parity has contract coverage, but the final business-flow parity sign-off against
-  the archived monolith has not been recorded in this plan.
-- Kubernetes/deployment artifacts exist as a baseline and should be revalidated after the
-  architecture refactor, especially datastore, event-consumer, and AI opt-in boundaries.
-- Service-owned seed/dev fixtures still need a final ownership pass before the monolith archive
-  can be deleted or frozen permanently.
+- Phase L replaced migration placeholders and monolith seed dependencies with service-owned
+  migration and fixture entrypoints.
+- Phase M hardened event delivery, replay, and DLQ recovery.
+- Phase N revalidated deployment, observability, and security boundaries.
+- Phase O recorded the monolith archive policy and rollback reference.
+
+The phases after O are not internal refactor phases. They are production-readiness phases for
+real data cutover, automated release enforcement, operational recovery, and security governance.
 
 ## Phase K: Refactor Completion Audit
 
@@ -470,6 +468,106 @@ Acceptance:
 - Active development workflows no longer mention monolith commands except historical reference.
 - Contract tests continue to guard against monolith re-entry into active runtime paths.
 
+## Phase P: Production Data Cutover and Backfill
+
+Status: TODO.
+
+Goal: prove the refactored services can take over real production data, not only local/dev data.
+
+- Define the source-to-target mapping for each owned datastore:
+  - users/auth data to `identity-service`
+  - customers to `customer-service`
+  - products/SKUs to `product-service`
+  - warehouses/positions/locations to `warehouse-service`
+  - inventory balances and movement history to `inventory-service`
+  - documents and document items to `documents-service`
+  - audit history to `audit-service`
+  - reporting projections to `reporting-service` rebuild/backfill
+- Add dry-run cutover scripts or documented commands that can validate row counts, key mappings,
+  foreign-ID references, and snapshot fields before writing target databases.
+- Define the cutover order, read-only window, rollback point, and post-cutover reconciliation
+  checks.
+- Add backfill/replay commands for reporting and AI read models without reading operational
+  service databases directly.
+- Record which data is migrated, rebuilt from events, manually seeded, or intentionally dropped.
+
+Acceptance:
+
+- A production-like cutover rehearsal can run against disposable target databases.
+- Reconciliation output covers counts, orphan references, document totals, inventory totals, and
+  reporting projection freshness.
+- Rollback steps identify the exact database snapshots, event offsets, and release images needed
+  to return to the previous runtime.
+
+## Phase Q: CI/CD Release Enforcement
+
+Status: TODO.
+
+Goal: turn documented release gates into automated checks that block unsafe releases.
+
+- Add CI jobs for default contract tests, gateway E2E smoke, compose config validation, kustomize
+  render, Kubernetes server dry-run where a target cluster is available, and generated proto drift.
+- Add release build checks for all non-AI runtime images and keep AI image checks behind an
+  explicit opt-in/profile.
+- Add SBOM and vulnerability scan steps for release images.
+- Enforce migration-job presence and service-owned datastore configuration before deployment.
+- Publish release artifacts with the commit SHA, image tags, migration command list, and rollback
+  notes.
+
+Acceptance:
+
+- Pull requests fail if architecture guardrails, compose config, proto generation, or kustomize
+  validation drift.
+- Release candidates fail if SBOM/image scan, migration checks, or smoke gates fail.
+- The release artifact has enough information to redeploy or roll back without reading local
+  developer notes.
+
+## Phase R: Backup, Restore, and Disaster Recovery
+
+Status: TODO.
+
+Goal: make the service-owned datastore model recoverable under real failure scenarios.
+
+- Define backup ownership, retention, encryption, and restore order for each service datastore.
+- Define Redis Streams persistence, snapshot, and restore expectations for `wms.events`, replay
+  streams, and DLQ streams.
+- Add restore rehearsal steps for identity, inventory, documents, reporting projections, and the
+  event bus.
+- Document RPO/RTO targets by service and by business workflow.
+- Add recovery checks that verify auth works, document posting is not duplicated, inventory totals
+  reconcile, and reporting projections can be rebuilt.
+
+Acceptance:
+
+- A disposable environment can be restored from backups and replayed to a known event offset.
+- Recovery runbooks include restore order, validation queries, event replay boundaries, and
+  rollback/roll-forward choices.
+- RPO/RTO targets are explicit enough for release and incident decisions.
+
+## Phase S: Security Governance and Authorization Hardening
+
+Status: TODO.
+
+Goal: move from baseline security wiring to enforceable production security governance.
+
+- Define fine-grained authorization scopes/permissions at the API Gateway boundary for WMS
+  workflows.
+- Add tests for admin-only actions, warehouse/inventory/document permissions, and token expiry or
+  rotation behavior.
+- Define secret rotation cadence for JWT signing keys, gRPC mTLS certificates, database
+  credentials, and external provider keys.
+- Add audit requirements for privileged operations, failed auth attempts, data export, and manual
+  inventory adjustments.
+- Add dependency/license scanning policy and remediation ownership for shared libraries and each
+  service image.
+
+Acceptance:
+
+- Gateway authorization tests cover the main role/scope matrix without pushing authz rules into
+  downstream domain services.
+- Secret and certificate rotation has rehearsal steps and rollback instructions.
+- Audit events provide enough detail to investigate privileged or destructive operations.
+
 ## Suggested Order
 
 1. Phase A: Architecture Baseline and Guardrails
@@ -487,6 +585,10 @@ Acceptance:
 13. Phase M: Transactional Event Delivery Hardening
 14. Phase N: Deployment, Observability, and Security Hardening
 15. Phase O: Monolith Archive Exit
+16. Phase P: Production Data Cutover and Backfill
+17. Phase Q: CI/CD Release Enforcement
+18. Phase R: Backup, Restore, and Disaster Recovery
+19. Phase S: Security Governance and Authorization Hardening
 
 ## Non-Goals
 
