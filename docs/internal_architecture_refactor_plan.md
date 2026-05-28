@@ -593,9 +593,8 @@ examples or untracked root-local `.env` files.
 - Kept `Services/wms-monolith/` out of scope because it is archived reference code.
 - Kept tracked AI templates out of scope because AI remains opt-in and provider keys belong only in
   ignored local `.env` files or the production secret manager.
-- Expanded active service templates with monolith-era shared settings that the current service
-  settings classes still consume, including DB pool sizing, app metadata, rate limit, JWT, and CORS
-  knobs.
+- Pruned active service templates to variables with a current runtime path; legacy monolith
+  metadata/CORS/host/port placeholders stay documented instead of appearing as effective config.
 - Documented env ownership rules in `docs/env_configuration.md`.
 - Added contract tests that verify service env templates exist, do not contain real secrets, and
   match compose datastore/table ownership.

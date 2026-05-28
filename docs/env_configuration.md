@@ -2,9 +2,9 @@
 
 Phase T adds per-service `.env.example` files for the active non-AI services. These files are
 local/development templates only; production secrets and database URLs must come from the platform
-secret manager or deployment manifests. The tracked templates also carry the monolith-era shared
-application settings that active service settings still read, such as DB pool sizing, CORS, rate
-limit, JWT, and app metadata knobs.
+secret manager or deployment manifests. The tracked templates intentionally list only variables
+with a current runtime path in that service, so copied monolith settings such as app metadata,
+datastore CORS, and HTTP host/port are omitted until code actually consumes them.
 
 ## Scope
 
@@ -33,6 +33,8 @@ Out of scope:
 - Keep provider API keys such as OpenAI, Google, and Groq only in ignored local `.env` files or in
   the production secret manager.
 - Local templates may use SQLite URLs and `LOCAL_DB_BOOTSTRAP_ENABLED=1`.
+- Root `docker-compose.yml` provides runtime environment values for container runs; `.env.example`
+  files are local copy/reference templates, not automatically loaded by Compose.
 - Production deployment must keep runtime table bootstrap disabled and source secrets from
   `deploy/kubernetes/examples/secret-manager-external-secrets.yaml` or the target platform.
 - Service-owned datastore templates must match `docs/data_ownership.md` and root

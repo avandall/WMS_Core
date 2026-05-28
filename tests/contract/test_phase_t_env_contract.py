@@ -8,7 +8,6 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 SERVICE_ENV = {
     "api-gateway": {
         "required": {
-            "SECRET_KEY",
             "IDENTITY_GRPC_ADDR",
             "CUSTOMER_GRPC_ADDR",
             "PRODUCT_GRPC_ADDR",
@@ -20,7 +19,18 @@ SERVICE_ENV = {
             "CORS_ORIGINS",
             "RATE_LIMIT_RPS",
         },
-        "forbidden": {"DATABASE_URL", "INIT_DB_TABLES"},
+        "forbidden": {
+            "DATABASE_URL",
+            "INIT_DB_TABLES",
+            "SECRET_KEY",
+            "DEBUG",
+            "TITLE",
+            "VERSION",
+            "DESCRIPTION",
+            "HOST",
+            "PORT",
+            "API_KEY_HEADER",
+        },
     },
     "identity-service": {"database_url": "sqlite:////tmp/wms-identity.db", "tables": "users"},
     "customer-service": {"database_url": "sqlite:////tmp/wms-customer.db", "tables": "customers"},
@@ -38,24 +48,30 @@ SERVICE_ENV = {
     },
 }
 
-LEGACY_SHARED_KEYS = {
-    "TEST_DATABASE_URL",
+DATASTORE_RUNTIME_KEYS = {
     "DB_POOL_SIZE",
     "DB_MAX_OVERFLOW",
     "DB_POOL_TIMEOUT",
     "DB_POOL_RECYCLE",
     "DEBUG",
+    "JWT_ALGORITHM",
+}
+
+IDENTITY_RUNTIME_KEYS = {
     "TESTING",
+    "RATE_LIMIT_PER_MINUTE",
+    "ACCESS_TOKEN_EXPIRE_MINUTES",
+    "REFRESH_TOKEN_EXPIRE_MINUTES",
+}
+
+STALE_TEMPLATE_KEYS = {
+    "TEST_DATABASE_URL",
     "TITLE",
     "VERSION",
     "DESCRIPTION",
     "HOST",
     "PORT",
-    "RATE_LIMIT_PER_MINUTE",
     "API_KEY_HEADER",
-    "JWT_ALGORITHM",
-    "ACCESS_TOKEN_EXPIRE_MINUTES",
-    "REFRESH_TOKEN_EXPIRE_MINUTES",
     "CORS_ORIGINS",
     "CORS_ALLOW_CREDENTIALS",
     "CORS_ALLOW_METHODS",
@@ -118,19 +134,23 @@ def test_env_examples_cover_shared_runtime_knobs_without_real_secrets() -> None:
         assert "your-secret-key-here" not in values.values()
 
 
-def test_datastore_env_examples_cover_legacy_shared_settings() -> None:
+def test_datastore_env_examples_only_cover_runtime_settings() -> None:
     for service in SERVICE_ENV:
         if service == "api-gateway":
             continue
         values = _parse_env(ROOT_DIR / "Services" / service / ".env.example")
-        assert LEGACY_SHARED_KEYS.issubset(values)
+        assert DATASTORE_RUNTIME_KEYS.issubset(values)
         assert values["DB_POOL_SIZE"] == "50"
         assert values["DB_MAX_OVERFLOW"] == "30"
         assert values["DB_POOL_TIMEOUT"] == "5"
         assert values["DB_POOL_RECYCLE"] == "1800"
-        assert values["RATE_LIMIT_PER_MINUTE"] == "300"
-        assert values["API_KEY_HEADER"] == "X-API-Key"
-        assert values["CORS_ALLOW_CREDENTIALS"] == "false"
+        assert values["JWT_ALGORITHM"] == "HS256"
+        assert not STALE_TEMPLATE_KEYS & set(values)
+        if service == "identity-service":
+            assert IDENTITY_RUNTIME_KEYS.issubset(values)
+            assert values["RATE_LIMIT_PER_MINUTE"] == "300"
+        else:
+            assert not IDENTITY_RUNTIME_KEYS & set(values)
 
 
 def test_env_configuration_doc_lists_scope_and_rules() -> None:
