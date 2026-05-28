@@ -573,6 +573,37 @@ Acceptance:
 - Secret and certificate rotation has rehearsal steps and rollback instructions.
 - Audit events provide enough detail to investigate privileged or destructive operations.
 
+## Phase T: Service Environment Templates
+
+Status: DONE.
+
+Goal: make active service environment configuration discoverable without relying on monolith
+examples or untracked root-local `.env` files.
+
+- Added per-service `.env.example` files for active non-AI services:
+  - `api-gateway`
+  - `identity-service`
+  - `customer-service`
+  - `product-service`
+  - `warehouse-service`
+  - `inventory-service`
+  - `documents-service`
+  - `audit-service`
+  - `reporting-service`
+- Kept `Services/wms-monolith/` out of scope because it is archived reference code.
+- Kept `ai-service` out of scope because AI remains out of scope for default dev/test and heavy
+  dependency flows.
+- Documented env ownership rules in `docs/env_configuration.md`.
+- Added contract tests that verify service env templates exist, do not contain real secrets, and
+  match compose datastore/table ownership.
+
+Acceptance:
+
+- Every active non-AI service has a tracked `.env.example`.
+- Env templates align with root compose datastore ownership and service-owned table lists.
+- Production guidance still points secrets and database URLs to deployment/secret-manager wiring,
+  not committed `.env` files.
+
 ## Suggested Order
 
 1. Phase A: Architecture Baseline and Guardrails
@@ -595,6 +626,7 @@ Acceptance:
 17. Phase Q: CI/CD Release Enforcement
 18. Phase R: Backup, Restore, and Disaster Recovery
 19. Phase S: Security Governance and Authorization Hardening
+20. Phase T: Service Environment Templates
 
 ## Non-Goals
 
