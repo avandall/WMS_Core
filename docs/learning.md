@@ -37,9 +37,27 @@ Client
 tạo lại các “đường ray vận hành” cho hệ thống mới: test, compose, tracing, security,
 resilience, deployment, events, rollback.
 
-## Đọc Từ Đâu Trước
+## Giải Thích Code
 
-Nếu bạn đang học lại quá trình chuyển đổi, đừng mở code service ngay. Hãy đọc theo thứ tự này.
+Phần code trong repo này được tổ chức theo các lớp rõ ràng:
+
+- API Gateway public boundary: `Services/api-gateway/src/api_gateway/main.py`,
+  `app.py`, `routes.py`.
+- gRPC client / downstream coupling: `Services/api-gateway/src/api_gateway/grpc_clients.py`.
+- Observability/trace helpers: `Services/api-gateway/src/api_gateway/observability.py`.
+- Auth/security boundary: `Services/api-gateway/src/api_gateway/auth.py` và
+  `grpc_security.py`.
+- Shared runtime helpers: `Libraries/shared-utils/src/shared_utils/` chứa
+  event publisher, trace propagation, gRPC metadata, logging và security helpers.
+- Mỗi backend service follow pattern: entrypoint server, `grpc_servicer.py`, application
+  service layer, infrastructure repositories, and service-owned config.
+- Event flow: producer dùng shared publisher trong `shared_utils/events/publisher.py`,
+  publish vào Redis Streams, consumer group xử lý trong `Services/*/event_consumer.py`.
+- Deployment/test flow: root `docker-compose.yml`, `deploy/kubernetes`,
+  `tests/contract`, `tests/e2e`.
+
+Đọc phần này trước khi xuống code giúp bạn hiểu “cái nào là entrypoint”, “cái nào là helper”,
+“cái nào là runtime boundary”.
 
 ### 1. `README.md`
 
@@ -111,7 +129,7 @@ Câu hỏi nên tự trả lời khi đọc:
 - route mounting
 - gateway làm public REST boundary như thế nào
 
-### 6. `Services/api-gateway/src/api_gateway/clients.py`
+### 6. `Services/api-gateway/src/api_gateway/grpc_clients.py`
 
 Đây là file giúp hiểu gateway gọi gRPC ra sao.
 
@@ -188,7 +206,7 @@ File nên đọc:
 
 - `Services/api-gateway/src/api_gateway/main.py`
 - `Services/api-gateway/src/api_gateway/routes.py`
-- `Services/api-gateway/src/api_gateway/clients.py`
+- `Services/api-gateway/src/api_gateway/grpc_clients.py`
 - `Services/api-gateway/src/api_gateway/schemas.py`
 
 ### Phase 7: Observability Và Reliability Cơ Bản
@@ -315,6 +333,25 @@ File nên đọc:
 - Không cross-service database join.
 - Reporting nên đọc read model, không query database service khác.
 
+### Phase 11-18: Tóm tắt thay đổi chính
+
+- Phase 11: Thêm event bus/async workflow với Redis Streams, event envelope, publisher, và
+  consumer audit/reporting/AI.
+- Phase 12: Chuẩn hóa observability theo W3C `traceparent`, structured logs, metrics,
+  và OTLP-ready compose baseline.
+- Phase 13: Security hardening với explicit CORS, security headers, body limits, route-level
+  rate limiting và opt-in gRPC mTLS.
+- Phase 14: Resilience/SLO với gRPC timeout/deadline, bounded retry, circuit breaker, backpressure,
+  và consumer failure guard.
+- Phase 15: Release/Ops baseline với rollout/rollback contract, image/SBOM expectation,
+  migration ownership và runbooks.
+- Phase 16: Retire monolith khỏi active workflow, giữ archive reference và tập trung CI vào
+  gateway/gRPC stack.
+- Phase 17: Deployment automation với Kubernetes base manifests, secret placeholders,
+  migration job examples và OTEL collector baseline.
+- Phase 18: Advanced async/analytics workflows với durable consumer groups, DLQ/replay,
+  reporting read-model consumer và opt-in AI reindex consumer.
+
 ### Phase 11: Event Bus
 
 Mục tiêu:
@@ -390,7 +427,8 @@ File nên đọc:
 
 - `docs/security.md`
 - `Services/api-gateway/src/api_gateway/main.py`
-- `Services/api-gateway/src/api_gateway/security.py` nếu có thay đổi liên quan
+- `Services/api-gateway/src/api_gateway/grpc_security.py`
+- `Services/api-gateway/src/api_gateway/auth.py`
 - `Libraries/shared-utils/src/shared_utils/security/*`
 
 Điểm cần học:
@@ -423,7 +461,7 @@ Thay đổi quan trọng:
 File nên đọc:
 
 - `docs/resilience.md`
-- `Services/api-gateway/src/api_gateway/clients.py`
+- `Services/api-gateway/src/api_gateway/grpc_clients.py`
 - `Services/audit-service/src/audit_service/event_consumer.py`
 
 Điểm cần học:
