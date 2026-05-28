@@ -2,7 +2,9 @@
 
 Phase T adds per-service `.env.example` files for the active non-AI services. These files are
 local/development templates only; production secrets and database URLs must come from the platform
-secret manager or deployment manifests.
+secret manager or deployment manifests. The tracked templates also carry the monolith-era shared
+application settings that active service settings still read, such as DB pool sizing, CORS, rate
+limit, JWT, and app metadata knobs.
 
 ## Scope
 
@@ -21,13 +23,15 @@ Tracked templates:
 Out of scope:
 
 - `Services/wms-monolith/` because it is archived reference code.
-- `Services/ai-service/` because AI remains opt-in and heavy dependency flows are handled
-  separately.
+- `Services/ai-service/.env.example` because AI remains opt-in and provider keys must never be
+  committed. Local AI runs should use ignored `Services/ai-service/.env`.
 
 ## Rules
 
 - Commit only `.env.example` templates, never real `.env` files.
 - Use placeholder values for secrets such as `SECRET_KEY`.
+- Keep provider API keys such as OpenAI, Google, and Groq only in ignored local `.env` files or in
+  the production secret manager.
 - Local templates may use SQLite URLs and `LOCAL_DB_BOOTSTRAP_ENABLED=1`.
 - Production deployment must keep runtime table bootstrap disabled and source secrets from
   `deploy/kubernetes/examples/secret-manager-external-secrets.yaml` or the target platform.

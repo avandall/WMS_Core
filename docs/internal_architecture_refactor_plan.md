@@ -591,8 +591,11 @@ examples or untracked root-local `.env` files.
   - `audit-service`
   - `reporting-service`
 - Kept `Services/wms-monolith/` out of scope because it is archived reference code.
-- Kept `ai-service` out of scope because AI remains out of scope for default dev/test and heavy
-  dependency flows.
+- Kept tracked AI templates out of scope because AI remains opt-in and provider keys belong only in
+  ignored local `.env` files or the production secret manager.
+- Expanded active service templates with monolith-era shared settings that the current service
+  settings classes still consume, including DB pool sizing, app metadata, rate limit, JWT, and CORS
+  knobs.
 - Documented env ownership rules in `docs/env_configuration.md`.
 - Added contract tests that verify service env templates exist, do not contain real secrets, and
   match compose datastore/table ownership.
