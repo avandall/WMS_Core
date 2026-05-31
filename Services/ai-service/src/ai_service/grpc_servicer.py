@@ -22,7 +22,7 @@ class AIServiceServicer(ai_pb2_grpc.AIServiceServicer):
         for k, v in context.invocation_metadata() or []:
             if k.lower() == "x-request-id":
                 break
-        mode = (request.mode or "rag").lower()
+        mode = (request.mode or "auto").lower()
         try:
             result = self._get_pipeline().answer(question=request.question, mode=mode)
             return ai_pb2.QueryResponse(

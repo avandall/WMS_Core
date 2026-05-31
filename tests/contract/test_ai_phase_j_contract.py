@@ -36,11 +36,14 @@ def test_ai_remains_opt_in_for_default_compose() -> None:
 
 def test_ai_pipeline_has_explicit_internal_stages() -> None:
     expected = {
+        "backend_query.py",
         "ingestion.py",
         "indexing.py",
         "retrieval.py",
         "generation.py",
         "providers.py",
+        "routing.py",
+        "templates.py",
     }
     actual = {path.name for path in (AI_SERVICE_DIR / "pipeline").glob("*.py")}
 
@@ -52,6 +55,18 @@ def test_ai_pipeline_has_explicit_internal_stages() -> None:
     assert "JsonlReindexJobStore" in consumer
     assert "AIQueryPipeline" in servicer
     assert "WMSEngineProviderAdapter" in servicer
+
+    generation = _read("Services/ai-service/src/ai_service/pipeline/generation.py")
+    templates = _read("Services/ai-service/src/ai_service/pipeline/templates.py")
+    backend_query = _read("Services/ai-service/src/ai_service/pipeline/backend_query.py")
+    assert "router.route" in generation
+    assert "template_extractor.extract" in generation
+    assert "backend_query.execute" in generation
+    assert "class GroqQueryTemplateExtractor" in templates
+    assert "class QueryTemplateExtractor" in templates
+    assert "class TemplateBackendQueryClient" in backend_query
+    assert "class HttpBackendQueryClient" in backend_query
+    assert "AI_BACKEND_QUERY_URL" in backend_query
 
     package_init = _read("Services/ai-service/src/ai_service/__init__.py")
     assert "def __getattr__" in package_init
@@ -93,6 +108,60 @@ def test_ai_pipeline_does_not_read_operational_service_databases() -> None:
         source = path.read_text()
         for text in forbidden:
             assert text not in source, f"{path.relative_to(ROOT_DIR)} references {text}"
+
+
+def test_ai_query_pipeline_routes_data_questions_through_template_boundary() -> None:
+    from ai_service.pipeline import AIQueryPipeline, QueryResult, QueryTemplate
+
+    class Provider:
+        calls = 0
+
+        def generate(self, *, question: str, mode: str) -> QueryResult:
+            self.calls += 1
+            return QueryResult(success=True, mode=mode, response=f"rag:{question}")
+
+        def status(self) -> dict[str, object]:
+            return {}
+
+    class Extractor:
+        calls = 0
+
+        def extract(self, *, question: str) -> QueryTemplate:
+            self.calls += 1
+            return QueryTemplate(
+                intent="inventory_lookup",
+                target="inventory",
+                filters={"sku": "SKU-001"},
+                metrics=("quantity",),
+                raw_question=question,
+            )
+
+    class Backend:
+        calls = 0
+        last_template: QueryTemplate | None = None
+
+        def execute(self, *, template: QueryTemplate):
+            from ai_service.pipeline import BackendQueryResponse
+
+            self.calls += 1
+            self.last_template = template
+            return BackendQueryResponse(success=True, payload={"rows": [{"quantity": 10}]})
+
+    provider = Provider()
+    extractor = Extractor()
+    backend = Backend()
+    pipeline = AIQueryPipeline(provider=provider, template_extractor=extractor, backend_query=backend)
+
+    data_result = pipeline.answer(question="How many SKU-001 are in inventory?", mode="auto")
+    knowledge_result = pipeline.answer(question="Explain warehouse slotting best practices", mode="auto")
+
+    assert data_result.mode == "data_query"
+    assert '"quantity": 10' in data_result.response
+    assert extractor.calls == 1
+    assert backend.calls == 1
+    assert provider.calls == 1
+    assert knowledge_result.mode == "rag"
+    assert knowledge_result.response.startswith("rag:")
 
 
 def test_default_contract_and_e2e_tests_do_not_build_ai_profile() -> None:

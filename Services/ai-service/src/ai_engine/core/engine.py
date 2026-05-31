@@ -48,7 +48,7 @@ class WMSEngine:
         
         # Workflow components
         self.rag_workflow = AdvancedRAGWorkflow()
-        self.wms_agent = WMSAgent()
+        self.wms_agent = None
         
         logger.info("All components initialized successfully")
     
@@ -77,7 +77,7 @@ class WMSEngine:
                 }
             
             elif processing_mode == ProcessingMode.AGENT:
-                response = self.wms_agent.process(question)
+                response = self._get_wms_agent().process(question)
                 return {
                     "response": response,
                     "mode": "agent",
@@ -91,7 +91,7 @@ class WMSEngine:
                 # Simple heuristic: if RAG response seems insufficient, try agent
                 if len(rag_response) < 50 or "couldn't find" in rag_response.lower():
                     logger.info("RAG response insufficient, trying agent mode")
-                    agent_response = self.wms_agent.process(question)
+                    agent_response = self._get_wms_agent().process(question)
                     return {
                         "response": agent_response,
                         "mode": "agent_fallback",
@@ -113,6 +113,11 @@ class WMSEngine:
                 "success": False,
                 "error": str(e)
             }
+
+    def _get_wms_agent(self):
+        if self.wms_agent is None:
+            self.wms_agent = WMSAgent()
+        return self.wms_agent
     
     def add_documents(self, documents: list, metadatas: list = None):
         """Add documents to the knowledge base"""

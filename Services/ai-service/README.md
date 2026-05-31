@@ -18,8 +18,22 @@ Pipeline boundary:
 - `ai_service.pipeline.ingestion`: đổi event envelope/snapshot thành reindex job.
 - `ai_service.pipeline.indexing`: queue adapter AI-owned cho reindex job.
 - `ai_service.pipeline.retrieval`: boundary cho retrieval context.
-- `ai_service.pipeline.generation`: query pipeline.
+- `ai_service.pipeline.routing`: phân loại prompt thành knowledge/RAG hoặc data query.
+- `ai_service.pipeline.templates`: đổi data query thành object template key-value. Mặc định dùng
+  Groq qua `GroqQueryTemplateExtractor`; có thể thay bằng local model qua `QueryTemplateExtractor`.
+- `ai_service.pipeline.backend_query`: boundary gửi template sang backend sở hữu truy vấn dữ liệu.
+- `ai_service.pipeline.generation`: query pipeline điều phối router, RAG, template extraction, và
+  backend query.
 - `ai_service.pipeline.providers`: adapter vào RAG/LLM engine nặng.
 
 AI không đọc database vận hành của service khác; dữ liệu vào phải đến từ event hoặc read-model
 snapshot có thể replay.
+
+Query flow:
+
+1. User prompt vào `/api/v1/ai/query` với `mode=auto` mặc định.
+2. Router kiểm tra prompt có phải data/SQL/DB-style query không.
+3. Knowledge prompt đi qua RAG workflow, dùng LLM API và quality evaluator/critic.
+4. Data prompt đi qua template extractor để tạo object key-value, rồi chuyển object đó cho
+   backend query adapter. Nếu cấu hình `AI_BACKEND_QUERY_URL`, adapter sẽ POST template sang
+   backend; nếu chưa cấu hình, response trả về template đã chuẩn bị để giữ boundary sạch.

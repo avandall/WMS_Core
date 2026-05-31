@@ -2,9 +2,10 @@ name: Release Gates
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
-      - gRPC
       - main
   workflow_dispatch:
     inputs:
@@ -12,31 +13,44 @@ on:
         description: Build and scan the opt-in AI image
         required: false
         default: "false"
+      skip_tests:
+        description: Skip tests (use with caution)
+        required: false
+        default: "false"
   release:
     types: [created]
 
+env:
+  UV_CACHE_DIR: /tmp/uv-cache
+  PYTHON_VERSION: '3.12'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: wms-microservices
+
 jobs:
-  architecture-and-config-gates:
+  quality-gates:
+    name: Quality Gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'uv'
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
       - name: Contract tests
-        run: env UV_CACHE_DIR=/tmp/uv-cache uv run --group dev pytest -q tests/contract
+        if: github.event.inputs.skip_tests != 'true'
+        run: env UV_CACHE_DIR=${{ env.UV_CACHE_DIR }} uv run --group dev pytest -q tests/contract
       - name: Docker Compose config
         run: docker compose config --quiet
       - name: Kustomize render
         run: kubectl kustomize deploy/kubernetes/base
       - name: Generated proto drift
         run: |
-          env UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/gen_protos.py
+          env UV_CACHE_DIR=${{ env.UV_CACHE_DIR }} uv run python scripts/gen_protos.py
           git diff --exit-code -- Services proto scripts/gen_protos.py
       - name: Production cutover dry-run
         run: python3 scripts/cutover_rehearsal.py --manifest deploy/kubernetes/examples/production-cutover-manifest.example.json --dry-run
@@ -46,55 +60,171 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@v4
 
-  gateway-stack-smoke:
+  integration-tests:
+    name: Integration Tests
     runs-on: ubuntu-latest
+    needs: quality-gates
+    if: github.event.inputs.skip_tests != 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'uv'
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
-      - name: Gateway contract and E2E smoke
+      - name: Gateway contract and E2E tests
         run: tests/e2e/run_gateway_stack_tests.sh
 
-  release-candidate-build-scan:
+  build-images:
+    name: Build Docker Images
     runs-on: ubuntu-latest
     needs:
-      - architecture-and-config-gates
-      - gateway-stack-smoke
+      - quality-gates
+      - integration-tests
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - identity-service
+          - customer-service
+          - product-service
+          - warehouse-service
+          - inventory-service
+          - documents-service
+          - audit-service
+          - reporting-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          build-args: |
+            UV_PACKAGE=${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-ai-image:
+    name: Build AI Service Image
+    runs-on: ubuntu-latest
+    needs:
+      - quality-gates
+      - integration-tests
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.run_ai_image == 'true') || github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/ai-service
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push AI Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          build-args: |
+            UV_PACKAGE=ai-service
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - identity-service
+          - customer-service
+          - product-service
+          - warehouse-service
+          - inventory-service
+          - documents-service
+          - audit-service
+          - reporting-service
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  generate-sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: build-images
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
       - name: Set release version
         run: echo "RELEASE_VERSION=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
-      - name: Build non-AI runtime images
-        run: docker compose build api-gateway identity-service customer-service product-service warehouse-service inventory-service documents-service audit-service reporting-service
-      - name: Build opt-in AI image
-        if: github.event.inputs.run_ai_image == 'true'
-        run: docker compose --profile ai build ai-service
       - name: Generate release artifact
         run: python3 scripts/release_artifact.py --release-version "$RELEASE_VERSION" --output release-artifact.json
-      - name: Generate SBOM
+      - name: Generate SBOM for API Gateway
         uses: anchore/sbom-action@v0
         with:
-          image: wms/api-gateway:dev
+          image: ${{ env.REGISTRY }}/${{ github.repository }}/api-gateway:latest
           format: spdx-json
           output-file: sbom-api-gateway.spdx.json
-      - name: Vulnerability scan
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          image-ref: wms/api-gateway:dev
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -102,3 +232,24 @@ jobs:
           path: |
             release-artifact.json
             sbom-api-gateway.spdx.json
+          retention-days: 90
+
+  release-summary:
+    name: Release Summary
+    runs-on: ubuntu-latest
+    needs:
+      - quality-gates
+      - integration-tests
+      - build-images
+      - security-scan
+      - generate-sbom
+    if: always()
+    steps:
+      - name: Release Summary
+        run: |
+          echo "## Release Gates Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Quality Gates: ${{ needs.quality-gates.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Images: ${{ needs.build-images.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Generate SBOM: ${{ needs.generate-sbom.result }}" >> $GITHUB_STEP_SUMMARY

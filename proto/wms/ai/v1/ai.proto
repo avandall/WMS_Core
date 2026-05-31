@@ -9,7 +9,7 @@ service AIService {
 
 message QueryRequest {
   string question = 1;
-  string mode = 2; // rag|agent|hybrid
+  string mode = 2; // auto|rag|data_query
 }
 
 message QueryResponse {
@@ -24,4 +24,3 @@ message StatusRequest {}
 message StatusResponse {
   string json = 1;
 }
-

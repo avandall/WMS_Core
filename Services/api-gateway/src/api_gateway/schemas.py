@@ -51,4 +51,4 @@ class PostDocumentPayload(BaseModel):
 
 class AIQueryPayload(BaseModel):
     question: str = ""
-    mode: str = "rag"
+    mode: str = "auto"
