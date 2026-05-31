@@ -26,7 +26,7 @@ async def me(user=Depends(get_current_user)):
     dependencies=[Depends(require_permissions(Permission.MANAGE_USERS))],
 )
 async def list_users(service: UserService = Depends(get_user_service)):
-    users = service.list_users()
+    users = await service.list_users()
     return [UserResponse.from_domain(u) for u in users.values()]
 
 
@@ -37,7 +37,7 @@ async def list_users(service: UserService = Depends(get_user_service)):
     dependencies=[Depends(require_permissions(Permission.MANAGE_USERS))],
 )
 async def create_user(payload: UserCreate, service: UserService = Depends(get_user_service)):
-    user = service.create_user(
+    user = await service.create_user(
         email=payload.email,
         password=payload.password,
         role=payload.role,
@@ -66,7 +66,7 @@ class RoleUpdatePayload(BaseModel):
     dependencies=[Depends(require_permissions(Permission.MANAGE_USERS))],
 )
 async def update_role(user_id: int, payload: RoleUpdatePayload, service: UserService = Depends(get_user_service)):
-    user = service.update_role(user_id, payload.role)
+    user = await service.update_role(user_id, payload.role)
     return UserResponse.from_domain(user)
 
 
@@ -98,7 +98,7 @@ async def change_my_password(
     user=Depends(get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    service.change_password(user.user_id, payload.old_password, payload.new_password)
+    await service.change_password(user.user_id, payload.old_password, payload.new_password)
     return {"status": "ok", "message": "Password changed successfully"}
 
 
@@ -116,7 +116,7 @@ async def reset_user_password(
     repo=Depends(get_user_repo),
     service: UserService = Depends(get_user_service),
 ):
-    user = service.get_user(user_id)
+    user = await service.get_user(user_id)
     updated = User(
         user_id=user.user_id,
         email=user.email,
@@ -144,6 +144,5 @@ async def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account",
         )
-    service.delete_user(user_id)
-    return None
-
+    await service.delete_user(user_id)
+    return {"status": "ok", "message": f"User {user_id} deleted successfully"}

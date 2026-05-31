@@ -25,8 +25,8 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
     response_model=CustomerResponse,
     dependencies=[Depends(require_permissions(Permission.MANAGE_PRODUCTS))],
 )
-def create_customer(payload: CustomerCreate, service: CustomerService = Depends(get_customer_service)):
-    model = service.create(payload.model_dump())
+async def create_customer(payload: CustomerCreate, service: CustomerService = Depends(get_customer_service)):
+    model = await service.create(payload.model_dump())
     return CustomerResponse(
         customer_id=model.customer_id,
         name=model.name,

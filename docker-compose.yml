@@ -1,319 +1,88 @@
-name: wms-monorepo
-
-x-service-env: &service-env
-  PYTHONUNBUFFERED: "1"
-  IDENTITY_GRPC_ADDR: identity-service:50051
-  SECRET_KEY: ${SECRET_KEY:-wms-local-dev-secret}
-  EVENT_BUS_URL: redis://event-bus:6379/0
-  EVENT_STREAM: wms.events
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-  OTEL_TRACES_EXPORTER: otlp
-  GRPC_TLS_ENABLED: ${GRPC_TLS_ENABLED:-0}
-  GRPC_TLS_CERT_FILE: ${GRPC_TLS_CERT_FILE:-}
-  GRPC_TLS_KEY_FILE: ${GRPC_TLS_KEY_FILE:-}
-  GRPC_TLS_CLIENT_CA_FILE: ${GRPC_TLS_CLIENT_CA_FILE:-}
-  GRPC_CLIENT_TLS_ENABLED: ${GRPC_CLIENT_TLS_ENABLED:-0}
-  GRPC_CLIENT_ROOT_CERT_FILE: ${GRPC_CLIENT_ROOT_CERT_FILE:-}
-  GRPC_CLIENT_CERT_FILE: ${GRPC_CLIENT_CERT_FILE:-}
-  GRPC_CLIENT_KEY_FILE: ${GRPC_CLIENT_KEY_FILE:-}
-  GRPC_TIMEOUT_FAST: ${GRPC_TIMEOUT_FAST:-5}
-  GRPC_TIMEOUT_DEFAULT: ${GRPC_TIMEOUT_DEFAULT:-10}
-  GRPC_TIMEOUT_SLOW: ${GRPC_TIMEOUT_SLOW:-30}
-  GRPC_TIMEOUT_AI: ${GRPC_TIMEOUT_AI:-60}
-  GRPC_RETRY_ATTEMPTS: ${GRPC_RETRY_ATTEMPTS:-2}
-  GRPC_RETRY_BACKOFF_SECONDS: ${GRPC_RETRY_BACKOFF_SECONDS:-0.05}
-  CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
-  CIRCUIT_BREAKER_RECOVERY_SECONDS: ${CIRCUIT_BREAKER_RECOVERY_SECONDS:-15}
-  LOCAL_DB_BOOTSTRAP_ENABLED: ${LOCAL_DB_BOOTSTRAP_ENABLED:-1}
-
-x-grpc-healthcheck: &grpc-healthcheck
-  interval: 10s
-  timeout: 3s
-  retries: 12
-  start_period: 20s
-
 services:
-  otel-collector:
-    image: jaegertracing/all-in-one:1.62.0
-    ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+  db:
+    image: postgres:16-alpine
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-
-  event-bus:
-    image: redis:7-alpine
+      POSTGRES_USER: ${POSTGRES_USER:-wms_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wms_password}
+      POSTGRES_DB: ${POSTGRES_DB:-warehouse_db}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Remove the automatic SQL initialization - we'll handle it in the app
     ports:
-      - "6379:6379"
+      - "5433:5432"
+
+  redis:
+    image: redis:7-alpine
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 5s
-
-  api-gateway:
-    image: wms/api-gateway:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: api-gateway
-    command: ["api-gateway"]
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
     ports:
-      - "8000:8000"
-    environment:
-      <<: *service-env
-      CUSTOMER_GRPC_ADDR: customer-service:50052
-      PRODUCT_GRPC_ADDR: product-service:50053
-      WAREHOUSE_GRPC_ADDR: warehouse-service:50054
-      INVENTORY_GRPC_ADDR: inventory-service:50055
-      DOCUMENTS_GRPC_ADDR: documents-service:50056
-      AUDIT_GRPC_ADDR: audit-service:50057
-      REPORTING_GRPC_ADDR: reporting-service:50058
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
-      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-0}
-      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-1048576}
-      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
-      # ai-service is intentionally opt-in because its ML dependency image is heavy.
-      # Enable it with: docker compose --profile ai up -d
-      AI_GRPC_ADDR: ai-service:50059
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  api:
+    build: .
     depends_on:
-      event-bus:
+      db:
         condition: service_healthy
-      identity-service:
+      redis:
         condition: service_healthy
-      customer-service:
-        condition: service_healthy
-      product-service:
-        condition: service_healthy
-      warehouse-service:
-        condition: service_healthy
-      inventory-service:
-        condition: service_healthy
-      documents-service:
-        condition: service_healthy
-      audit-service:
-        condition: service_healthy
-      reporting-service:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "http", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 20s
-
-  identity-service:
-    image: wms/identity-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: identity-service
-    command: ["identity-grpc"]
+    env_file:
+      - .env.docker
     ports:
-      - "50051:50051"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-identity.db
-      INIT_DB_TABLES: users
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50051"]
-
-  customer-service:
-    image: wms/customer-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: customer-service
-    command: ["customer-grpc"]
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      # Ánh xạ toàn bộ thư mục gốc vào /app để đồng bộ pyproject.toml và src
+      - .:/app  
+    # Ghi đè lệnh chạy để dùng Uvicorn với tính năng --reload
+    command: >
+      sh -c "
+        echo '🚀 Starting WMS API with Hot-Reload...'
+        # Sử dụng uvicorn trực tiếp để tự động load lại khi bạn sửa code
+        pip install -e . && \
+        python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+  dashboard:
+    image: nginx:alpine
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
     ports:
-      - "50052:50052"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-customer.db
-      INIT_DB_TABLES: customers
+      - "${DASHBOARD_PORT:-8080}:80"
     depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50052"]
+      api:
+        condition: service_started # Hoặc service_healthy nếu bạn muốn đợi API sẵn sàng hoàn toàn
 
-  product-service:
-    image: wms/product-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: product-service
-    command: ["product-grpc"]
+  # Development tools (only in development mode)
+  dev-tools:
+    image: adminer:latest
     ports:
-      - "50053:50053"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-product.db
-      INIT_DB_TABLES: products
+      - "${ADMINER_PORT:-8090}:8080"
     depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50053"]
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    # Only start in development mode
+    profiles: ["dev"]
 
-  warehouse-service:
-    image: wms/warehouse-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: warehouse-service
-    command: ["warehouse-grpc"]
-    ports:
-      - "50054:50054"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-warehouse.db
-      INIT_DB_TABLES: warehouses,positions
+  # Cloudflare Tunnel (free / quick tunnel)
+  # Enable with: docker compose --profile tunnel up -d
+  tunnel:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate --url http://api:8000
     depends_on:
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50054"]
+      - api
 
-  inventory-service:
-    image: wms/inventory-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: inventory-service
-    command: ["inventory-grpc"]
-    ports:
-      - "50055:50055"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-inventory.db
-      INIT_DB_TABLES: inventory,warehouse_inventory,inventory_movement_ledger
-    depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50055"]
-
-  documents-service:
-    image: wms/documents-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: documents-service
-    command: ["documents-grpc"]
-    ports:
-      - "50056:50056"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-documents.db
-      INIT_DB_TABLES: documents,document_items
-    depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50056"]
-
-  audit-service:
-    image: wms/audit-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: audit-service
-    command: ["audit-grpc"]
-    ports:
-      - "50057:50057"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-audit.db
-      INIT_DB_TABLES: audit_events
-      AUDIT_EVENT_CONSUMER_ENABLED: "1"
-      AUDIT_EVENT_CONSUMER_BLOCK_MS: ${AUDIT_EVENT_CONSUMER_BLOCK_MS:-5000}
-      AUDIT_EVENT_CONSUMER_BATCH_SIZE: ${AUDIT_EVENT_CONSUMER_BATCH_SIZE:-20}
-      AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH: ${AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH:-10000}
-      AUDIT_EVENT_CONSUMER_GROUP: ${AUDIT_EVENT_CONSUMER_GROUP:-audit-service}
-      AUDIT_EVENT_DLQ_STREAM: ${AUDIT_EVENT_DLQ_STREAM:-wms.events.audit.dlq}
-    depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50057"]
-
-  reporting-service:
-    image: wms/reporting-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: reporting-service
-    command: ["reporting-grpc"]
-    ports:
-      - "50058:50058"
-    environment:
-      <<: *service-env
-      DATABASE_URL: sqlite:////tmp/wms-reporting.db
-      INIT_DB_TABLES: reporting_read_model_events,inventory_summary,document_summary,sales_summary,warehouse_activity_summary
-      REPORTING_READ_MODEL_CONSUMER_ENABLED: ${REPORTING_READ_MODEL_CONSUMER_ENABLED:-1}
-      REPORTING_READ_MODEL_CONSUMER_GROUP: ${REPORTING_READ_MODEL_CONSUMER_GROUP:-reporting-service}
-      REPORTING_READ_MODEL_DLQ_STREAM: ${REPORTING_READ_MODEL_DLQ_STREAM:-wms.events.reporting.dlq}
-    depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50058"]
-
-  ai-service:
-    profiles: ["ai"]
-    image: wms/ai-service:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UV_PACKAGE: ai-service
-    command: ["ai-grpc"]
-    ports:
-      - "50059:50059"
-    environment:
-      <<: *service-env
-      DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
-      VECTOR_DB_PATH: /tmp/wms-ai-vector-db
-      AI_REINDEX_CONSUMER_ENABLED: ${AI_REINDEX_CONSUMER_ENABLED:-0}
-      AI_REINDEX_QUEUE_PATH: ${AI_REINDEX_QUEUE_PATH:-/tmp/wms-ai-reindex-queue.jsonl}
-      AI_REINDEX_DLQ_STREAM: ${AI_REINDEX_DLQ_STREAM:-wms.events.ai.dlq}
-    depends_on:
-      event-bus:
-        condition: service_healthy
-      identity-service:
-        condition: service_healthy
-    healthcheck:
-      <<: *grpc-healthcheck
-      test: ["CMD", "python", "/app/scripts/docker_healthcheck.py", "grpc", "localhost:50059"]
+volumes:
+  postgres_data:
+  redis_data:
