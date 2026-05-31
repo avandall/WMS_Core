@@ -27,18 +27,16 @@ def test_monolith_is_not_in_default_ci_or_proto_generation() -> None:
 def test_monolith_retirement_docs_define_archive_status_and_fixture_ownership() -> None:
     source = (ROOT_DIR / "docs/monolith_retirement.md").read_text()
     readme = (ROOT_DIR / "README.md").read_text()
-    archive = (ROOT_DIR / "Services/wms-monolith/ARCHIVE.md").read_text()
 
-    assert "archived reference code" in source
-    assert "frozen read-only reference" in source
+    assert "branch `Monolith`" in source
+    assert "branch\n`gRPC` clean" in source or "branch `gRPC` clean" in source
     assert "phase-o-monolith-archive-exit" in source
-    assert "frozen read-only reference" in archive
-    assert "Do not add new runtime features" in archive
     assert "root `uv` workspace members" in source
     assert "Fixture Ownership" in source
     assert "identity-service" in source
-    assert "Archived reference only" in readme
+    assert "branch `Monolith`" in readme
     assert "phase-o-monolith-archive-exit" in readme
+    assert not (ROOT_DIR / "Services/wms-monolith").exists()
 
 
 def test_active_runtime_paths_do_not_reference_monolith_archive() -> None:
@@ -64,16 +62,13 @@ def test_active_runtime_paths_do_not_reference_monolith_archive() -> None:
         assert "wms-monolith" not in source, path
 
 
-def test_monolith_archive_readme_routes_contributors_to_services() -> None:
-    source = (ROOT_DIR / "Services/wms-monolith/README.md").read_text()
+def test_retired_monolith_policy_routes_contributors_to_services() -> None:
+    source = (ROOT_DIR / "docs/monolith_retirement.md").read_text()
 
-    assert "frozen reference code" in source
-    assert "not an active" in source
-    assert "development, test, deployment, fixture, migration, or CI" in source
     assert "Services/api-gateway/" in source
-    assert "Services/*-service/" in source
-    assert "docker-compose.yml" in source
-    assert "Historical Commands" in source
+    assert "service-owned gRPC" in source
+    assert "docker compose up -d" in source
+    assert "Do not start active work from retired commands" in source
 
 
 def test_roadmap_marks_phase_16_done_and_tracks_followups() -> None:

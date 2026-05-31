@@ -22,7 +22,8 @@ Tracked templates:
 
 Out of scope:
 
-- `Services/wms-monolith/` because it is archived reference code.
+- The retired monolith tree because it lives on branch `Monolith`, outside this active runtime
+  branch.
 - `Services/ai-service/.env.example` because AI remains opt-in and provider keys must never be
   committed. Local AI runs should use ignored `Services/ai-service/.env`.
 

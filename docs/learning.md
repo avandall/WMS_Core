@@ -65,7 +65,7 @@ Phần code trong repo này được tổ chức theo các lớp rõ ràng:
 
 Điểm cần nắm:
 
-- `Services/wms-monolith` không còn là app chính.
+- Monolith cũ đã được tách sang branch `Monolith`, không còn là app chính của branch này.
 - `Services/api-gateway` là public REST entrypoint.
 - Các service như `identity-service`, `customer-service`, `inventory-service` là backend gRPC.
 - AI service là opt-in, không nằm trong default dev/test.
@@ -724,9 +724,9 @@ docker compose --profile ai up -d
 Default test/dev không nên build hoặc install AI dependencies. Nếu một phase làm default test kéo
 AI vào, đó là regression cần sửa.
 
-### 7. Monolith Là Archive, Không Phải Đường Chạy Chính
+### 7. Monolith Nằm Ngoài Branch Chạy Chính
 
-`Services/wms-monolith` vẫn còn để tham khảo, nhưng:
+Code cũ nằm ở branch `Monolith`; branch `gRPC` chỉ giữ runtime microservice. Vì vậy:
 
 - không còn trong root `uv` workspace
 - không còn trong CI mặc định

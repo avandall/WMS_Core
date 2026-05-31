@@ -158,7 +158,7 @@ def test_env_configuration_doc_lists_scope_and_rules() -> None:
 
     assert "Services/api-gateway/.env.example" in source
     assert "Services/reporting-service/.env.example" in source
-    assert "Services/wms-monolith/" in source
+    assert "branch `Monolith`" in source
     assert "Services/ai-service/" in source
     assert "Commit only `.env.example` templates" in source
     assert "Services/ai-service/.env" in source

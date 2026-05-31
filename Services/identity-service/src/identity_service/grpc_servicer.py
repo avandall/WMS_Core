@@ -27,7 +27,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         except Exception:
             return identity_pb2.ValidateTokenResponse(valid=False)
 
-        # Resolve current user from DB (same as monolith behavior).
+        # Resolve current user from the identity datastore.
         # Note: `get_session()` is a FastAPI dependency generator; here we call next() to get a session.
         session_gen = get_session()
         db = next(session_gen)

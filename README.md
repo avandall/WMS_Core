@@ -21,18 +21,16 @@ Trạng thái theo roadmap dài hạn: `docs/roadmap.md`
 │   ├── documents-service/  # Documents gRPC
 │   ├── audit-service/      # Audit gRPC + event consumer
 │   ├── reporting-service/  # Reporting gRPC
-│   ├── ai-service/         # AI gRPC, opt-in Compose profile
-│   └── wms-monolith/       # Archived reference only, not default workspace/CI
+│   └── ai-service/         # AI gRPC, opt-in Compose profile
 └── Libraries/
     └── shared-utils/       # Shared library
 ```
 
-## Monolith archive
+## Retired monolith
 
-`Services/wms-monolith/` đã được đóng băng thành archive tham chiếu. Nó không còn nằm trong
-root `uv` workspace, CI mặc định, root compose, proto generation target, migration, fixture,
-hoặc release workflow. Rollback reference tag: `phase-o-monolith-archive-exit`. Xem
-`docs/monolith_retirement.md`.
+Code monolith cũ đã được tách sang branch `Monolith`. Branch `gRPC` hiện chỉ giữ API Gateway,
+các microservice gRPC, shared library, proto, deployment artifacts và tests cho runtime mới.
+Rollback reference tag: `phase-o-monolith-archive-exit`. Xem `docs/monolith_retirement.md`.
 
 ## gRPC protos
 
@@ -45,7 +43,7 @@ Chi tiết Phase 2 gRPC: `docs/phase2_grpc.md`
 
 ## Run (local)
 
-Root `docker-compose.yml` không còn chạy `wms-monolith`. API public entrypoint là API Gateway:
+API public entrypoint là API Gateway:
 - REST: `http://localhost:8000/api/v1/*`
 - Downstream: gRPC nội bộ (identity/customer/product/warehouse/inventory)
 - AI service được tách vào Compose profile `ai` để dev/test mặc định không build image ML nặng.

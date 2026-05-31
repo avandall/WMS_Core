@@ -6,7 +6,7 @@ from fastapi import FastAPI
 def create_app() -> FastAPI:
     app = FastAPI(title="Identity Service", version="0.1.0")
 
-    # Temporary: reuse extracted monolith routers while refactoring.
+    # Reuse the identity-owned routers packaged with this service.
     from app.api.v1.router import router as v1_router
     from shared_utils.observability import METRICS, http_metrics_middleware
 

@@ -7,7 +7,7 @@ Phạm vi extract (Phase 1):
 - Users
 - Roles/permissions (thông qua user role + permissions helpers)
 
-Nguồn code hiện tại (monolith):
-- `Services/wms-monolith/src/app/api/v1/endpoints/auth.py`
-- `Services/wms-monolith/src/app/api/v1/endpoints/users/`
-- `Services/wms-monolith/src/app/modules/users/`
+Code identity hiện nằm trong service này:
+- `src/app/api/v1/endpoints/auth.py`
+- `src/app/api/v1/endpoints/users/`
+- `src/app/modules/users/`

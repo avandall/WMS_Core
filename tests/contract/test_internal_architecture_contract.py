@@ -10,7 +10,6 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 ACTIVE_SERVICE_DIRS = [
     path
     for path in sorted((ROOT_DIR / "Services").glob("*-service"))
-    if path.name != "wms-monolith"
 ]
 
 OWNED_MODULES = {
@@ -88,7 +87,6 @@ def _python_files_under(*parts: str | Path) -> list[Path]:
         for path in sorted(base.rglob("*.py"))
         if "__pycache__" not in path.parts
         and "gen" not in path.parts
-        and "wms-monolith" not in path.parts
     ]
 
 
@@ -127,8 +125,8 @@ def test_architecture_docs_define_active_service_patterns_and_templates() -> Non
     architecture = (ROOT_DIR / "docs/architecture.md").read_text()
     template = (ROOT_DIR / "docs/service_template.md").read_text()
 
-    assert "Services/wms-monolith" in architecture
-    assert "outside the refactor scope" in architecture
+    assert "branch\n`Monolith`" in architecture or "branch `Monolith`" in architecture
+    assert "active service runtime" in architecture
 
     for service in OWNED_MODULES:
         assert f"`{service}`" in architecture

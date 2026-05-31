@@ -1,12 +1,12 @@
 # Monolith Retirement
 
-Phase 16 removes the monolith from the active development path. Phase O freezes the remaining
-tree as a read-only archive with an explicit rollback reference.
+Phase 16 removed the monolith from the active development path. Phase O froze the remaining tree
+with an explicit rollback reference. The retired source now lives on branch `Monolith`; branch
+`gRPC` contains only the active microservice runtime.
 
 ## Status
 
-`Services/wms-monolith/` is archived reference code and is now frozen read-only reference code.
-It is intentionally not part of:
+The retired monolith tree is no longer present on this branch. It is intentionally not part of:
 
 - root `uv` workspace members
 - default CI jobs
@@ -19,9 +19,8 @@ packages and local datastores.
 
 ## Retirement Decision
 
-Decision: keep `Services/wms-monolith/` as read-only reference until the next accepted tagged
-service release, then delete it in a dedicated commit if no rollback/parity investigation is open.
-The rollback reference tag is `phase-o-monolith-archive-exit`.
+Decision: keep the retired source on branch `Monolith` as read-only reference and keep branch
+`gRPC` clean of monolith code. The rollback reference tag is `phase-o-monolith-archive-exit`.
 
 Phase O confirms:
 
@@ -31,9 +30,9 @@ Phase O confirms:
 4. No active script, CI job, Compose service, or deployment manifest imports or executes
    monolith internals.
 
-Changes to `Services/wms-monolith/` must be rare and explicitly labeled as archive/reference
-maintenance. Do not add new runtime features, migrations, fixtures, generated protos, CI jobs, or
-deployment scripts under this tree.
+Changes to branch `Monolith` must be rare and explicitly labeled as archive/reference
+maintenance. Do not add retired runtime features, migrations, fixtures, generated protos, CI jobs,
+or deployment scripts back into branch `gRPC`.
 
 ## Fixture Ownership
 
@@ -68,6 +67,5 @@ AI remains explicit:
 docker compose --profile ai up -d ai-service
 ```
 
-Do not start work from monolith commands such as `Services/wms-monolith/start.sh`,
-`Services/wms-monolith/run_tests.sh`, or `Services/wms-monolith/scripts/seed.py`; those are
-historical archive commands only.
+Do not start active work from retired commands on branch `Monolith`; those are historical archive
+commands only.

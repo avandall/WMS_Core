@@ -1,16 +1,16 @@
 # Internal Architecture Refactor Plan
 
 This plan starts from the current `gRPC` branch where the active runtime is already
-gRPC-first microservices. The legacy `Services/wms-monolith` tree is out of scope for this
-plan. The next goal is to optimize the internal architecture of each active service around
+gRPC-first microservices. The retired monolith source lives on branch `Monolith` and is out of
+scope for this branch. The next goal is to optimize the internal architecture of each active service around
 its real WMS ownership without forcing heavy DDD everywhere.
 
 ## Current Baseline
 
 - Runtime services exist for gateway, identity, customer, product, warehouse, inventory,
   documents, audit, reporting, and AI.
-- The monolith is no longer part of the active architecture. Do not spend refactor effort on
-  `Services/wms-monolith` unless a future migration/reference task explicitly asks for it.
+- The monolith is no longer part of the active architecture. Do not spend refactor effort on the
+  retired branch unless a future migration/reference task explicitly asks for it.
 - Root compose gives each runtime service a service-owned datastore connection.
 - Redis Streams exists as the async event bus with durable consumer groups, DLQ streams, and
   replay support.
@@ -456,9 +456,9 @@ Goal: decide whether the archived monolith can be frozen, moved, or deleted.
 - Confirmed service-owned migrations and fixtures have replaced monolith operational dependencies.
 - Confirmed no active scripts, CI jobs, compose services, or deployment manifests import or execute
   monolith internals.
-- Chose the archive policy: keep `Services/wms-monolith/` as frozen read-only reference until the
-  next accepted tagged service release; delete it later in a dedicated commit if no rollback/parity
-  investigation is open. Rollback reference tag: `phase-o-monolith-archive-exit`.
+- Chose the archive policy: keep retired source on branch `Monolith` as read-only reference and
+  keep branch `gRPC` clean of monolith code. Rollback reference tag:
+  `phase-o-monolith-archive-exit`.
 - Updated contributor docs so new work starts from services, gateway, proto, and deployment
   artifacts only.
 
@@ -590,7 +590,7 @@ examples or untracked root-local `.env` files.
   - `documents-service`
   - `audit-service`
   - `reporting-service`
-- Kept `Services/wms-monolith/` out of scope because it is archived reference code.
+- Kept the retired monolith tree out of scope because it lives on branch `Monolith`.
 - Kept tracked AI templates out of scope because AI remains opt-in and provider keys belong only in
   ignored local `.env` files or the production secret manager.
 - Pruned active service templates to variables with a current runtime path; legacy monolith

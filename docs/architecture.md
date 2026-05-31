@@ -1,8 +1,8 @@
 # Architecture
 
 This document describes the active architecture on the `gRPC` branch. The runtime system is
-gRPC-first microservices behind an API Gateway. `Services/wms-monolith` is legacy reference code
-and is outside the refactor scope unless a task explicitly says otherwise.
+gRPC-first microservices behind an API Gateway. The retired monolith source lives on branch
+`Monolith`; this branch contains only the active service runtime and supporting artifacts.
 
 ## Service Patterns
 
@@ -61,7 +61,7 @@ Redis Streams is the async integration backbone. Events use the shared envelope 
 
 ## Active Refactor Guardrails
 
-Phase A guardrails intentionally ignore `Services/wms-monolith` and apply only to active services.
+Phase A guardrails apply only to active services on this branch.
 They should:
 
 - fail when domain code imports transport or infrastructure concerns;
