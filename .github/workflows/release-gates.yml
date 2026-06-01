@@ -36,7 +36,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'uv'
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
       - name: Install kubectl
@@ -71,7 +70,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'uv'
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
       - name: Gateway contract and E2E tests
