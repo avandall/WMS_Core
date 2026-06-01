@@ -241,19 +241,6 @@ def client() -> Any:
 
 
 @pytest.fixture
-def sample_product():
-    """Fixture for a sample product."""
-    from app.modules.products.domain.entities.product import Product
-
-    return Product(
-        product_id=1,
-        name="Test Laptop",
-        description="High-performance laptop",
-        price=999.99,
-    )
-
-
-@pytest.fixture
 def sample_warehouse():
     """Fixture for a sample warehouse."""
     from app.modules.inventory.domain.entities.inventory import InventoryItem
@@ -374,69 +361,6 @@ def sample_product():
     )
 
 
-# Commented out - modules don't exist yet
-# @pytest.fixture
-# def create_product_command():
-#     """CreateProductCommand fixture for testing."""
-#     return CreateProductCommand(
-#         product_id=None,
-#         name="Test Product",
-#         description="Test Description",
-#         price=99.99
-#     )
-#
-#
-# @pytest.fixture
-# def update_product_command():
-#     """UpdateProductCommand fixture for testing."""
-#     return UpdateProductCommand(
-#         product_id=1,
-#         name="Updated Product",
-#         description="Updated Description",
-#         price=149.99
-#     )
-#
-#
-# @pytest.fixture
-# def delete_product_command():
-#     """DeleteProductCommand fixture for testing."""
-#     return DeleteProductCommand(product_id=1)
-#
-#
-# @pytest.fixture
-# def get_product_query():
-#     """GetProductQuery fixture for testing."""
-#     return GetProductQuery(product_id=1)
-#
-#
-# @pytest.fixture
-# def get_all_products_query():
-#     """GetAllProductsQuery fixture for testing."""
-#     return GetAllProductsQuery()
-#
-#
-# @pytest.fixture
-# def product_validator():
-#     """ProductValidator fixture for testing."""
-#     return ProductValidator()
-
-
-# Commented out - modules don't exist yet
-# @pytest.fixture
-# def repository_container(mock_session, mock_product_repo, mock_inventory_repo):
-#     """Repository container fixture for Unit of Work testing."""
-#     container = Mock(spec=RepositoryContainer)
-#     container.product_repo = mock_product_repo
-#     container.inventory_repo = mock_inventory_repo
-#     return container
-#
-#
-# @pytest.fixture
-# def unit_of_work(mock_session, repository_container):
-#     """Unit of Work fixture for testing."""
-#     return UnitOfWork(mock_session, repository_container)
-
-
 @pytest.fixture
 def product_authorizer():
     """ProductAuthorizer fixture for testing."""
@@ -471,11 +395,15 @@ def mock_product_service():
 @pytest.fixture
 def test_products_list():
     """List of test products for testing."""
-    return [
-        Product(id=1, name="Product 1", description="Description 1", price=10.0, sku="P1", stock_quantity=50),
-        Product(id=2, name="Product 2", description="Description 2", price=20.0, sku="P2", stock_quantity=30),
-        Product(id=3, name="Product 3", description="Description 3", price=30.0, sku="P3", stock_quantity=20)
-    ]
+    try:
+        from app.modules.products.domain.entities.product import Product
+        return [
+            Product(id=1, name="Product 1", description="Description 1", price=10.0, sku="P1", stock_quantity=50),
+            Product(id=2, name="Product 2", description="Description 2", price=20.0, sku="P2", stock_quantity=30),
+            Product(id=3, name="Product 3", description="Description 3", price=30.0, sku="P3", stock_quantity=20)
+        ]
+    except ImportError:
+        pytest.skip("Product module not available")
 
 
 @pytest.fixture
