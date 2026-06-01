@@ -13,9 +13,11 @@ x-api-gateway-env: &api-gateway-env
   DOCUMENTS_GRPC_ADDR: documents-service:50056
   AUDIT_GRPC_ADDR: audit-service:50057
   REPORTING_GRPC_ADDR: reporting-service:50058
+  AI_GRPC_ADDR: ai-service:50059
   GRPC_TIMEOUT_FAST: "5"
   GRPC_TIMEOUT_DEFAULT: "10"
   GRPC_TIMEOUT_SLOW: "30"
+  GRPC_TIMEOUT_AI: "60"
   GRPC_RETRY_ATTEMPTS: "2"
   GRPC_RETRY_BACKOFF_SECONDS: "0.05"
   CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
@@ -209,10 +211,27 @@ services:
       <<: *build-common
       args:
         UV_PACKAGE: ai-service
+    env_file:
+      - Services/ai-service/.env.example
     environment:
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
       AI_REINDEX_CONSUMER_ENABLED: "0"
+      AI_REINDEX_QUEUE_PATH: /tmp/wms-ai-reindex-queue.jsonl
+      AI_REINDEX_CONSUMER_GROUP: ai-service
+      AI_REINDEX_CONSUMER_NAME: ai-service-1
+      AI_REINDEX_DLQ_STREAM: wms.events.ai.dlq
+      AI_REINDEX_CONSUMER_BLOCK_MS: "5000"
+      AI_REINDEX_CONSUMER_BATCH_SIZE: "10"
+      AI_REINDEX_CONSUMER_MAX_ATTEMPTS: "3"
+      AI_REINDEX_CONSUMER_RECLAIM_IDLE_MS: "60000"
+      AI_REINDEX_CONSUMER_START_ID: "0"
+      FINE_TUNED_MODEL_PATH: ""
+      FINE_TUNED_MODEL_DEVICE: cpu
+      FINE_TUNED_MAX_NEW_TOKENS: "256"
+      AI_BACKEND_QUERY_URL: ""
+      AI_BACKEND_QUERY_TOKEN: ""
+      AI_BACKEND_QUERY_TIMEOUT: "10"
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     command: ["ai-grpc"]

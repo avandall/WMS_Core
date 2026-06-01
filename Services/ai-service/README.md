@@ -20,7 +20,8 @@ Pipeline boundary:
 - `ai_service.pipeline.retrieval`: boundary cho retrieval context.
 - `ai_service.pipeline.routing`: phân loại prompt thành knowledge/RAG hoặc data query.
 - `ai_service.pipeline.templates`: đổi data query thành object template key-value. Mặc định dùng
-  Groq qua `GroqQueryTemplateExtractor`; có thể thay bằng local model qua `QueryTemplateExtractor`.
+  Groq qua `GroqQueryTemplateExtractor`; có thể thay bằng local fine-tuned model khi set
+  `FINE_TUNED_MODEL_PATH`, hoặc tự cài extractor khác qua `QueryTemplateExtractor`.
 - `ai_service.pipeline.backend_query`: boundary gửi template sang backend sở hữu truy vấn dữ liệu.
 - `ai_service.pipeline.generation`: query pipeline điều phối router, RAG, template extraction, và
   backend query.
@@ -31,9 +32,13 @@ snapshot có thể replay.
 
 Query flow:
 
-1. User prompt vào `/api/v1/ai/query` với `mode=auto` mặc định.
+1. Client gọi gRPC `Query` của `wms.ai.v1.AIService` với `mode=auto` mặc định.
 2. Router kiểm tra prompt có phải data/SQL/DB-style query không.
 3. Knowledge prompt đi qua RAG workflow, dùng LLM API và quality evaluator/critic.
 4. Data prompt đi qua template extractor để tạo object key-value, rồi chuyển object đó cho
    backend query adapter. Nếu cấu hình `AI_BACKEND_QUERY_URL`, adapter sẽ POST template sang
    backend; nếu chưa cấu hình, response trả về template đã chuẩn bị để giữ boundary sạch.
+5. HTTP chỉ dùng cho `GET /health` và `GET /metrics`.
+
+Fine-tuned local model, nếu bật, chỉ thay extractor ở bước 4. Nó không chạm vào RAG/agent path
+và không thay đổi flow knowledge prompt.

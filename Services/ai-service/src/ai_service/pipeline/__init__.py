@@ -14,6 +14,7 @@ from ai_service.pipeline.providers import AIProvider, WMSEngineProviderAdapter
 from ai_service.pipeline.retrieval import RetrievalContext, RetrievalPipeline
 from ai_service.pipeline.routing import HeuristicQueryRouter, QueryRouter, RouteDecision
 from ai_service.pipeline.templates import (
+    FineTunedQueryTemplateExtractor,
     GroqQueryTemplateExtractor,
     HeuristicQueryTemplateExtractor,
     QueryTemplate,
@@ -27,6 +28,7 @@ __all__ = [
     "BackendQueryClient",
     "BackendQueryResponse",
     "EventIngestor",
+    "FineTunedQueryTemplateExtractor",
     "GroqQueryTemplateExtractor",
     "HeuristicQueryRouter",
     "HeuristicQueryTemplateExtractor",

@@ -63,10 +63,10 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/app","src/ai_engine"]
+packages = ["training/fine_tuning"]
 
 [tool.hatch.build.targets.editable]
-packages = ["src/app","src/ai_engine"]
+packages = ["training/fine_tuning"]
 
 [build-system]
 requires = ["hatchling"]

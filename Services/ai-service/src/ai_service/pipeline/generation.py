@@ -10,7 +10,11 @@ from ai_service.pipeline.backend_query import (
 from ai_service.pipeline.providers import AIProvider
 from ai_service.pipeline.retrieval import RetrievalPipeline
 from ai_service.pipeline.routing import HeuristicQueryRouter, QueryRouter
-from ai_service.pipeline.templates import QueryTemplateExtractor, SafeQueryTemplateExtractor
+from ai_service.pipeline.templates import (
+    QueryTemplateExtractor,
+    SafeQueryTemplateExtractor,
+    extractor_source,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,5 +60,9 @@ class AIQueryPipeline:
         status = self.provider.status()
         status["query_router"] = self.router.__class__.__name__
         status["template_extractor"] = self.template_extractor.__class__.__name__
+        status["template_extractor_source"] = extractor_source(self.template_extractor)
+        status["fine_tuned_template_extractor_enabled"] = (
+            extractor_source(self.template_extractor) == "fine_tuned"
+        )
         status["backend_query"] = self.backend_query.__class__.__name__
         return status

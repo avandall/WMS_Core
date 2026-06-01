@@ -65,6 +65,77 @@ Question: {question}
         return _template_from_payload(question=question, payload=payload)
 
 
+class FineTunedQueryTemplateExtractor:
+    """
+    Optional local extractor backed by a fine-tuned causal LM.
+
+    It is used when FINE_TUNED_MODEL_PATH is configured. The model is prompted
+    to return the same JSON template as the Groq extractor so the rest of the
+    pipeline remains unchanged.
+    """
+
+    def __init__(self, model_path: str, device: str = "cpu", max_new_tokens: int = 256):
+        self.model_path = model_path
+        self.device = device
+        self.max_new_tokens = max_new_tokens
+        self._generator = None
+
+    def _get_generator(self):
+        if self._generator is not None:
+            return self._generator
+
+        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        model = AutoModelForCausalLM.from_pretrained(self.model_path)
+
+        if self.device.isdigit():
+            device_index = int(self.device)
+        elif self.device.lower() in {"cpu", "mps", "cuda", "auto"}:
+            device_index = 0 if self.device.lower() == "cuda" else -1
+        else:
+            device_index = -1
+
+        self._generator = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            device=device_index,
+        )
+        return self._generator
+
+    def extract(self, *, question: str) -> QueryTemplate:
+        prompt = f"""You are a WMS query planner.
+Return only valid JSON with this shape:
+{{
+  "intent": "inventory_lookup|order_status|report_lookup|unknown",
+  "target": "inventory|orders|reporting|unknown",
+  "filters": {{"key": "value"}},
+  "metrics": ["quantity"],
+  "limit": 20
+}}
+
+Question: {question}
+"""
+        generator = self._get_generator()
+        result = generator(
+            prompt,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=False,
+            return_full_text=False,
+        )
+        content = result[0].get("generated_text", "") if result else ""
+        return self._parse(question=question, content=content)
+
+    def _parse(self, *, question: str, content: str) -> QueryTemplate:
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            payload = json.loads(match.group(0)) if match else {}
+        return _template_from_payload(question=question, payload=payload)
+
+
 class HeuristicQueryTemplateExtractor:
     """Fallback extractor used when the Groq extractor cannot produce a template."""
 
@@ -86,7 +157,7 @@ class HeuristicQueryTemplateExtractor:
 
 class SafeQueryTemplateExtractor:
     def __init__(self, primary: QueryTemplateExtractor | None = None, fallback: QueryTemplateExtractor | None = None):
-        self.primary = primary or GroqQueryTemplateExtractor()
+        self.primary = primary or _default_primary_extractor()
         self.fallback = fallback or HeuristicQueryTemplateExtractor()
 
     def extract(self, *, question: str) -> QueryTemplate:
@@ -111,3 +182,34 @@ def _template_from_payload(*, question: str, payload: dict[str, Any]) -> QueryTe
         limit=int(limit) if isinstance(limit, int) else None,
         raw_question=question,
     )
+
+
+def _default_primary_extractor() -> QueryTemplateExtractor:
+    from ai_engine.config import settings
+    from ai_engine.utils import logger
+
+    if settings.FINE_TUNED_MODEL_PATH:
+        try:
+            return FineTunedQueryTemplateExtractor(
+                model_path=settings.FINE_TUNED_MODEL_PATH,
+                device=settings.FINE_TUNED_MODEL_DEVICE,
+                max_new_tokens=settings.FINE_TUNED_MAX_NEW_TOKENS,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Falling back to Groq extractor because fine-tuned model could not be loaded",
+                extra={"model_path": settings.FINE_TUNED_MODEL_PATH, "error": str(exc)},
+            )
+    return GroqQueryTemplateExtractor()
+
+
+def extractor_source(extractor: QueryTemplateExtractor) -> str:
+    if isinstance(extractor, FineTunedQueryTemplateExtractor):
+        return "fine_tuned"
+    if isinstance(extractor, GroqQueryTemplateExtractor):
+        return "groq"
+    if isinstance(extractor, HeuristicQueryTemplateExtractor):
+        return "heuristic"
+    if isinstance(extractor, SafeQueryTemplateExtractor):
+        return extractor_source(extractor.primary)
+    return extractor.__class__.__name__
