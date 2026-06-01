@@ -15,7 +15,7 @@ if str(src_path) not in sys.path:
 
 # Add shared_utils to Python path for contract tests
 shared_utils_path = project_root / "shared_utils"
-if shared_utils_path.exists() and str(shared_utils_path) not in sys.path:
+if str(shared_utils_path) not in sys.path:
     sys.path.insert(0, str(shared_utils_path))
 
 import pytest
