@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 
@@ -13,6 +14,7 @@ class QueryTemplate:
     filters: dict[str, Any]
     metrics: tuple[str, ...] = ()
     limit: int | None = None
+    sql: str | None = None
     raw_question: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -21,6 +23,25 @@ class QueryTemplate:
 
 class QueryTemplateExtractor(Protocol):
     def extract(self, *, question: str) -> QueryTemplate: ...
+
+
+QUERY_TEMPLATE_SCHEMA = """{
+  "intent": "inventory_lookup|order_status|report_lookup|warehouse_lookup|document_lookup|product_lookup|customer_lookup|unknown",
+  "target": "inventory|orders|reporting|warehouses|positions|documents|products|customers|unknown",
+  "filters": {"key": "value"},
+  "metrics": ["quantity"],
+  "limit": 20,
+  "sql": "optional SQL query when the request needs a database query"
+}"""
+
+
+def build_query_template_prompt(*, question: str) -> str:
+    return f"""You are a WMS query planner.
+Return only valid JSON with this shape:
+{QUERY_TEMPLATE_SCHEMA}
+
+Question: {question}
+"""
 
 
 class GroqQueryTemplateExtractor:
@@ -40,29 +61,9 @@ class GroqQueryTemplateExtractor:
     def extract(self, *, question: str) -> QueryTemplate:
         from langchain_core.messages import HumanMessage
 
-        prompt = f"""Extract a backend query template for a WMS question.
-
-Return only valid JSON with this shape:
-{{
-  "intent": "inventory_lookup|order_status|report_lookup|unknown",
-  "target": "inventory|orders|reporting|unknown",
-  "filters": {{"key": "value"}},
-  "metrics": ["quantity"],
-  "limit": 20
-}}
-
-Question: {question}
-"""
+        prompt = build_query_template_prompt(question=question)
         response = self.llm.invoke([HumanMessage(content=prompt)])
-        return self._parse(question=question, content=response.content)
-
-    def _parse(self, *, question: str, content: str) -> QueryTemplate:
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", content, re.DOTALL)
-            payload = json.loads(match.group(0)) if match else {}
-        return _template_from_payload(question=question, payload=payload)
+        return parse_query_template_content(question=question, content=response.content)
 
 
 class FineTunedQueryTemplateExtractor:
@@ -87,7 +88,13 @@ class FineTunedQueryTemplateExtractor:
         from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-        model = AutoModelForCausalLM.from_pretrained(self.model_path)
+        model_path = Path(self.model_path)
+        if (model_path / "adapter_config.json").exists():
+            from peft import AutoPeftModelForCausalLM
+
+            model = AutoPeftModelForCausalLM.from_pretrained(self.model_path)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(self.model_path)
 
         if self.device.isdigit():
             device_index = int(self.device)
@@ -105,18 +112,7 @@ class FineTunedQueryTemplateExtractor:
         return self._generator
 
     def extract(self, *, question: str) -> QueryTemplate:
-        prompt = f"""You are a WMS query planner.
-Return only valid JSON with this shape:
-{{
-  "intent": "inventory_lookup|order_status|report_lookup|unknown",
-  "target": "inventory|orders|reporting|unknown",
-  "filters": {{"key": "value"}},
-  "metrics": ["quantity"],
-  "limit": 20
-}}
-
-Question: {question}
-"""
+        prompt = build_query_template_prompt(question=question)
         generator = self._get_generator()
         result = generator(
             prompt,
@@ -125,15 +121,7 @@ Question: {question}
             return_full_text=False,
         )
         content = result[0].get("generated_text", "") if result else ""
-        return self._parse(question=question, content=content)
-
-    def _parse(self, *, question: str, content: str) -> QueryTemplate:
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", content, re.DOTALL)
-            payload = json.loads(match.group(0)) if match else {}
-        return _template_from_payload(question=question, payload=payload)
+        return parse_query_template_content(question=question, content=content)
 
 
 class HeuristicQueryTemplateExtractor:
@@ -170,16 +158,27 @@ class SafeQueryTemplateExtractor:
         return self.fallback.extract(question=question)
 
 
+def parse_query_template_content(*, question: str, content: str) -> QueryTemplate:
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", content, re.DOTALL)
+        payload = json.loads(match.group(0)) if match else {}
+    return _template_from_payload(question=question, payload=payload)
+
+
 def _template_from_payload(*, question: str, payload: dict[str, Any]) -> QueryTemplate:
     filters = payload.get("filters") if isinstance(payload.get("filters"), dict) else {}
     metrics = payload.get("metrics") if isinstance(payload.get("metrics"), list) else []
     limit = payload.get("limit")
+    sql = payload.get("sql")
     return QueryTemplate(
         intent=str(payload.get("intent") or "unknown"),
         target=str(payload.get("target") or "unknown"),
         filters=filters,
         metrics=tuple(str(metric) for metric in metrics),
         limit=int(limit) if isinstance(limit, int) else None,
+        sql=str(sql).strip() if isinstance(sql, str) and sql.strip() else None,
         raw_question=question,
     )
 

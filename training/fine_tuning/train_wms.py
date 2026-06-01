@@ -1,72 +1,290 @@
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import inspect
+import json
+import re
+import sys
 from pathlib import Path
+from typing import Any
 
-from datasets import load_dataset
-from trl import SFTTrainer
-from transformers import TrainingArguments
-from unsloth import FastLanguageModel
 
-def main():
+ROOT_DIR = Path(__file__).resolve().parents[2]
+TEMPLATES_PATH = ROOT_DIR / "Services" / "ai-service" / "src" / "ai_service" / "pipeline" / "templates.py"
+
+
+def _load_template_helpers():
+    spec = importlib.util.spec_from_file_location("wms_ai_templates", TEMPLATES_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load template helpers from {TEMPLATES_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.build_query_template_prompt
+
+
+build_query_template_prompt = _load_template_helpers()
+
+
+def main() -> None:
+    from datasets import load_dataset
+    from trl import SFTTrainer
+    from transformers import TrainingArguments
+    from unsloth import FastLanguageModel
+
+    args = parse_args()
     script_dir = Path(__file__).resolve().parent
-    data_path = script_dir / "data" / "wms_data_fixed.jsonl"
-    output_dir = script_dir / "wms_checkpoints"
-    final_model_dir = script_dir / "wms_final_model"
+    data_path = args.data_path or script_dir / "data" / "wms_data_enriched.jsonl"
+    output_dir = args.output_dir or script_dir / "wms_checkpoints"
+    adapter_dir = args.adapter_dir or script_dir / "wms_final_adapter"
+    merged_model_dir = args.merged_model_dir or script_dir / "wms_final_model"
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    adapter_dir.mkdir(parents=True, exist_ok=True)
+    merged_model_dir.mkdir(parents=True, exist_ok=True)
 
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name="unsloth/Llama-3.2-1B-Instruct-bnb-4bit",
-        max_seq_length=1024,
+        model_name=args.model_name,
+        max_seq_length=args.max_seq_length,
         load_in_4bit=True,
     )
 
     model = FastLanguageModel.get_peft_model(
         model,
-        r=16,
+        r=args.lora_rank,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-        lora_alpha=16,
+        lora_alpha=args.lora_alpha,
         lora_dropout=0,
         bias="none",
     )
 
-    def formatting_prompts_func(examples):
-        instructions = examples["instruction"]
-        inputs = examples["input"]
-        outputs = examples["output"]
-        texts = []
-        for instruction, input, output in zip(instructions, inputs, outputs):
-            text = f"### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{output}"
-            texts.append(text)
-        return {"text": texts}
-
     dataset = load_dataset("json", data_files=str(data_path), split="train")
     dataset = dataset.map(formatting_prompts_func, batched=True)
+    split = dataset.train_test_split(test_size=args.eval_ratio, seed=args.seed)
+
+    training_args_kwargs = {
+        "per_device_train_batch_size": args.batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "warmup_steps": args.warmup_steps,
+        "max_steps": args.max_steps,
+        "learning_rate": args.learning_rate,
+        "fp16": args.fp16,
+        "logging_steps": 1,
+        "optim": "adamw_8bit",
+        "weight_decay": 0.01,
+        "output_dir": str(output_dir),
+        "save_steps": args.save_steps,
+        "save_total_limit": 2,
+        "eval_steps": args.eval_steps,
+        "report_to": "none",
+    }
+    eval_arg = (
+        "eval_strategy"
+        if "eval_strategy" in inspect.signature(TrainingArguments).parameters
+        else "evaluation_strategy"
+    )
+    training_args_kwargs[eval_arg] = "steps"
 
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
-        train_dataset=dataset,
+        train_dataset=split["train"],
+        eval_dataset=split["test"],
         dataset_text_field="text",
-        max_seq_length=1024,
-        args=TrainingArguments(
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=4,
-            warmup_steps=5,
-            max_steps=200,
-            learning_rate=2e-4,
-            fp16=True,
-            logging_steps=1,
-            optim="adamw_8bit",
-            weight_decay=0.01,
-            output_dir=str(output_dir),
-            save_steps=50,
-            save_total_limit=2,
-        ),
+        max_seq_length=args.max_seq_length,
+        args=TrainingArguments(**training_args_kwargs),
     )
 
     trainer.train()
+    trainer.evaluate()
 
-    model.save_pretrained(str(final_model_dir))
-    tokenizer.save_pretrained(str(final_model_dir))
+    model.save_pretrained(str(adapter_dir))
+    tokenizer.save_pretrained(str(adapter_dir))
+
+    if not args.skip_merge:
+        model.save_pretrained_merged(
+            str(merged_model_dir),
+            tokenizer,
+            save_method="merged_16bit",
+        )
+
+
+def parse_args() -> argparse.Namespace:
+    script_dir = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description="Fine-tune the WMS query-template extractor.")
+    parser.add_argument("--data-path", type=Path, default=script_dir / "data" / "wms_data_enriched.jsonl")
+    parser.add_argument("--output-dir", type=Path, default=script_dir / "wms_checkpoints")
+    parser.add_argument("--adapter-dir", type=Path, default=script_dir / "wms_final_adapter")
+    parser.add_argument("--merged-model-dir", type=Path, default=script_dir / "wms_final_model")
+    parser.add_argument("--model-name", default="unsloth/Llama-3.2-1B-Instruct-bnb-4bit")
+    parser.add_argument("--max-seq-length", type=int, default=1024)
+    parser.add_argument("--max-steps", type=int, default=200)
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=4)
+    parser.add_argument("--warmup-steps", type=int, default=5)
+    parser.add_argument("--learning-rate", type=float, default=2e-4)
+    parser.add_argument("--lora-rank", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=16)
+    parser.add_argument("--save-steps", type=int, default=50)
+    parser.add_argument("--eval-steps", type=int, default=50)
+    parser.add_argument("--eval-ratio", type=float, default=0.1)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fp16", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--skip-merge", action="store_true")
+    return parser.parse_args()
+
+
+def formatting_prompts_func(examples: dict[str, list[Any]]) -> dict[str, list[str]]:
+    instructions = examples.get("instruction", [])
+    inputs = examples.get("input", [""] * len(instructions))
+    outputs = examples.get("output", [])
+    texts = []
+    for instruction, input_text, output in zip(instructions, inputs, outputs):
+        question = build_question(instruction=instruction, input_text=input_text)
+        template = build_training_template(question=question, output=output)
+        prompt = build_query_template_prompt(question=question)
+        texts.append(f"{prompt}{json.dumps(template, ensure_ascii=False, sort_keys=True)}")
+    return {"text": texts}
+
+
+def build_question(*, instruction: Any, input_text: Any) -> str:
+    instruction_text = str(instruction or "").strip()
+    input_value = str(input_text or "").strip()
+    if input_value:
+        return f"{instruction_text}\nContext: {input_value}"
+    return instruction_text
+
+
+def build_training_template(*, question: str, output: Any) -> dict[str, Any]:
+    if isinstance(output, dict):
+        return normalize_template(output)
+
+    output_text = str(output or "").strip()
+    try:
+        payload = json.loads(output_text)
+        if isinstance(payload, dict):
+            return normalize_template(payload)
+    except json.JSONDecodeError:
+        pass
+
+    sql = extract_sql(output_text)
+    return infer_template_from_sql(question=question, sql=sql)
+
+
+def normalize_template(payload: dict[str, Any]) -> dict[str, Any]:
+    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), list) else []
+    filters = payload.get("filters") if isinstance(payload.get("filters"), dict) else {}
+    sql = payload.get("sql")
+    return {
+        "intent": str(payload.get("intent") or "unknown"),
+        "target": str(payload.get("target") or "unknown"),
+        "filters": filters,
+        "metrics": [str(metric) for metric in metrics],
+        "limit": payload.get("limit") if isinstance(payload.get("limit"), int) else None,
+        "sql": str(sql).strip() if isinstance(sql, str) and sql.strip() else None,
+    }
+
+
+def extract_sql(output_text: str) -> str:
+    fenced = re.search(r"```sql\s*(.*?)```", output_text, re.IGNORECASE | re.DOTALL)
+    if fenced:
+        return fenced.group(1).strip()
+    generic = re.search(r"```\s*(.*?)```", output_text, re.DOTALL)
+    if generic:
+        return generic.group(1).strip()
+    return output_text.strip()
+
+
+def infer_template_from_sql(*, question: str, sql: str) -> dict[str, Any]:
+    lower_question = question.lower()
+    lower_sql = sql.lower()
+    target = infer_target(lower_question=lower_question, lower_sql=lower_sql)
+    return {
+        "intent": infer_intent(target=target, lower_question=lower_question, lower_sql=lower_sql),
+        "target": target,
+        "filters": infer_filters(sql=sql),
+        "metrics": infer_metrics(lower_question=lower_question, lower_sql=lower_sql),
+        "limit": infer_limit(lower_sql=lower_sql),
+        "sql": sql or None,
+    }
+
+
+def infer_target(*, lower_question: str, lower_sql: str) -> str:
+    table_targets = {
+        "inventory": "inventory",
+        "warehouse_inventory": "inventory",
+        "movement_ledger": "inventory",
+        "documents": "documents",
+        "document_items": "documents",
+        "positions": "positions",
+        "warehouses": "warehouses",
+        "products": "products",
+        "customers": "customers",
+        "orders": "orders",
+        "reporting": "reporting",
+    }
+    for table, target in table_targets.items():
+        if table in lower_sql or table in lower_question:
+            return target
+    return "unknown"
+
+
+def infer_intent(*, target: str, lower_question: str, lower_sql: str) -> str:
+    if any(word in lower_sql for word in ("sum(", "count(", "avg(", "group by")):
+        return "report_lookup"
+    if target == "inventory":
+        return "inventory_lookup"
+    if target == "documents":
+        return "document_lookup"
+    if target in {"warehouses", "positions"}:
+        return "warehouse_lookup"
+    if target == "products":
+        return "product_lookup"
+    if target == "customers":
+        return "customer_lookup"
+    if "order" in lower_question:
+        return "order_status"
+    return "unknown"
+
+
+def infer_filters(*, sql: str) -> dict[str, str]:
+    filters: dict[str, str] = {}
+    where_match = re.search(
+        r"\bwhere\b(.*?)(?:\bgroup\s+by\b|\border\s+by\b|\blimit\b|;|$)",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not where_match:
+        return filters
+    for key, value in re.findall(r"([a-zA-Z_][\w.]*?)\s*=\s*'([^']+)'", where_match.group(1)):
+        filters[key.split(".")[-1]] = value
+    for key, value in re.findall(r"([a-zA-Z_][\w.]*?)\s*=\s*(\d+)", where_match.group(1)):
+        filters.setdefault(key.split(".")[-1], value)
+    return filters
+
+
+def infer_metrics(*, lower_question: str, lower_sql: str) -> list[str]:
+    metrics = []
+    metric_terms = {
+        "quantity": ("quantity", "số lượng", "ton kho", "tồn kho"),
+        "count": ("count(", "đếm", "bao nhiêu"),
+        "sum": ("sum(", "tổng"),
+        "average": ("avg(", "trung bình"),
+        "amount": ("amount", "doanh thu", "giá trị"),
+        "location": ("location", "vị trí"),
+    }
+    haystack = f"{lower_question} {lower_sql}"
+    for metric, terms in metric_terms.items():
+        if any(term in haystack for term in terms):
+            metrics.append(metric)
+    return metrics
+
+
+def infer_limit(*, lower_sql: str) -> int | None:
+    match = re.search(r"\blimit\s+(\d+)", lower_sql)
+    return int(match.group(1)) if match else None
+
 
 if __name__ == "__main__":
     main()
