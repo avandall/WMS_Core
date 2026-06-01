@@ -1,0 +1,169 @@
+{
+  "release": {
+    "release_version": "RELEASE_VERSION",
+    "source_runtime": "archived-monolith-or-current-production",
+    "target_runtime": "grpc-microservices"
+  },
+  "databases": {
+    "source": "sqlite:////tmp/wms-cutover/source.db",
+    "identity": "sqlite:////tmp/wms-cutover/identity.db",
+    "customer": "sqlite:////tmp/wms-cutover/customer.db",
+    "product": "sqlite:////tmp/wms-cutover/product.db",
+    "warehouse": "sqlite:////tmp/wms-cutover/warehouse.db",
+    "inventory": "sqlite:////tmp/wms-cutover/inventory.db",
+    "documents": "sqlite:////tmp/wms-cutover/documents.db",
+    "audit": "sqlite:////tmp/wms-cutover/audit.db",
+    "reporting": "sqlite:////tmp/wms-cutover/reporting.db"
+  },
+  "service_data_map": {
+    "identity-service": {
+      "mode": "migrate",
+      "source": "users/auth data",
+      "target_tables": ["users"]
+    },
+    "customer-service": {
+      "mode": "migrate",
+      "source": "customers",
+      "target_tables": ["customers"]
+    },
+    "product-service": {
+      "mode": "migrate",
+      "source": "products/SKUs",
+      "target_tables": ["products"]
+    },
+    "warehouse-service": {
+      "mode": "migrate",
+      "source": "warehouses/positions/locations",
+      "target_tables": ["warehouses", "positions"]
+    },
+    "inventory-service": {
+      "mode": "migrate",
+      "source": "inventory balances and movement history",
+      "target_tables": ["inventory", "warehouse_inventory", "inventory_movement_ledger"]
+    },
+    "documents-service": {
+      "mode": "migrate",
+      "source": "documents and document items",
+      "target_tables": ["documents", "document_items"]
+    },
+    "audit-service": {
+      "mode": "migrate",
+      "source": "audit history",
+      "target_tables": ["audit_events"]
+    },
+    "reporting-service": {
+      "mode": "rebuild",
+      "source": "wms.events and wms.events.replay",
+      "target_tables": [
+        "reporting_read_model_events",
+        "inventory_summary",
+        "document_summary",
+        "sales_summary",
+        "warehouse_activity_summary"
+      ]
+    }
+  },
+  "cutover": {
+    "order": [
+      "capture source snapshots",
+      "enter read-only window",
+      "run service migrations",
+      "load service-owned target datastores",
+      "replay reporting and AI read models from events",
+      "run reconciliation",
+      "shift traffic to api-gateway",
+      "watch post-cutover gates"
+    ],
+    "read_only_window": "required while final source snapshots and event offsets are captured",
+    "post_cutover_checks": [
+      "gateway health",
+      "authenticated customer flow",
+      "document post/cancel flow",
+      "inventory totals",
+      "reporting projection freshness",
+      "DLQ depth"
+    ]
+  },
+  "rollback": {
+    "reference_tag": "phase-o-monolith-archive-exit",
+    "database_snapshots": {
+      "source": "snapshot-before-read-only-window",
+      "identity": "snapshot-before-target-write",
+      "customer": "snapshot-before-target-write",
+      "product": "snapshot-before-target-write",
+      "warehouse": "snapshot-before-target-write",
+      "inventory": "snapshot-before-target-write",
+      "documents": "snapshot-before-target-write",
+      "audit": "snapshot-before-target-write",
+      "reporting": "snapshot-before-target-write"
+    },
+    "event_offsets": {
+      "wms.events": "capture-before-read-only-window",
+      "wms.events.replay": "capture-before-read-only-window"
+    },
+    "release_images": {
+      "api-gateway": "wms/api-gateway:RELEASE_VERSION",
+      "identity-service": "wms/identity-service:RELEASE_VERSION",
+      "customer-service": "wms/customer-service:RELEASE_VERSION",
+      "product-service": "wms/product-service:RELEASE_VERSION",
+      "warehouse-service": "wms/warehouse-service:RELEASE_VERSION",
+      "inventory-service": "wms/inventory-service:RELEASE_VERSION",
+      "documents-service": "wms/documents-service:RELEASE_VERSION",
+      "audit-service": "wms/audit-service:RELEASE_VERSION",
+      "reporting-service": "wms/reporting-service:RELEASE_VERSION"
+    }
+  },
+  "count_checks": [
+    {
+      "name": "users row count",
+      "service": "identity-service",
+      "source_db": "source",
+      "target_db": "identity",
+      "source_sql": "select count(*) from users",
+      "target_sql": "select count(*) from users"
+    },
+    {
+      "name": "documents row count",
+      "service": "documents-service",
+      "source_db": "source",
+      "target_db": "documents",
+      "source_sql": "select count(*) from documents",
+      "target_sql": "select count(*) from documents"
+    }
+  ],
+  "orphan_checks": [
+    {
+      "name": "document items have parent documents",
+      "service": "documents-service",
+      "target_db": "documents",
+      "target_sql": "select count(*) from document_items di left join documents d on d.id = di.document_id where d.id is null"
+    }
+  ],
+  "total_checks": [
+    {
+      "name": "inventory quantity total",
+      "service": "inventory-service",
+      "source_db": "source",
+      "target_db": "inventory",
+      "source_sql": "select coalesce(sum(quantity), 0) from inventory",
+      "target_sql": "select coalesce(sum(quantity), 0) from inventory"
+    },
+    {
+      "name": "document amount total",
+      "service": "documents-service",
+      "source_db": "source",
+      "target_db": "documents",
+      "source_sql": "select coalesce(sum(total_amount), 0) from documents",
+      "target_sql": "select coalesce(sum(total_amount), 0) from documents"
+    }
+  ],
+  "freshness_checks": [
+    {
+      "name": "reporting projection lag",
+      "service": "reporting-service",
+      "target_db": "reporting",
+      "target_sql": "select 0",
+      "max_lag_seconds": 300
+    }
+  ]
+}

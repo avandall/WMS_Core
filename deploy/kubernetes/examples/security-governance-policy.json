@@ -1,0 +1,59 @@
+{
+  "authorization_boundary": "api-gateway",
+  "role_matrix": {
+    "admin": ["*"],
+    "user": ["view_customers", "view_products", "view_inventory", "view_reports"],
+    "sales": ["view_customers", "manage_customers", "view_products", "view_inventory", "view_reports", "doc_create_import"],
+    "warehouse": ["view_customers", "view_products", "view_inventory", "view_reports", "doc_create_transfer", "doc_post"],
+    "warehouse_manager": [
+      "view_customers",
+      "view_products",
+      "manage_products",
+      "view_warehouses",
+      "manage_warehouses",
+      "view_inventory",
+      "manage_inventory",
+      "view_documents",
+      "manage_documents",
+      "view_reports"
+    ],
+    "accountant": ["view_customers", "view_products", "view_inventory", "view_reports", "edit_prices"]
+  },
+  "protected_workflows": {
+    "admin_only": ["manage_users", "audit_events_read"],
+    "warehouse": ["view_warehouses", "manage_warehouses", "doc_create_transfer"],
+    "inventory": ["view_inventory", "manage_inventory", "doc_post"],
+    "documents": ["view_documents", "manage_documents", "doc_create_import", "doc_create_export", "doc_create_transfer", "doc_post"]
+  },
+  "token_policy": {
+    "issuer": "identity-service",
+    "validation_boundary": "api-gateway-to-identity-grpc",
+    "access_token_expire_minutes": 60,
+    "refresh_token_expire_minutes": 10080,
+    "rotation": "roll identity-service and api-gateway together after SECRET_KEY update"
+  },
+  "secret_rotation": {
+    "jwt_secret_key": {"cadence": "90d", "owner": "identity-service", "rollback": "restore previous SECRET_KEY and roll identity-service plus api-gateway"},
+    "grpc_mtls_certificates": {"cadence": "60d", "owner": "platform", "rollback": "restore previous wms-grpc-mtls secret and roll gateway/backends"},
+    "database_credentials": {"cadence": "90d", "owner": "service-owner", "rollback": "restore previous service-owned credential after migration job health check"},
+    "external_provider_keys": {"cadence": "90d", "owner": "integrating-service", "rollback": "restore previous provider key and disable affected integration"}
+  },
+  "audit_requirements": {
+    "privileged_operations": ["manage_users", "manage_products", "manage_warehouses", "manage_documents", "doc_post"],
+    "failed_auth_attempts": ["invalid_token", "inactive_user", "permission_denied"],
+    "data_export": ["reports_export", "audit_events_read"],
+    "manual_inventory_adjustments": ["inventory_adjusted", "reservation_released"],
+    "required_fields": ["event_id", "request_id", "user_id", "action", "entity_type", "entity_id", "warehouse_id", "payload", "created_at"]
+  },
+  "dependency_scanning": {
+    "workflow": ".github/workflows/release-gates.yml",
+    "tools": ["dependency-review-action", "trivy", "sbom-action"],
+    "remediation_sla": {"critical": "24h", "high": "7d", "medium": "30d"},
+    "owners": {
+      "shared-utils": "platform",
+      "api-gateway": "platform",
+      "runtime-services": "service-owners",
+      "ai-service": "ai-owner"
+    }
+  }
+}

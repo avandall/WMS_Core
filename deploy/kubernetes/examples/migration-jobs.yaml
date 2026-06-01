@@ -1,0 +1,183 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: identity-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: identity-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/identity-service:RELEASE_VERSION
+          command: ["identity-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: IDENTITY_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: customer-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: customer-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/customer-service:RELEASE_VERSION
+          command: ["customer-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: CUSTOMER_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: product-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: product-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/product-service:RELEASE_VERSION
+          command: ["product-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: PRODUCT_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: warehouse-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: warehouse-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/warehouse-service:RELEASE_VERSION
+          command: ["warehouse-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: WAREHOUSE_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inventory-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: inventory-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/inventory-service:RELEASE_VERSION
+          command: ["inventory-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: INVENTORY_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: documents-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: documents-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/documents-service:RELEASE_VERSION
+          command: ["documents-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: DOCUMENTS_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: audit-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: audit-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/audit-service:RELEASE_VERSION
+          command: ["audit-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: AUDIT_DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: reporting-service-migration
+  namespace: wms
+  labels:
+    app.kubernetes.io/name: reporting-service
+    app.kubernetes.io/component: migration
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wms/reporting-service:RELEASE_VERSION
+          command: ["reporting-migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wms-secrets
+                  key: REPORTING_DATABASE_URL

@@ -1,88 +1,221 @@
+x-build-common: &build-common
+  context: .
+  dockerfile: Dockerfile
+
+x-api-gateway-env: &api-gateway-env
+  SECRET_KEY: ${SECRET_KEY:-wms-local-dev-secret}
+  PYTHONUNBUFFERED: "1"
+  IDENTITY_GRPC_ADDR: identity-service:50051
+  CUSTOMER_GRPC_ADDR: customer-service:50052
+  PRODUCT_GRPC_ADDR: product-service:50053
+  WAREHOUSE_GRPC_ADDR: warehouse-service:50054
+  INVENTORY_GRPC_ADDR: inventory-service:50055
+  DOCUMENTS_GRPC_ADDR: documents-service:50056
+  AUDIT_GRPC_ADDR: audit-service:50057
+  REPORTING_GRPC_ADDR: reporting-service:50058
+  GRPC_TIMEOUT_FAST: "5"
+  GRPC_TIMEOUT_DEFAULT: "10"
+  GRPC_TIMEOUT_SLOW: "30"
+  GRPC_RETRY_ATTEMPTS: "2"
+  GRPC_RETRY_BACKOFF_SECONDS: "0.05"
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  CIRCUIT_BREAKER_RECOVERY_SECONDS: "15"
+  GRPC_CLIENT_TLS_ENABLED: "0"
+  GRPC_CLIENT_ROOT_CERT_FILE: ""
+  GRPC_CLIENT_CERT_FILE: ""
+  GRPC_CLIENT_KEY_FILE: ""
+  CORS_ORIGINS: http://localhost:3000,http://localhost:8000
+  CORS_ALLOW_CREDENTIALS: "0"
+  MAX_REQUEST_BODY_BYTES: "1048576"
+  RATE_LIMIT_RPS: "10"
+  EVENT_BUS_URL: redis://event-bus:6379/0
+  EVENT_STREAM: wms.events
+  EVENTS_ENABLED: "1"
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  LOG_FORMAT: json
+
+x-service-env: &service-env
+  PYTHONUNBUFFERED: "1"
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  LOG_FORMAT: json
+
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-wms_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wms_password}
-      POSTGRES_DB: ${POSTGRES_DB:-warehouse_db}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Remove the automatic SQL initialization - we'll handle it in the app
-    ports:
-      - "5433:5432"
-
-  redis:
-    image: redis:7-alpine
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - redis_data:/data
-    ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-
-  api:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  api-gateway:
+    image: wms/api-gateway:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: api-gateway
     env_file:
-      - .env.docker
-    ports:
-      - "${API_PORT:-8000}:8000"
-    volumes:
-      # Ánh xạ toàn bộ thư mục gốc vào /app để đồng bộ pyproject.toml và src
-      - .:/app  
-    # Ghi đè lệnh chạy để dùng Uvicorn với tính năng --reload
-    command: >
-      sh -c "
-        echo '🚀 Starting WMS API with Hot-Reload...'
-        # Sử dụng uvicorn trực tiếp để tự động load lại khi bạn sửa code
-        pip install -e . && \
-        python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-      "
-  dashboard:
-    image: nginx:alpine
-    volumes:
-      - ./dashboard:/usr/share/nginx/html:ro
-    ports:
-      - "${DASHBOARD_PORT:-8080}:80"
-    depends_on:
-      api:
-        condition: service_started # Hoặc service_healthy nếu bạn muốn đợi API sẵn sàng hoàn toàn
-
-  # Development tools (only in development mode)
-  dev-tools:
-    image: adminer:latest
-    ports:
-      - "${ADMINER_PORT:-8090}:8080"
-    depends_on:
-      - db
+      - Services/api-gateway/.env.example
     environment:
-      ADMINER_DEFAULT_SERVER: db
-    # Only start in development mode
-    profiles: ["dev"]
-
-  # Cloudflare Tunnel (free / quick tunnel)
-  # Enable with: docker compose --profile tunnel up -d
-  tunnel:
-    profiles: ["tunnel"]
-    image: cloudflare/cloudflared:latest
-    restart: always
-    command: tunnel --no-autoupdate --url http://api:8000
+      <<: *api-gateway-env
+    command: ["api-gateway"]
+    ports:
+      - "8000:8000"
     depends_on:
-      - api
+      - event-bus
+      - otel-collector
+      - identity-service
+      - customer-service
+      - product-service
+      - warehouse-service
+      - inventory-service
+      - documents-service
+      - audit-service
+      - reporting-service
 
-volumes:
-  postgres_data:
-  redis_data:
+  identity-service:
+    image: wms/identity-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: identity-service
+    env_file:
+      - Services/identity-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["identity-grpc"]
+    depends_on:
+      - otel-collector
+
+  customer-service:
+    image: wms/customer-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: customer-service
+    env_file:
+      - Services/customer-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["customer-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+
+  product-service:
+    image: wms/product-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: product-service
+    env_file:
+      - Services/product-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["product-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+
+  warehouse-service:
+    image: wms/warehouse-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: warehouse-service
+    env_file:
+      - Services/warehouse-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["warehouse-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+
+  inventory-service:
+    image: wms/inventory-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: inventory-service
+    env_file:
+      - Services/inventory-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["inventory-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+      - warehouse-service
+
+  documents-service:
+    image: wms/documents-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: documents-service
+    env_file:
+      - Services/documents-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["documents-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+
+  audit-service:
+    image: wms/audit-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: audit-service
+    env_file:
+      - Services/audit-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["audit-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+
+  reporting-service:
+    image: wms/reporting-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: reporting-service
+    env_file:
+      - Services/reporting-service/.env.example
+    environment:
+      <<: *service-env
+    command: ["reporting-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector
+
+  event-bus:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    command: ["--config=/etc/otel/otel-collector.yaml"]
+    volumes:
+      - ./deploy/otel-collector.local.yaml:/etc/otel/otel-collector.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  ai-service:
+    image: wms/ai-service:dev
+    profiles: ["ai"]
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: ai-service
+    environment:
+      DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
+      VECTOR_DB_PATH: /tmp/wms-ai-vector-db
+      AI_REINDEX_CONSUMER_ENABLED: "0"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    command: ["ai-grpc"]
+    depends_on:
+      - event-bus
+      - otel-collector

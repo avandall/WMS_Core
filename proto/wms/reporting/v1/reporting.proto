@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package wms.reporting.v1;
+
+service ReportingService {
+  rpc InventoryReport(InventoryReportRequest) returns (JsonResponse);
+  rpc InventoryList(InventoryListRequest) returns (JsonResponse);
+  rpc WarehouseReport(WarehouseReportRequest) returns (JsonResponse);
+  rpc DocumentsReport(DocumentsReportRequest) returns (JsonResponse);
+  rpc ProductReport(ProductReportRequest) returns (JsonResponse);
+  rpc SalesReport(SalesReportRequest) returns (JsonResponse);
+}
+
+message JsonResponse {
+  string json = 1;
+}
+
+message InventoryReportRequest {
+  int64 warehouse_id = 1; // optional
+  int64 low_stock_threshold = 2;
+}
+
+message InventoryListRequest {}
+
+message WarehouseReportRequest {
+  int64 warehouse_id = 1;
+  string start_date = 2; // ISO date or empty
+  string end_date = 3;   // ISO date or empty
+}
+
+message DocumentsReportRequest {
+  string start_date = 1;
+  string end_date = 2;
+}
+
+message ProductReportRequest {
+  int64 product_id = 1;
+  string start_date = 2;
+  string end_date = 3;
+}
+
+message SalesReportRequest {
+  string start_date = 1;
+  string end_date = 2;
+  int64 customer_id = 3;
+  string salesperson = 4;
+}
+

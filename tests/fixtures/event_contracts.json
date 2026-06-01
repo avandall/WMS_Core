@@ -1,0 +1,156 @@
+{
+  "DocumentUploaded": {
+    "source": "documents-service",
+    "required_payload": ["entity_type", "entity_id", "document_id", "doc_type", "status", "items"],
+    "fixture_payload": {
+      "event_id": "fixture:document:1:uploaded",
+      "entity_type": "document",
+      "entity_id": 1,
+      "document_id": 1,
+      "doc_type": "SALE",
+      "status": "DRAFT",
+      "customer_id": 10,
+      "from_warehouse_id": 20,
+      "to_warehouse_id": null,
+      "items": [{"product_id": 100, "quantity": 2, "unit_price": 5.0}]
+    }
+  },
+  "DocumentPosted": {
+    "source": "documents-service",
+    "required_payload": ["entity_type", "entity_id", "document_id", "doc_type", "status", "approved_by"],
+    "fixture_payload": {
+      "event_id": "fixture:document:1:posted",
+      "entity_type": "document",
+      "entity_id": 1,
+      "document_id": 1,
+      "doc_type": "SALE",
+      "status": "POSTED",
+      "approved_by": "manager",
+      "posted_at": "2026-05-26T00:00:00+00:00"
+    }
+  },
+  "DocumentCancelled": {
+    "source": "documents-service",
+    "required_payload": ["entity_type", "entity_id", "document_id", "doc_type", "status", "cancelled_by"],
+    "fixture_payload": {
+      "event_id": "fixture:document:1:cancelled",
+      "entity_type": "document",
+      "entity_id": 1,
+      "document_id": 1,
+      "doc_type": "SALE",
+      "status": "CANCELLED",
+      "cancelled_by": "manager",
+      "reason": "mistake"
+    }
+  },
+  "InventoryMovementRequested": {
+    "source": "documents-service",
+    "required_payload": ["entity_type", "entity_id", "document_id", "doc_type", "items"],
+    "fixture_payload": {
+      "event_id": "fixture:document:1:inventory-movement-requested",
+      "entity_type": "document",
+      "entity_id": 1,
+      "document_id": 1,
+      "doc_type": "SALE",
+      "from_warehouse_id": 20,
+      "items": [{"product_id": 100, "quantity": 2}]
+    }
+  },
+  "InventoryAdjusted": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "entity_id", "product_id", "quantity_delta"],
+    "fixture_payload": {
+      "event_id": "fixture:inventory:100:adjusted",
+      "entity_type": "inventory",
+      "entity_id": 100,
+      "product_id": 100,
+      "warehouse_id": 20,
+      "quantity_delta": 5,
+      "reason": "manual_adjustment"
+    }
+  },
+  "StockReserved": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "entity_id", "product_id", "quantity"],
+    "fixture_payload": {
+      "event_id": "fixture:inventory:100:reserved",
+      "entity_type": "inventory",
+      "entity_id": 100,
+      "product_id": 100,
+      "warehouse_id": 20,
+      "quantity": 2
+    }
+  },
+  "ReservationReleased": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "entity_id", "product_id", "quantity"],
+    "fixture_payload": {
+      "event_id": "fixture:inventory:100:reservation-released",
+      "entity_type": "inventory",
+      "entity_id": 100,
+      "product_id": 100,
+      "warehouse_id": 20,
+      "quantity": 2
+    }
+  },
+  "InventoryMovementApplied": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "entity_id", "document_id", "doc_type", "items"],
+    "fixture_payload": {
+      "event_id": "fixture:document:1:inventory-movement-applied",
+      "source_event_id": "fixture:document:1:inventory-movement-requested",
+      "entity_type": "document",
+      "entity_id": 1,
+      "document_id": 1,
+      "doc_type": "SALE",
+      "from_warehouse_id": 20,
+      "items": [{"product_id": 100, "quantity": 2}]
+    }
+  },
+  "InventoryListed": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "count"],
+    "fixture_payload": {"event_id": "fixture:inventory:list", "entity_type": "inventory", "count": 1}
+  },
+  "InventoryByWarehouseListed": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "count"],
+    "fixture_payload": {"event_id": "fixture:inventory:warehouse-list", "entity_type": "inventory", "count": 1}
+  },
+  "InventoryQuantityRead": {
+    "source": "inventory-service",
+    "required_payload": ["entity_type", "entity_id", "product_id", "quantity"],
+    "fixture_payload": {
+      "event_id": "fixture:inventory:100:quantity-read",
+      "entity_type": "inventory",
+      "entity_id": 100,
+      "product_id": 100,
+      "quantity": 5
+    }
+  },
+  "ProductCreated": {
+    "source": "product-service",
+    "required_payload": ["entity_type", "entity_id", "product_id"],
+    "fixture_payload": {"event_id": "fixture:product:100:created", "entity_type": "product", "entity_id": 100, "product_id": 100}
+  },
+  "ProductUpdated": {
+    "source": "product-service",
+    "required_payload": ["entity_type", "entity_id", "product_id"],
+    "fixture_payload": {"event_id": "fixture:product:100:updated", "entity_type": "product", "entity_id": 100, "product_id": 100}
+  },
+  "ProductDeleted": {
+    "source": "product-service",
+    "required_payload": ["entity_type", "entity_id", "product_id"],
+    "fixture_payload": {"event_id": "fixture:product:100:deleted", "entity_type": "product", "entity_id": 100, "product_id": 100}
+  },
+  "WarehouseCreated": {
+    "source": "warehouse-service",
+    "required_payload": ["entity_type", "entity_id", "warehouse_id", "location"],
+    "fixture_payload": {"event_id": "fixture:warehouse:20:created", "entity_type": "warehouse", "entity_id": 20, "warehouse_id": 20, "location": "Main Warehouse"}
+  },
+  "WarehouseDeleted": {
+    "source": "warehouse-service",
+    "required_payload": ["entity_type", "entity_id", "warehouse_id"],
+    "fixture_payload": {"event_id": "fixture:warehouse:20:deleted", "entity_type": "warehouse", "entity_id": 20, "warehouse_id": 20}
+  }
+}

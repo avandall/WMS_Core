@@ -49,6 +49,8 @@ dependencies = [
     "datasets>=4.3.0",
     "trl>=0.24.0",
     "redis>=7.4.0",
+    "ruff>=0.1.0",
+    "grpcio-tools>=1.60.0",
 ]
 
 [project.optional-dependencies]
@@ -74,3 +76,21 @@ build-backend = "hatchling.build"
 dev = [
     "pytest-asyncio>=1.3.0",
 ]
+
+[tool.uv.workspace]
+members = [
+    "Libraries/shared-utils",
+    "Services/api-gateway",
+    "Services/ai-service",
+    "Services/audit-service",
+    "Services/customer-service",
+    "Services/documents-service",
+    "Services/identity-service",
+    "Services/inventory-service",
+    "Services/product-service",
+    "Services/reporting-service",
+    "Services/warehouse-service",
+]
+
+[tool.uv.sources]
+shared-utils = { workspace = true }
