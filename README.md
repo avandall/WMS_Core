@@ -120,6 +120,7 @@ docker compose down -v
 - **Multi-Mode Processing** - RAG, Agent, and Hybrid processing modes
 - **WMS-Specific Intelligence** - Understanding of warehouse operations and business logic
 - **Vector Database** - ChromaDB integration for efficient semantic search
+- **Optional Fine-Tuned Extractor** - Local query-template extractor when `FINE_TUNED_MODEL_PATH` is set
 
 ## 🔐 Security
 
@@ -163,18 +164,17 @@ src/
 │       ├── core/               # Core functionality
 │       ├── domain/             # Domain entities
 │       └── utils/              # Utilities
-└── ai_engine/                   # Advanced AI capabilities
-    ├── retrieval/              # Hybrid RAG search
-    ├── generation/             # LLM response generation
-    ├── agents/                 # WMS-specific AI agents
-    └── workflows/              # AI workflow orchestration
+└── training/
+    └── fine_tuning/             # Fine-tune datasets and training scripts
+        ├── data/                # Training JSONL data
+        └── train_wms.py         # Local LoRA fine-tune entrypoint
 ```
 
 ## 📚 Documentation
 
 - **[PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)** - Comprehensive technical documentation
 - **[API Documentation](http://localhost:8000/docs)** - Interactive Swagger API docs
-- **[AI Engine Documentation](./src/ai_engine/README.md)** - AI capabilities and usage
+- **[AI Engine Documentation](./Services/ai-service/src/ai_engine/README.md)** - AI capabilities and usage
 
 ## 🤝 Contributing
 

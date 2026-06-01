@@ -59,7 +59,7 @@ QUALITY_THRESHOLD=7.0
 
 ### Basic RAG Usage
 ```python
-from src.ai_engine import WMSEngine, ProcessingMode
+from ai_engine import WMSEngine, ProcessingMode
 
 # Initialize engine
 engine = WMSEngine(mode=ProcessingMode.RAG)
@@ -95,7 +95,7 @@ print(result['response'])
 
 ### Directory Structure
 ```
-src/ai_engine/
+Services/ai-service/src/ai_engine/
 |-- config/           # Configuration management
 |   |-- settings.py
 |-- models/           # Base models and interfaces

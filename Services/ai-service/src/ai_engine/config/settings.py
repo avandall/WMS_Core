@@ -35,6 +35,11 @@ class Settings:
     
     # API Keys
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+
+    # Optional fine-tuned local model for data/query extraction
+    FINE_TUNED_MODEL_PATH: str = os.getenv("FINE_TUNED_MODEL_PATH", "").strip()
+    FINE_TUNED_MODEL_DEVICE: str = os.getenv("FINE_TUNED_MODEL_DEVICE", "cpu").strip()
+    FINE_TUNED_MAX_NEW_TOKENS: int = int(os.getenv("FINE_TUNED_MAX_NEW_TOKENS", "256"))
     
     @classmethod
     def get_llm_config(cls) -> Dict[str, Any]:

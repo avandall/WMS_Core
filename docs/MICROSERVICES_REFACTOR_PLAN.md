@@ -1,7 +1,7 @@
 # WMS Microservices Refactor Plan
 
 ## 1. Overview
-This project currently lives as a monolithic FastAPI application with a clear domain module structure under `src/app/modules` and a separate AI engine in `src/ai_engine`.
+This project currently lives as a monolithic FastAPI application with a clear domain module structure under `src/app/modules` and a separate AI engine in `Services/ai-service/src/ai_engine`.
 
 The recommended microservice decomposition preserves business capabilities, minimizes coupling, and makes it easier to scale individual domains, data stores, and AI-specific workloads.
 
@@ -146,7 +146,7 @@ Likely endpoints:
 - `GET /reports/customer-activity`
 
 ### 3.10 AI / Knowledge Service
-- Own the AI engine, retrieval, LLM generation, and agent logic in `src/ai_engine`.
+- Own the AI engine, retrieval, LLM generation, and agent logic in `Services/ai-service/src/ai_engine`.
 - Host vector store, embedding generation, and RAG orchestration.
 - Expose query endpoints for both direct question answering and tool-driven agent use.
 - Integrate with domain services to resolve inventory, product, warehouse, and document queries.
@@ -237,7 +237,7 @@ Each service should own its own persistence layer and schema. Recommended bounda
 3. Use event-driven ingestion from other services.
 
 ### Phase 5: Extract AI Engine
-1. Convert `src/ai_engine` into a standalone AI Service.
+1. Convert `Services/ai-service/src/ai_engine` into a standalone AI Service.
 2. Implement an interface for other services to query AI.
 3. Sync documents, products, warehouses, and inventory metadata into the AI Service through events or API fetch.
 4. Add AI service health checks and separate configuration.
