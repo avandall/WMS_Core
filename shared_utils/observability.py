@@ -32,5 +32,5 @@ def child_trace_context(parent_traceparent: Optional[str]) -> Dict[str, str]:
         return {}
     
     return {
-        "traceparent": parent_traceparent,  # Simplified - in real W3C trace context, parent_id changes
+        "traceparent": parent_traceparent,
     }
