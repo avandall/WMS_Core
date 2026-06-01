@@ -18,6 +18,11 @@ shared_utils_path = project_root / "shared_utils"
 if str(shared_utils_path) not in sys.path:
     sys.path.insert(0, str(shared_utils_path))
 
+# Add Services/api-gateway/src to Python path for contract tests
+api_gateway_path = project_root / "Services" / "api-gateway" / "src"
+if str(api_gateway_path) not in sys.path:
+    sys.path.insert(0, str(api_gateway_path))
+
 import pytest
 from typing import Any
 import requests
