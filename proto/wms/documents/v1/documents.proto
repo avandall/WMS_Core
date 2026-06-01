@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package wms.documents.v1;
+
+service DocumentsService {
+  rpc CreateImport(CreateDocumentRequest) returns (Document);
+  rpc CreateExport(CreateDocumentRequest) returns (Document);
+  rpc CreateSale(CreateDocumentRequest) returns (Document);
+  rpc CreateTransfer(CreateDocumentRequest) returns (Document);
+  rpc PostDocument(PostDocumentRequest) returns (PostDocumentResponse);
+  rpc GetDocument(GetDocumentRequest) returns (Document);
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+}
+
+message DocumentItem {
+  int64 product_id = 1;
+  int64 quantity = 2;
+  double unit_price = 3;
+}
+
+message Document {
+  int64 document_id = 1;
+  string doc_type = 2;
+  string status = 3;
+  int64 from_warehouse_id = 4;
+  int64 to_warehouse_id = 5;
+  int64 customer_id = 6;
+  repeated DocumentItem items = 7;
+  string created_by = 8;
+  string approved_by = 9;
+  string note = 10;
+  string created_at = 11;
+  string posted_at = 12;
+}
+
+message CreateDocumentRequest {
+  // For IMPORT: use `to_warehouse_id`
+  // For EXPORT/SALE: use `from_warehouse_id`
+  // For TRANSFER: use both
+  int64 from_warehouse_id = 1;
+  int64 to_warehouse_id = 2;
+  int64 customer_id = 3;
+  repeated DocumentItem items = 4;
+  string created_by = 5;
+  string note = 6;
+}
+
+message PostDocumentRequest {
+  int64 document_id = 1;
+  string approved_by = 2;
+}
+
+message PostDocumentResponse {
+  string message = 1;
+}
+
+message GetDocumentRequest {
+  int64 document_id = 1;
+}
+
+message ListDocumentsRequest {
+  string doc_type = 1; // optional
+  int64 page = 2;
+  int64 page_size = 3;
+}
+
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+}
+
+message DeleteDocumentRequest {
+  int64 document_id = 1;
+}
+
+message DeleteDocumentResponse {
+  string message = 1;
+}
+

@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package wms.warehouse.v1;
+
+service WarehouseService {
+  rpc ListWarehouses(ListWarehousesRequest) returns (ListWarehousesResponse);
+  rpc GetWarehouse(GetWarehouseRequest) returns (Warehouse);
+  rpc CreateWarehouse(CreateWarehouseRequest) returns (Warehouse);
+  rpc DeleteWarehouse(DeleteWarehouseRequest) returns (DeleteWarehouseResponse);
+  rpc TransferAllInventory(TransferAllInventoryRequest) returns (TransferAllInventoryResponse);
+}
+
+service WarehouseOperationsService {
+  rpc GetSystemOverview(GetSystemOverviewRequest) returns (SystemOverview);
+  rpc GetInventoryHealth(GetInventoryHealthRequest) returns (InventoryHealthReport);
+  rpc OptimizeDistribution(OptimizeDistributionRequest) returns (OptimizeDistributionResponse);
+  rpc BulkTransfer(BulkTransferRequest) returns (BulkTransferResponse);
+}
+
+message InventoryItem {
+  int64 product_id = 1;
+  int64 quantity = 2;
+}
+
+message Warehouse {
+  int64 warehouse_id = 1;
+  string name = 2;
+  string location = 3;
+  repeated InventoryItem inventory = 4;
+}
+
+message ListWarehousesRequest {}
+
+message ListWarehousesResponse {
+  repeated Warehouse warehouses = 1;
+}
+
+message GetWarehouseRequest {
+  int64 warehouse_id = 1;
+}
+
+message CreateWarehouseRequest {
+  string name = 1;
+}
+
+message DeleteWarehouseRequest {
+  int64 warehouse_id = 1;
+}
+
+message DeleteWarehouseResponse {
+  string message = 1;
+}
+
+message TransferAllInventoryRequest {
+  int64 warehouse_id = 1;
+  int64 to_warehouse_id = 2;
+}
+
+message TransferAllInventoryResponse {
+  int64 from_warehouse_id = 1;
+  int64 to_warehouse_id = 2;
+  repeated InventoryItem transferred_items = 3;
+  string message = 4;
+}
+
+message GetSystemOverviewRequest {}
+
+message SystemOverview {
+  int64 total_warehouses = 1;
+  int64 total_products = 2;
+  double total_inventory_value = 3;
+  repeated string warehouses = 4;
+}
+
+message GetInventoryHealthRequest {}
+
+message InventoryHealthReport {
+  double system_health_score = 1;
+  repeated InventoryHealthWarehouse warehouses = 2;
+}
+
+message InventoryHealthWarehouse {
+  int64 warehouse_id = 1;
+  string location = 2;
+  double total_value = 3;
+  double health_score = 4;
+  repeated InventoryHealthProduct products = 5;
+}
+
+message InventoryHealthProduct {
+  int64 product_id = 1;
+  string name = 2;
+  int64 quantity = 3;
+  double value = 4;
+}
+
+message OptimizeDistributionRequest {
+  int64 product_id = 1;
+}
+
+message OptimizeDistributionResponse {
+  int64 product_id = 1;
+  string product_name = 2;
+  repeated DistributionItem distribution = 3;
+  repeated string recommendations = 4;
+  string error = 5;
+}
+
+message DistributionItem {
+  int64 warehouse_id = 1;
+  string location = 2;
+  int64 quantity = 3;
+}
+
+message BulkTransferRequest {
+  repeated BulkTransferItem transfers = 1;
+}
+
+message BulkTransferItem {
+  int64 from_warehouse_id = 1;
+  int64 to_warehouse_id = 2;
+  int64 product_id = 3;
+  int64 quantity = 4;
+}
+
+message BulkTransferResponse {
+  int64 total_transfers = 1;
+  int64 successful = 2;
+  int64 failed = 3;
+}
+

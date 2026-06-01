@@ -25,7 +25,8 @@ class _MissingDependencyApp:
         ) from self._exc
 
 
-def create_app() -> FastAPI:
+def create_app():
+    """Create and configure the FastAPI application."""
     from contextlib import asynccontextmanager
     from datetime import datetime
 

@@ -132,7 +132,6 @@ cloudflare/cert.json
 cloudflare/*.json
 
 # Package managers
-uv.lock
 package-lock.json
 
 # Node.js
@@ -153,3 +152,4 @@ yarn-error.log*
 *.bak
 *.backup
 
+lessons/

@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package wms.product.v1;
+
+service ProductService {
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc GetProduct(GetProductRequest) returns (Product);
+  rpc CreateProduct(CreateProductRequest) returns (Product);
+  rpc UpdateProduct(UpdateProductRequest) returns (Product);
+  rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse);
+}
+
+message Product {
+  int64 product_id = 1;
+  string name = 2;
+  double price = 3;
+  string description = 4;
+}
+
+message ListProductsRequest {}
+
+message ListProductsResponse {
+  repeated Product products = 1;
+}
+
+message GetProductRequest {
+  int64 product_id = 1;
+}
+
+message CreateProductRequest {
+  int64 product_id = 1;
+  string name = 2;
+  double price = 3;
+  string description = 4;
+}
+
+message UpdateProductRequest {
+  int64 product_id = 1;
+  string name = 2;
+  double price = 3;
+  string description = 4;
+}
+
+message DeleteProductRequest {
+  int64 product_id = 1;
+}
+
+message DeleteProductResponse {
+  string message = 1;
+}
+

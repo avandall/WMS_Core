@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package wms.customer.v1;
+
+service CustomerService {
+  rpc CreateCustomer(CreateCustomerRequest) returns (Customer);
+  rpc ListCustomers(ListCustomersRequest) returns (ListCustomersResponse);
+  rpc GetCustomer(GetCustomerRequest) returns (Customer);
+  rpc UpdateCustomer(UpdateCustomerRequest) returns (Customer);
+  rpc UpdateDebt(UpdateDebtRequest) returns (UpdateDebtResponse);
+  rpc ListPurchases(ListPurchasesRequest) returns (ListPurchasesResponse);
+}
+
+message Customer {
+  int64 customer_id = 1;
+  string name = 2;
+  string email = 3;
+  string phone = 4;
+  string address = 5;
+  double debt_balance = 6;
+  string created_at = 7;
+}
+
+message Purchase {
+  int64 purchase_id = 1;
+  int64 customer_id = 2;
+  double amount = 3;
+  string created_at = 4;
+}
+
+message CreateCustomerRequest {
+  string name = 1;
+  string email = 2;
+  string phone = 3;
+  string address = 4;
+}
+
+message ListCustomersRequest {}
+
+message ListCustomersResponse {
+  repeated Customer customers = 1;
+}
+
+message GetCustomerRequest {
+  int64 customer_id = 1;
+}
+
+message UpdateCustomerRequest {
+  int64 customer_id = 1;
+  string name = 2;
+  string email = 3;
+  string phone = 4;
+  string address = 5;
+}
+
+message UpdateDebtRequest {
+  int64 customer_id = 1;
+  double amount = 2;
+}
+
+message UpdateDebtResponse {
+  string message = 1;
+  double delta = 2;
+}
+
+message ListPurchasesRequest {
+  int64 customer_id = 1;
+}
+
+message ListPurchasesResponse {
+  repeated Purchase purchases = 1;
+}
+

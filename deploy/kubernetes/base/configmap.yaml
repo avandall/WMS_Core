@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wms-runtime-config
+  namespace: wms
+data:
+  PYTHONUNBUFFERED: "1"
+  EVENT_BUS_URL: redis://event-bus:6379/0
+  EVENT_STREAM: wms.events
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_TRACES_EXPORTER: otlp
+  GRPC_TLS_ENABLED: "1"
+  GRPC_TLS_CERT_FILE: /etc/wms/grpc/tls.crt
+  GRPC_TLS_KEY_FILE: /etc/wms/grpc/tls.key
+  GRPC_TLS_CLIENT_CA_FILE: /etc/wms/grpc/ca.crt
+  GRPC_CLIENT_TLS_ENABLED: "1"
+  GRPC_CLIENT_ROOT_CERT_FILE: /etc/wms/grpc/ca.crt
+  GRPC_CLIENT_CERT_FILE: /etc/wms/grpc/tls.crt
+  GRPC_CLIENT_KEY_FILE: /etc/wms/grpc/tls.key
+  GRPC_TIMEOUT_FAST: "5"
+  GRPC_TIMEOUT_DEFAULT: "10"
+  GRPC_TIMEOUT_SLOW: "30"
+  GRPC_RETRY_ATTEMPTS: "2"
+  GRPC_RETRY_BACKOFF_SECONDS: "0.05"
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  CIRCUIT_BREAKER_RECOVERY_SECONDS: "15"
+  IDENTITY_GRPC_ADDR: identity-service:50051
+  CUSTOMER_GRPC_ADDR: customer-service:50052
+  PRODUCT_GRPC_ADDR: product-service:50053
+  WAREHOUSE_GRPC_ADDR: warehouse-service:50054
+  INVENTORY_GRPC_ADDR: inventory-service:50055
+  DOCUMENTS_GRPC_ADDR: documents-service:50056
+  AUDIT_GRPC_ADDR: audit-service:50057
+  REPORTING_GRPC_ADDR: reporting-service:50058
+  CORS_ORIGINS: https://wms.example.com
+  CORS_ALLOW_CREDENTIALS: "0"
+  MAX_REQUEST_BODY_BYTES: "1048576"
+  RATE_LIMIT_RPS: "10"
+  AUDIT_EVENT_CONSUMER_ENABLED: "1"
+  AUDIT_EVENT_CONSUMER_BLOCK_MS: "5000"
+  AUDIT_EVENT_CONSUMER_BATCH_SIZE: "20"
+  AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH: "10000"
+  AUDIT_EVENT_CONSUMER_GROUP: audit-service
+  AUDIT_EVENT_DLQ_STREAM: wms.events.audit.dlq
+  REPORTING_READ_MODEL_CONSUMER_ENABLED: "1"
+  REPORTING_READ_MODEL_CONSUMER_GROUP: reporting-service
+  REPORTING_READ_MODEL_DLQ_STREAM: wms.events.reporting.dlq
+  AI_REINDEX_CONSUMER_ENABLED: "0"
+  AI_REINDEX_DLQ_STREAM: wms.events.ai.dlq
