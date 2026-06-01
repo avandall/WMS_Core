@@ -1,160 +1,136 @@
-I'll retrieve the logs for the failing job to identify the issue and provide a solution.Now let me check the conftest.py file and the project structure to understand the issue:## Solution for Failing Job 78774881860
+Now let me get the conftest and test files to understand the issue better:## Solution for Failing Job 78775833437
 
-Root Cause: The test fails during conftest.py loading at line 299 with:
+Root Causes:
 
-Code
-ModuleNotFoundError: No module named 'app.modules.products.domain'
-The issue is that line 299 has an unconditional import:
+The contract tests fail during collection with two distinct issues:
 
-Python
-from app.modules.products.domain.entities.product import Product
-This import executes at module load time, before the src path (added at lines 11-14) has a chance to be used by pytest's import system.
+Missing shared_utils module - Multiple test files import from shared_utils which is not on the Python path:
 
-The Problem: While conftest.py adds src to sys.path, pytest loads the conftest module before fully initializing the path configuration for fixture discovery. The module-level imports at lines 299-301 fail because the app package cannot be found.
-
-Solution:
-
-Move the unconditional imports inside the fixtures that actually use them. Replace lines 299-306 with conditional/lazy loading:
-
-Python
-# Remove these unconditional imports:
-# from app.modules.products.domain.entities.product import Product
-# from app.modules.products.domain.interfaces.product_repo import IProductRepo
-# from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
-
-# Update the product_authorizer fixture:
-@pytest.fixture
-def product_authorizer():
-    """ProductAuthorizer fixture for testing."""
-    try:
-        from app.api.authorization.product_authorizers import ProductAuthorizer
-        return ProductAuthorizer()
-    except ImportError:
-        return None
-
-# Update the sample_product fixture (line 355):
-@pytest.fixture
-def sample_product():
-    """Sample product entity for testing."""
-    try:
-        from app.modules.products.domain.entities.product import Product
-    except ImportError:
-        # Return a mock or skip the test
-        pytest.skip("Product module not available")
-    
-    return Product(
-        id=1,
-        name="Test Product",
-        description="Test Description",
-        price=99.99,
-        sku="TEST-001",
-        stock_quantity=100
-    )
-
-# Update mock fixtures to not depend on interfaces:
-@pytest.fixture
-def mock_product_repo():
-    """Mock product repository for testing."""
-    repo = Mock()
-    repo.save = Mock()
-    repo.get = Mock()
-    repo.get_all = Mock()
-    repo.get_price = Mock()
-    repo.delete = Mock()
-    return repo
-
-@pytest.fixture
-def mock_inventory_repo():
-    """Mock inventory repository for testing."""
-    repo = Mock()
-    repo.save = Mock()
-    repo.get = Mock()
-    repo.get_all = Mock()
-    repo.update_quantity = Mock()
-    return repo
-Key Changes:
-
-Remove module-level imports of domain entities and interfaces
-Move imports into individual fixtures using try/except
-Use pytest.skip() for fixtures that depend on unavailable modules
-Remove spec=IProductRepo and spec=IInventoryRepo from mocks since those interfaces aren't loaded
-This ensures imports only happen when fixtures are actually invoked, giving pytest time to properly initialize the Python path.
-The logs returned are for job 78774881860, which is the same job from your previous request. Let me try searching for the specific job ID 78774881856:## Solution for Failing Job 78774881856
-
-Root Cause: Identical to job 78774881860. The test fails during conftest.py loading at line 299 with:
+tests/contract/test_event_bus_contract.py:7 - from shared_utils.events import EventEnvelope, build_event
+tests/contract/test_event_contract_hardening.py:6 - from shared_utils.events import EventEnvelope, build_event
+tests/contract/test_observability_contract.py:8 - from shared_utils.observability import ...
+tests/contract/test_phase_m_event_delivery_contract.py:6 - from shared_utils.events import build_event
+Missing DATABASE_URL environment variable - test_reporting_phase_f_contract.py fails with:
 
 Code
-ModuleNotFoundError: No module named 'app.modules.products.domain'
-This is an unconditional module-level import that executes before pytest has properly initialized the Python path, even though src is added to sys.path at lines 11-14.
-
-The Problem: The module-level imports at lines 299-301 execute at conftest load time, before the path configuration is fully applied by pytest's import system:
-
-Python
-from app.modules.products.domain.entities.product import Product
-from app.modules.products.domain.interfaces.product_repo import IProductRepo
-from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+database_url - Value error, DATABASE_URL environment variable is required
 Solution:
 
-Move all unconditional imports into the fixtures that use them, using lazy loading with try/except blocks:
+1. Add shared_utils to Python path in conftest.py:
+Add this to the path configuration section at the top of tests/conftest.py (after line 14):
 
 Python
-# Remove lines 299-301 entirely
+# Add src to Python path for all tests
+project_root = Path(__file__).parent.parent
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
 
-# Update fixtures to load imports on-demand:
+# Add shared_utils to Python path for contract tests
+shared_utils_path = project_root / "shared_utils"
+if shared_utils_path.exists() and str(shared_utils_path) not in sys.path:
+    sys.path.insert(0, str(shared_utils_path))
+2. Set DATABASE_URL environment variable in CI workflow:
+Update .github/workflows/ci.yml (or release-gates.yml if contract tests run there) to set the required environment variable:
 
-@pytest.fixture
-def mock_product_repo():
-    """Mock product repository for testing."""
-    repo = Mock()
-    repo.save = Mock()
-    repo.get = Mock()
-    repo.get_all = Mock()
-    repo.get_price = Mock()
-    repo.delete = Mock()
-    return repo
+YAML
+jobs:
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "sqlite:///test.db"  # Add this line
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+      - name: Contract tests
+        if: github.event.inputs.skip_tests != 'true'
+        env:
+          TEST_DATABASE_URL: "sqlite:///test.db"  # Add this as well for consistency
+        run: uv run --group dev pytest -q tests/contract
+3. Alternative: Make settings validation optional in contract tests
+If contract tests shouldn't require database configuration, update the Settings class to make database_url optional during testing:
 
+Python
+# In app/shared/core/settings.py or equivalent
+from pydantic_settings import BaseSettings
+import os
 
-@pytest.fixture
-def mock_inventory_repo():
-    """Mock inventory repository for testing."""
-    repo = Mock()
-    repo.save = Mock()
-    repo.get = Mock()
-    repo.get_all = Mock()
-    repo.update_quantity = Mock()
-    return repo
+class Settings(BaseSettings):
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///test.db")  # Provide default instead of requiring it
+    # ... rest of settings
+Recommended Approach:
 
+Implement both solutions 1 and 2:
 
-@pytest.fixture
-def sample_product():
-    """Sample product entity for testing."""
-    try:
-        from app.modules.products.domain.entities.product import Product
-    except ImportError:
-        pytest.skip("Product module not available")
-    
-    return Product(
-        id=1,
-        name="Test Product",
-        description="Test Description",
-        price=99.99,
-        sku="TEST-001",
-        stock_quantity=100
-    )
+Solution 1 ensures shared_utils is discovered during test collection
+Solution 2 ensures the Settings class has required environment variables during CI runs
+This will resolve all collection errors and allow the contract tests to proceed.
 
+Solution for Failing Job 78775833408
+Root Causes:
 
-@pytest.fixture
-def product_authorizer():
-    """ProductAuthorizer fixture for testing."""
-    try:
-        from app.api.authorization.product_authorizers import ProductAuthorizer
-        return ProductAuthorizer()
-    except ImportError:
-        return None
-Key Changes:
+This job fails with identical issues to job 78775833437. The contract tests fail during collection with two distinct problems:
 
-Delete unconditional imports at module level (lines 299-301)
-Remove spec=IProductRepo and spec=IInventoryRepo parameters from Mock objects since those interfaces won't be imported
-Move domain entity imports into fixtures using try/except/pytest.skip pattern
-Imports now happen lazily when fixtures are requested, giving pytest time to initialize the path correctly
-This resolves both job failures (78774881856 and 78774881860) since they're caused by the same conftest.py issue.
+Missing shared_utils module - Multiple test files import from shared_utils which is not on the Python path:
+
+tests/contract/test_event_bus_contract.py:7 - from shared_utils.events import EventEnvelope, build_event
+tests/contract/test_event_contract_hardening.py:6 - from shared_utils.events import EventEnvelope, build_event
+tests/contract/test_observability_contract.py:8 - from shared_utils.observability import ...
+tests/contract/test_phase_m_event_delivery_contract.py:6 - from shared_utils.events import build_event
+Missing DATABASE_URL environment variable - test_reporting_phase_f_contract.py fails during import with:
+
+Code
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+database_url - Value error, DATABASE_URL environment variable is required
+Solution:
+
+1. Add shared_utils to Python path in tests/conftest.py:
+Update the path configuration section (after line 14) to include the shared_utils directory:
+
+Python
+# Add src to Python path for all tests
+project_root = Path(__file__).parent.parent
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+# Add shared_utils to Python path for contract tests
+shared_utils_path = project_root / "shared_utils"
+if shared_utils_path.exists() and str(shared_utils_path) not in sys.path:
+    sys.path.insert(0, str(shared_utils_path))
+2. Add DATABASE_URL environment variable to .github/workflows/release-gates.yml:
+Update the quality-gates job to set the required environment variable (lines 30-45):
+
+YAML
+quality-gates:
+  name: Quality Gates
+  runs-on: ubuntu-latest
+  env:
+    DATABASE_URL: "sqlite:///test.db"  # Add this
+  steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v5
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v4
+    - name: Contract tests
+      if: github.event.inputs.skip_tests != 'true'
+      env:
+        TEST_DATABASE_URL: "sqlite:///test.db"  # Add this as well for consistency
+      run: uv run --group dev pytest -q tests/contract
+These changes will:
+
+Allow pytest to discover and import from the shared_utils module during test collection
+Provide the required DATABASE_URL environment variable so Settings can initialize without validation errors
+Enable all contract tests to proceed past the collection phase

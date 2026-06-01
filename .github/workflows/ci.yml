@@ -33,6 +33,8 @@ jobs:
   contract-tests:
     name: Contract Tests
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "sqlite:///test.db"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -42,6 +44,8 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
       - name: Run contract tests
+        env:
+          TEST_DATABASE_URL: "sqlite:///test.db"
         run: uv run --group dev pytest -q tests/contract
 
   proto-drift-check:
