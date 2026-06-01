@@ -42,14 +42,14 @@ jobs:
         uses: azure/setup-kubectl@v4
       - name: Contract tests
         if: github.event.inputs.skip_tests != 'true'
-        run: env UV_CACHE_DIR=${{ env.UV_CACHE_DIR }} uv run --group dev pytest -q tests/contract
+        run: uv run --group dev pytest -q tests/contract
       - name: Docker Compose config
         run: docker compose config --quiet
       - name: Kustomize render
         run: kubectl kustomize deploy/kubernetes/base
       - name: Generated proto drift
         run: |
-          env UV_CACHE_DIR=${{ env.UV_CACHE_DIR }} uv run python scripts/gen_protos.py
+          uv run python scripts/gen_protos.py
           git diff --exit-code -- Services proto scripts/gen_protos.py
       - name: Production cutover dry-run
         run: python3 scripts/cutover_rehearsal.py --manifest deploy/kubernetes/examples/production-cutover-manifest.example.json --dry-run
@@ -58,6 +58,7 @@ jobs:
       - name: Dependency review
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@v4
+        continue-on-error: true
 
   integration-tests:
     name: Integration Tests

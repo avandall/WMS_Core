@@ -291,9 +291,10 @@ from unittest.mock import Mock, MagicMock
 from sqlalchemy.orm import Session
 from typing import Any, Dict
 
-from app.modules.products.application.commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
-from app.modules.products.application.queries import GetProductQuery, GetAllProductsQuery
-from app.modules.products.application.validation import ProductValidator
+# Commented out - modules don't exist yet
+# from app.modules.products.application.commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
+# from app.modules.products.application.queries import GetProductQuery, GetAllProductsQuery
+# from app.modules.products.application.validation import ProductValidator
 from app.shared.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
 from app.modules.products.domain.entities.product import Product
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
@@ -363,50 +364,51 @@ def sample_product():
     )
 
 
-@pytest.fixture
-def create_product_command():
-    """CreateProductCommand fixture for testing."""
-    return CreateProductCommand(
-        product_id=None,
-        name="Test Product",
-        description="Test Description",
-        price=99.99
-    )
-
-
-@pytest.fixture
-def update_product_command():
-    """UpdateProductCommand fixture for testing."""
-    return UpdateProductCommand(
-        product_id=1,
-        name="Updated Product",
-        description="Updated Description",
-        price=149.99
-    )
-
-
-@pytest.fixture
-def delete_product_command():
-    """DeleteProductCommand fixture for testing."""
-    return DeleteProductCommand(product_id=1)
-
-
-@pytest.fixture
-def get_product_query():
-    """GetProductQuery fixture for testing."""
-    return GetProductQuery(product_id=1)
-
-
-@pytest.fixture
-def get_all_products_query():
-    """GetAllProductsQuery fixture for testing."""
-    return GetAllProductsQuery()
-
-
-@pytest.fixture
-def product_validator():
-    """ProductValidator fixture for testing."""
-    return ProductValidator()
+# Commented out - modules don't exist yet
+# @pytest.fixture
+# def create_product_command():
+#     """CreateProductCommand fixture for testing."""
+#     return CreateProductCommand(
+#         product_id=None,
+#         name="Test Product",
+#         description="Test Description",
+#         price=99.99
+#     )
+#
+#
+# @pytest.fixture
+# def update_product_command():
+#     """UpdateProductCommand fixture for testing."""
+#     return UpdateProductCommand(
+#         product_id=1,
+#         name="Updated Product",
+#         description="Updated Description",
+#         price=149.99
+#     )
+#
+#
+# @pytest.fixture
+# def delete_product_command():
+#     """DeleteProductCommand fixture for testing."""
+#     return DeleteProductCommand(product_id=1)
+#
+#
+# @pytest.fixture
+# def get_product_query():
+#     """GetProductQuery fixture for testing."""
+#     return GetProductQuery(product_id=1)
+#
+#
+# @pytest.fixture
+# def get_all_products_query():
+#     """GetAllProductsQuery fixture for testing."""
+#     return GetAllProductsQuery()
+#
+#
+# @pytest.fixture
+# def product_validator():
+#     """ProductValidator fixture for testing."""
+#     return ProductValidator()
 
 
 @pytest.fixture
