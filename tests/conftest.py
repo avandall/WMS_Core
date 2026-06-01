@@ -28,6 +28,11 @@ api_gateway_path = project_root / "Services" / "api-gateway" / "src"
 if str(api_gateway_path) not in sys.path:
     sys.path.insert(0, str(api_gateway_path))
 
+# Add Services/ai-service/src to Python path for contract tests
+ai_service_path = project_root / "Services" / "ai-service" / "src"
+if str(ai_service_path) not in sys.path:
+    sys.path.insert(0, str(ai_service_path))
+
 import pytest
 from typing import Any
 import requests

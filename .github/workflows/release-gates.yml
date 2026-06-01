@@ -77,8 +77,22 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
-      - name: Gateway contract and E2E tests
+      - name: Gateway contract and E2E smoke
         run: tests/e2e/run_gateway_stack_tests.sh
+
+  release-candidate-build-scan:
+    name: Release Candidate Build Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build release candidate images
+        run: docker compose build api-gateway identity-service customer-service product-service warehouse-service inventory-service documents-service audit-service reporting-service
+      - name: Build opt-in AI image
+        if: github.event.inputs.run_ai_image == 'true'
+        run: docker compose --profile ai build ai-service
 
   build-images:
     name: Build Docker Images

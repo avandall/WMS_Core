@@ -1,144 +1,166 @@
-Now I can see the real issue. The shared_utils module still cannot be found even after adding it to sys.path. The real problem is that shared_utils likely doesn't exist in the project structure, or it exists at a different location than expected. Let me check the project structure and the actual test files that are failing:I see the problem now. The shared_utils directory doesn't exist in the repository at all. The conftest.py path setup won't help if the directory doesn't exist. The real issue is that the test files are trying to import from a module that hasn't been created yet.
-
-Solution:
-
-You have two options:
-
-Option 1: Create the shared_utils module (Recommended if this is needed)
-Create shared_utils directory and stub modules:
-
-bash
-mkdir -p shared_utils/events
-mkdir -p shared_utils/observability
-Create shared_utils/__init__.py:
-
-Python
-"""Shared utilities for WMS Project."""
-Create shared_utils/events.py:
-
-Python
-"""Event utilities for contract tests."""
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict
-import uuid
-
-
-@dataclass
-class EventEnvelope:
-    """Event envelope with versioning and idempotency."""
-    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    schema_version: int = 1
-    source: str = ""
-    event_type: str = ""
-    payload: Dict[str, Any] = field(default_factory=dict)
-    occurred_at: datetime = field(default_factory=datetime.utcnow)
-
-    def to_json(self) -> Dict[str, Any]:
-        """Convert to JSON-serializable dict."""
-        return {
-            "event_id": self.event_id,
-            "schema_version": self.schema_version,
-            "source": self.source,
-            "event_type": self.event_type,
-            "payload": self.payload,
-            "occurred_at": self.occurred_at.isoformat(),
-        }
-
-    @classmethod
-    def from_json(cls, data: Dict[str, Any]) -> "EventEnvelope":
-        """Create from JSON data."""
-        return cls(
-            event_id=data.get("event_id", str(uuid.uuid4())),
-            schema_version=data.get("schema_version", 1),
-            source=data.get("source", ""),
-            event_type=data.get("event_type", ""),
-            payload=data.get("payload", {}),
-            occurred_at=datetime.fromisoformat(data.get("occurred_at", datetime.utcnow().isoformat())),
-        )
-
-
-def build_event(
-    source: str,
-    event_type: str,
-    payload: Dict[str, Any],
-) -> EventEnvelope:
-    """Build an event envelope."""
-    return EventEnvelope(
-        source=source,
-        event_type=event_type,
-        payload=payload,
-    )
-Create shared_utils/observability.py:
-
-Python
-"""Observability utilities for contract tests."""
-from typing import Optional, Dict, Any
-
-
-def parse_traceparent(traceparent_header: Optional[str]) -> Dict[str, Any]:
-    """Parse W3C traceparent header.
+#1 Contract Tests
+Run uv run --group dev pytest -q tests/contract
+Using CPython 3.12.13 interpreter at: /opt/hostedtoolcache/Python/3.12.13/x64/bin/python3.12
+Creating virtual environment at: .venv
+   Building wms @ file:///home/runner/work/WMS-Project/WMS-Project
+Downloading zstandard (5.3MiB)
+Downloading networkx (2.0MiB)
+Downloading sqlalchemy (3.2MiB)
+Downloading tokenizers (3.1MiB)
+Downloading nvidia-cuda-runtime (2.1MiB)
+Downloading kubernetes (1.9MiB)
+Downloading torchvision (7.2MiB)
+Downloading uvloop (4.2MiB)
+Downloading hf-xet (4.0MiB)
+Downloading nvidia-cusparse (139.2MiB)
+Downloading nvidia-cufft (204.2MiB)
+Downloading pandas (10.4MiB)
+Downloading ruff (10.9MiB)
+Downloading pillow (6.8MiB)
+Downloading pyarrow (46.6MiB)
+Downloading nvidia-nvshmem-cu13 (57.6MiB)
+Downloading grpcio-tools (2.5MiB)
+Downloading xformers (3.1MiB)
+Downloading sympy (6.0MiB)
+Downloading hf-transfer (3.4MiB)
+Downloading scikit-learn (8.5MiB)
+Downloading grpcio (6.5MiB)
+Downloading nvidia-cuda-nvrtc (86.0MiB)
+Downloading psycopg2-binary (4.1MiB)
+Downloading nvidia-cublas (403.5MiB)
+Downloading nvidia-cuda-cupti (10.2MiB)
+Downloading torchao (3.1MiB)
+Downloading torch (506.1MiB)
+Downloading nvidia-curand (56.8MiB)
+Downloading cryptography (4.3MiB)
+Downloading triton (179.5MiB)
+Downloading nvidia-nvjitlink (38.8MiB)
+        repo = InMemoryPositionRepo()
+        service = PositionService(repo)
     
-    Format: version-trace_id-parent_id-trace_flags
-    """
-    if not traceparent_header:
-        return {}
+        position = service.create_position(warehouse_id=1, code=" pick-01 ", type="picking")
     
-    parts = traceparent_header.split("-")
-    if len(parts) != 4:
-        return {}
+>       assert position.code == "PICK-01"
+               ^^^^^^^^^^^^^
+E       AttributeError: 'coroutine' object has no attribute 'code'
+
+tests/contract/test_warehouse_phase_g_contract.py:145: AttributeError
+=============================== warnings summary ===============================
+Services/reporting-service/src/app/shared/core/settings.py:48
+  /home/runner/work/WMS-Project/WMS-Project/Services/reporting-service/src/app/shared/core/settings.py:48: UserWarning: Using default secret key! Set SECRET_KEY environment variable in production.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_ai_phase_j_contract.py::test_ai_remains_opt_in_for_default_compose - KeyError: 'ai-service'
+FAILED tests/contract/test_ai_phase_j_contract.py::test_ai_query_pipeline_routes_data_questions_through_template_boundary - ModuleNotFoundError: No module named 'ai_service'
+FAILED tests/contract/test_async_analytics_contract.py::test_reporting_read_model_is_service_owned_and_idempotent - AssertionError: assert 'reporting_read_model_events' in 'services:\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_USER: ${POSTGRES_USER:-wms_user}\n ...nel --no-autoupdate --url http://api:8000\n    depends_on:\n      - api\n\nvolumes:\n  postgres_data:\n  redis_data:\n'
+FAILED tests/contract/test_compose_data_ownership.py::test_default_compose_uses_service_owned_datastore_urls - KeyError: 'api-gateway'
+FAILED tests/contract/test_compose_data_ownership.py::test_ai_profile_has_its_own_datastore_configuration - KeyError: 'ai-service'
+FAILED tests/contract/test_event_bus_contract.py::test_compose_defines_redis_stream_event_bus - KeyError: 'event-bus'
+FAILED tests/contract/test_internal_architecture_contract.py::test_application_layer_does_not_import_transport_runtime_clients - assert ["Services/id...core.redis']"] == []
+  
+  Left contains one more item: "Services/identity-service/src/app/modules/users/application/services/user_service.py imports forbidden modules: ['app.shared.core.redis']"
+  
+  Full diff:
+  - []
+  + [
+  +     'Services/identity-service/src/app/modules/users/application/services/user_service.py '
+  +     "imports forbidden modules: ['app.shared.core.redis']",
+  + ]
+FAILED tests/contract/test_internal_architecture_contract.py::test_compose_does_not_add_new_non_owned_init_tables_before_phase_b - KeyError: 'audit-service'
+FAILED tests/contract/test_monolith_retirement_contract.py::test_monolith_is_not_in_active_uv_workspace - KeyError: 'uv'
+FAILED tests/contract/test_monolith_retirement_contract.py::test_monolith_retirement_docs_define_archive_status_and_fixture_ownership - AssertionError: assert 'branch `Monolith`' in '# Warehouse Management System (WMS)\n\nA comprehensive, modern Warehouse Management System built with Python FastAPI,...unctionality\n5. Run the test suite\n6. Submit a pull request\n\n## 📝 License\n\n[Add your license information here]\n'
+FAILED tests/contract/test_observability_contract.py::test_compose_is_otlp_ready - KeyError: 'api-gateway'
+FAILED tests/contract/test_phase_l_migration_contract.py::test_runtime_table_bootstrap_is_local_only - KeyError: 'identity-service'
+FAILED tests/contract/test_phase_q_cicd_contract.py::test_release_gates_workflow_blocks_drift_and_smoke_failures - assert 'Gateway contract and E2E smoke' in 'name: Release Gates\n\non:\n  pull_request:\n    branches:\n      - main\n  push:\n    branches:\n      - main\n  wor...>> $GITHUB_STEP_SUMMARY\n          echo "- Generate SBOM: ${{ needs.generate-sbom.result }}" >> $GITHUB_STEP_SUMMARY\n'
+FAILED tests/contract/test_phase_q_cicd_contract.py::test_release_candidate_build_scan_and_ai_opt_in_are_enforced - assert 'release-candidate-build-scan' in 'name: Release Gates\n\non:\n  pull_request:\n    branches:\n      - main\n  push:\n    branches:\n      - main\n  wor...>> $GITHUB_STEP_SUMMARY\n          echo "- Generate SBOM: ${{ needs.generate-sbom.result }}" >> $GITHUB_STEP_SUMMARY\n'
+FAILED tests/contract/test_resilience_contract.py::test_compose_exposes_resilience_configuration - KeyError: 'api-gateway'
+FAILED tests/contract/test_security_contract.py::test_compose_exposes_security_configuration - KeyError: 'api-gateway'
+FAILED tests/contract/test_warehouse_phase_g_contract.py::test_position_service_models_bins_without_inventory_quantities - AttributeError: 'coroutine' object has no attribute 'code'
+17 failed, 100 passed, 1 warning in 5.06s
+Error: Process completed with exit code 1.
+
+
+#2 Quality gates
+Run uv run --group dev pytest -q tests/contract
+Using CPython 3.12.13 interpreter at: /opt/hostedtoolcache/Python/3.12.13/x64/bin/python3.12
+Creating virtual environment at: .venv
+   Building wms @ file:///home/runner/work/WMS-Project/WMS-Project
+Downloading pillow (6.8MiB)
+Downloading grpcio (6.5MiB)
+Downloading sympy (6.0MiB)
+Downloading networkx (2.0MiB)
+Downloading ruff (10.9MiB)
+Downloading uvloop (4.2MiB)
+Downloading nvidia-cuda-runtime (2.1MiB)
+Downloading kubernetes (1.9MiB)
+Downloading torchvision (7.2MiB)
+Downloading cuda-bindings (6.0MiB)
+Downloading torchao (3.1MiB)
+Downloading hf-xet (4.0MiB)
+Downloading zstandard (5.3MiB)
+Downloading pandas (10.4MiB)
+Downloading nvidia-nvshmem-cu13 (57.6MiB)
+Downloading nvidia-cudnn-cu13 (349.1MiB)
+Downloading tokenizers (3.1MiB)
+Downloading langchain-community (2.4MiB)
+Downloading nvidia-cufft (204.2MiB)
+Downloading pyarrow (46.6MiB)
+Downloading nvidia-cusparse (139.2MiB)
+Downloading faiss-cpu (22.7MiB)
+Downloading chromadb (22.1MiB)
+Downloading scipy (33.6MiB)
+Downloading mypy (14.1MiB)
+Downloading xformers (3.1MiB)
+Downloading nvidia-curand (56.8MiB)
+Downloading nvidia-cusparselt-cu13 (162.0MiB)
+Downloading hf-transfer (3.4MiB)
+Downloading nvidia-nccl-cu13 (187.4MiB)
+
+    def test_position_service_models_bins_without_inventory_quantities() -> None:
+        repo = InMemoryPositionRepo()
+        service = PositionService(repo)
     
-    return {
-        "version": parts[0],
-        "trace_id": parts[1],
-        "parent_id": parts[2],
-        "trace_flags": parts[3],
-    }
-
-
-def child_trace_context(parent_traceparent: Optional[str]) -> Dict[str, str]:
-    """Generate child trace context from parent traceparent header."""
-    if not parent_traceparent:
-        return {}
+        position = service.create_position(warehouse_id=1, code=" pick-01 ", type="picking")
     
-    parsed = parse_traceparent(parent_traceparent)
-    if not parsed:
-        return {}
-    
-    return {
-        "traceparent": parent_traceparent,  # Simplified - in real W3C trace context, parent_id changes
-    }
-Option 2: Skip contract tests (if shared_utils is not needed yet)
-Update pytest.ini to exclude contract tests during collection:
+>       assert position.code == "PICK-01"
+               ^^^^^^^^^^^^^
+E       AttributeError: 'coroutine' object has no attribute 'code'
 
-INI
-[pytest]
-testpaths = tests
-python_files = test_*.py
-python_classes = Test*
-python_functions = test_*
-addopts = --tb=short
-Or update .github/workflows/ci.yml to skip contract tests:
+tests/contract/test_warehouse_phase_g_contract.py:145: AttributeError
+=============================== warnings summary ===============================
+Services/reporting-service/src/app/shared/core/settings.py:48
+  /home/runner/work/WMS-Project/WMS-Project/Services/reporting-service/src/app/shared/core/settings.py:48: UserWarning: Using default secret key! Set SECRET_KEY environment variable in production.
+    warnings.warn(
 
-YAML
-- name: Contract tests
-  if: github.event.inputs.skip_tests != 'true'
-  run: uv run --group dev pytest -q tests/contract --co -q 2>/dev/null || echo "Contract tests skipped - shared_utils not available"
-  continue-on-error: true
-Option 3: Fix imports in contract test files (if shared_utils is internal code)
-If the tests should use relative imports or different paths, update the test files:
-
-For tests/contract/test_event_bus_contract.py line 7, change:
-
-Python
-from shared_utils.events import EventEnvelope, build_event
-To:
-
-Python
-# Try shared_utils first, then fall back to mocks if not available
-try:
-    from shared_utils.events import EventEnvelope, build_event
-except ModuleNotFoundError:
-    import pytest
-    pytest.skip("shared_utils module not available", allow_module_level=True)
-Recommended Action: Option 1 is best if these utilities are truly needed. Create the shared_utils module with the stub implementations above, and the import errors will resolve.
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_ai_phase_j_contract.py::test_ai_remains_opt_in_for_default_compose - KeyError: 'ai-service'
+FAILED tests/contract/test_ai_phase_j_contract.py::test_ai_query_pipeline_routes_data_questions_through_template_boundary - ModuleNotFoundError: No module named 'ai_service'
+FAILED tests/contract/test_async_analytics_contract.py::test_reporting_read_model_is_service_owned_and_idempotent - AssertionError: assert 'reporting_read_model_events' in 'services:\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_USER: ${POSTGRES_USER:-wms_user}\n ...nel --no-autoupdate --url http://api:8000\n    depends_on:\n      - api\n\nvolumes:\n  postgres_data:\n  redis_data:\n'
+FAILED tests/contract/test_compose_data_ownership.py::test_default_compose_uses_service_owned_datastore_urls - KeyError: 'api-gateway'
+FAILED tests/contract/test_compose_data_ownership.py::test_ai_profile_has_its_own_datastore_configuration - KeyError: 'ai-service'
+FAILED tests/contract/test_event_bus_contract.py::test_compose_defines_redis_stream_event_bus - KeyError: 'event-bus'
+FAILED tests/contract/test_internal_architecture_contract.py::test_application_layer_does_not_import_transport_runtime_clients - assert ["Services/id...core.redis']"] == []
+  
+  Left contains one more item: "Services/identity-service/src/app/modules/users/application/services/user_service.py imports forbidden modules: ['app.shared.core.redis']"
+  
+  Full diff:
+  - []
+  + [
+  +     'Services/identity-service/src/app/modules/users/application/services/user_service.py '
+  +     "imports forbidden modules: ['app.shared.core.redis']",
+  + ]
+FAILED tests/contract/test_internal_architecture_contract.py::test_compose_does_not_add_new_non_owned_init_tables_before_phase_b - KeyError: 'audit-service'
+FAILED tests/contract/test_monolith_retirement_contract.py::test_monolith_is_not_in_active_uv_workspace - KeyError: 'uv'
+FAILED tests/contract/test_monolith_retirement_contract.py::test_monolith_retirement_docs_define_archive_status_and_fixture_ownership - AssertionError: assert 'branch `Monolith`' in '# Warehouse Management System (WMS)\n\nA comprehensive, modern Warehouse Management System built with Python FastAPI,...unctionality\n5. Run the test suite\n6. Submit a pull request\n\n## 📝 License\n\n[Add your license information here]\n'
+FAILED tests/contract/test_observability_contract.py::test_compose_is_otlp_ready - KeyError: 'api-gateway'
+FAILED tests/contract/test_phase_l_migration_contract.py::test_runtime_table_bootstrap_is_local_only - KeyError: 'identity-service'
+FAILED tests/contract/test_phase_q_cicd_contract.py::test_release_gates_workflow_blocks_drift_and_smoke_failures - assert 'Gateway contract and E2E smoke' in 'name: Release Gates\n\non:\n  pull_request:\n    branches:\n      - main\n  push:\n    branches:\n      - main\n  wor...>> $GITHUB_STEP_SUMMARY\n          echo "- Generate SBOM: ${{ needs.generate-sbom.result }}" >> $GITHUB_STEP_SUMMARY\n'
+FAILED tests/contract/test_phase_q_cicd_contract.py::test_release_candidate_build_scan_and_ai_opt_in_are_enforced - assert 'release-candidate-build-scan' in 'name: Release Gates\n\non:\n  pull_request:\n    branches:\n      - main\n  push:\n    branches:\n      - main\n  wor...>> $GITHUB_STEP_SUMMARY\n          echo "- Generate SBOM: ${{ needs.generate-sbom.result }}" >> $GITHUB_STEP_SUMMARY\n'
+FAILED tests/contract/test_resilience_contract.py::test_compose_exposes_resilience_configuration - KeyError: 'api-gateway'
+FAILED tests/contract/test_security_contract.py::test_compose_exposes_security_configuration - KeyError: 'api-gateway'
+FAILED tests/contract/test_warehouse_phase_g_contract.py::test_position_service_models_bins_without_inventory_quantities - AttributeError: 'coroutine' object has no attribute 'code'
+17 failed, 100 passed, 1 warning in 3.31s
+Error: Process completed with exit code 1.

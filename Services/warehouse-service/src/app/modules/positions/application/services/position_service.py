@@ -24,7 +24,7 @@ class PositionService:
         self.position_repo.ensure_default_positions(warehouse_id)
         self._commit_if_needed()
 
-    async def create_position(
+    def create_position(
         self,
         *,
         warehouse_id: int,
@@ -41,8 +41,6 @@ class PositionService:
             code=code,
             type=type,
             description=description,
-            capacity=capacity,
-            zone=zone,
         )
         self._commit_if_needed()
         logger.info(

@@ -59,4 +59,3 @@ async def create_position(
         description=pos.description,
         is_active=pos.is_active,
     )
-

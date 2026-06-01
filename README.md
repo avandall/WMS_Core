@@ -2,6 +2,8 @@
 
 A comprehensive, modern Warehouse Management System built with Python FastAPI, Clean Architecture, and advanced AI capabilities. Features real-time inventory tracking, role-based access control, and intelligent AI-powered warehouse operations.
 
+Active development lives on branch `gRPC`. The retired monolith remains archived on branch `Monolith` and is referenced by the `phase-o-monolith-archive-exit` rollback tag.
+
 ## 🚀 Quick Start
 
 ### Development Environment (Recommended)
