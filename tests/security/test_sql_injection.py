@@ -290,7 +290,7 @@ class TestSQLInjectionPrevention:
             try:
                 result = await service.create_product(name=name, price=price)
                 # Should not crash the service and should return a result or raise validation error
-                assert result is not None or isinstance(result, Product)
+                assert result is not None
             except Exception:
                 # Should be handled gracefully with validation error
                 pass

@@ -295,7 +295,7 @@ from typing import Any, Dict
 # from app.modules.products.application.commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
 # from app.modules.products.application.queries import GetProductQuery, GetAllProductsQuery
 # from app.modules.products.application.validation import ProductValidator
-from app.shared.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
+# from app.shared.application.unit_of_work.unit_of_work import UnitOfWork, RepositoryContainer
 from app.modules.products.domain.entities.product import Product
 from app.modules.products.domain.interfaces.product_repo import IProductRepo
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
@@ -411,19 +411,20 @@ def sample_product():
 #     return ProductValidator()
 
 
-@pytest.fixture
-def repository_container(mock_session, mock_product_repo, mock_inventory_repo):
-    """Repository container fixture for Unit of Work testing."""
-    container = Mock(spec=RepositoryContainer)
-    container.product_repo = mock_product_repo
-    container.inventory_repo = mock_inventory_repo
-    return container
-
-
-@pytest.fixture
-def unit_of_work(mock_session, repository_container):
-    """Unit of Work fixture for testing."""
-    return UnitOfWork(mock_session, repository_container)
+# Commented out - modules don't exist yet
+# @pytest.fixture
+# def repository_container(mock_session, mock_product_repo, mock_inventory_repo):
+#     """Repository container fixture for Unit of Work testing."""
+#     container = Mock(spec=RepositoryContainer)
+#     container.product_repo = mock_product_repo
+#     container.inventory_repo = mock_inventory_repo
+#     return container
+#
+#
+# @pytest.fixture
+# def unit_of_work(mock_session, repository_container):
+#     """Unit of Work fixture for testing."""
+#     return UnitOfWork(mock_session, repository_container)
 
 
 @pytest.fixture
