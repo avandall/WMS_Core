@@ -42,3 +42,29 @@ Query flow:
 
 Fine-tuned local model, nếu bật, chỉ thay extractor ở bước 4. Nó không chạm vào RAG/agent path
 và không thay đổi flow knowledge prompt.
+
+Fine-tune workflow:
+
+```bash
+uv run python training/fine_tuning/train_wms.py
+```
+
+Script train dùng cùng prompt JSON template với runtime extractor, tự chuyển dataset SQL hiện tại
+thành template có `intent`, `target`, `filters`, `metrics`, `limit`, và `sql`. Artifact mặc định:
+
+- `training/fine_tuning/data/wms_data_enriched.jsonl`: dataset mặc định, đa domain WMS và có
+  paraphrase tiếng Việt/Anh.
+- `training/fine_tuning/build_enriched_dataset.py`: generator để tái tạo hoặc mở rộng dataset.
+
+- `training/fine_tuning/wms_final_adapter`: LoRA/PEFT adapter.
+- `training/fine_tuning/wms_final_model`: merged model, dùng thuận tiện nhất cho runtime.
+
+Sau khi train xong, set:
+
+```bash
+FINE_TUNED_MODEL_PATH=training/fine_tuning/wms_final_model
+FINE_TUNED_MODEL_DEVICE=cpu
+```
+
+Nếu chỉ muốn dùng adapter, trỏ `FINE_TUNED_MODEL_PATH` vào `wms_final_adapter`; runtime cũng hỗ trợ
+PEFT adapter folder có `adapter_config.json`.

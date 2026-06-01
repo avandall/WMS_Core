@@ -17,9 +17,12 @@ from ai_service.pipeline.templates import (
     FineTunedQueryTemplateExtractor,
     GroqQueryTemplateExtractor,
     HeuristicQueryTemplateExtractor,
+    QUERY_TEMPLATE_SCHEMA,
     QueryTemplate,
     QueryTemplateExtractor,
     SafeQueryTemplateExtractor,
+    build_query_template_prompt,
+    parse_query_template_content,
 )
 
 __all__ = [
@@ -34,6 +37,7 @@ __all__ = [
     "HeuristicQueryTemplateExtractor",
     "HttpBackendQueryClient",
     "JsonlReindexJobStore",
+    "QUERY_TEMPLATE_SCHEMA",
     "QueryResult",
     "QueryRouter",
     "QueryTemplate",
@@ -46,5 +50,7 @@ __all__ = [
     "SafeQueryTemplateExtractor",
     "TemplateBackendQueryClient",
     "WMSEngineProviderAdapter",
+    "build_query_template_prompt",
     "default_backend_query_client",
+    "parse_query_template_content",
 ]
