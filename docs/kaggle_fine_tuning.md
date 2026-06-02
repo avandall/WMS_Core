@@ -64,45 +64,35 @@ If the uploaded files appear directly under `/kaggle/input/<your-dataset-name>/`
 In a Kaggle notebook cell:
 
 ```bash
-pip install -U unsloth datasets trl transformers peft accelerate bitsandbytes
+bash training/fine_tuning/kaggle_bootstrap.sh
 ```
 
-If Kaggle already has compatible versions, this may be enough:
+This installs the pinned Unsloth fine-tuning stack from:
 
-```bash
-pip install -U unsloth
-```
+- `training/fine_tuning/requirements.kaggle-unsloth.txt`
+- `training/fine_tuning/constraints.kaggle-unsloth.txt`
+
+Run this before importing `torch`, `transformers`, `trl`, or `unsloth` in the notebook. If the notebook already imported any of those packages, restart the Kaggle session after the install and run the training command from a fresh kernel.
+If a failed install already pulled an incompatible Torch/CUDA stack into the session, use Kaggle's "Factory reset session" and run the bootstrap again from a clean environment.
 
 ## Train
 
 Default training command:
 
 ```bash
-python training/fine_tuning/train_wms.py \
-  --data-path training/fine_tuning/data/wms_data_enriched.jsonl \
-  --output-dir /kaggle/working/wms_checkpoints \
-  --adapter-dir /kaggle/working/wms_final_adapter \
-  --merged-model-dir /kaggle/working/wms_final_model
+bash training/fine_tuning/kaggle_train.sh
 ```
 
 If Kaggle runs out of VRAM or disk while merging the final model, train only the PEFT adapter:
 
 ```bash
-python training/fine_tuning/train_wms.py \
-  --data-path training/fine_tuning/data/wms_data_enriched.jsonl \
-  --output-dir /kaggle/working/wms_checkpoints \
-  --adapter-dir /kaggle/working/wms_final_adapter \
-  --skip-merge
+bash training/fine_tuning/kaggle_train.sh --skip-merge
 ```
 
 Useful low-resource adjustments:
 
 ```bash
-python training/fine_tuning/train_wms.py \
-  --data-path training/fine_tuning/data/wms_data_enriched.jsonl \
-  --output-dir /kaggle/working/wms_checkpoints \
-  --adapter-dir /kaggle/working/wms_final_adapter \
-  --merged-model-dir /kaggle/working/wms_final_model \
+bash training/fine_tuning/kaggle_train.sh \
   --max-steps 100 \
   --batch-size 1 \
   --gradient-accumulation-steps 8 \

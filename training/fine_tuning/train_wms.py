@@ -4,7 +4,9 @@ import argparse
 import importlib.util
 import inspect
 import json
+import os
 import re
+import site
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,10 +30,10 @@ build_query_template_prompt = _load_template_helpers()
 
 
 def main() -> None:
-    from datasets import load_dataset
-    from trl import SFTTrainer
-    from transformers import TrainingArguments
+    ensure_nvidia_library_path()
     from unsloth import FastLanguageModel
+    from datasets import load_dataset
+    from trl import SFTConfig, SFTTrainer
 
     args = parse_args()
     script_dir = Path(__file__).resolve().parent
@@ -57,43 +59,27 @@ def main() -> None:
         lora_alpha=args.lora_alpha,
         lora_dropout=0,
         bias="none",
+        use_gradient_checkpointing="unsloth",
+        random_state=args.seed,
+        max_seq_length=args.max_seq_length,
     )
 
     dataset = load_dataset("json", data_files=str(data_path), split="train")
-    dataset = dataset.map(formatting_prompts_func, batched=True)
-    split = dataset.train_test_split(test_size=args.eval_ratio, seed=args.seed)
-
-    training_args_kwargs = {
-        "per_device_train_batch_size": args.batch_size,
-        "gradient_accumulation_steps": args.gradient_accumulation_steps,
-        "warmup_steps": args.warmup_steps,
-        "max_steps": args.max_steps,
-        "learning_rate": args.learning_rate,
-        "fp16": args.fp16,
-        "logging_steps": 1,
-        "optim": "adamw_8bit",
-        "weight_decay": 0.01,
-        "output_dir": str(output_dir),
-        "save_steps": args.save_steps,
-        "save_total_limit": 2,
-        "eval_steps": args.eval_steps,
-        "report_to": "none",
-    }
-    eval_arg = (
-        "eval_strategy"
-        if "eval_strategy" in inspect.signature(TrainingArguments).parameters
-        else "evaluation_strategy"
+    dataset = dataset.map(
+        formatting_prompts_func,
+        batched=True,
+        remove_columns=dataset.column_names,
     )
-    training_args_kwargs[eval_arg] = "steps"
+    split = dataset.train_test_split(test_size=args.eval_ratio, seed=args.seed, shuffle=True)
+    sft_config = build_sft_config(SFTConfig, args=args, output_dir=output_dir)
 
-    trainer = SFTTrainer(
+    trainer = build_sft_trainer(
+        SFTTrainer,
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=split["train"],
         eval_dataset=split["test"],
-        dataset_text_field="text",
-        max_seq_length=args.max_seq_length,
-        args=TrainingArguments(**training_args_kwargs),
+        args=sft_config,
     )
 
     trainer.train()
@@ -110,6 +96,108 @@ def main() -> None:
         )
 
 
+def ensure_nvidia_library_path() -> None:
+    if os.environ.get("WMS_NVIDIA_LIB_PATH_READY"):
+        return
+
+    nvidia_lib_dirs = find_nvidia_library_dirs()
+    if not nvidia_lib_dirs:
+        os.environ["WMS_NVIDIA_LIB_PATH_READY"] = "1"
+        return
+
+    current_dirs = [path for path in os.environ.get("LD_LIBRARY_PATH", "").split(":") if path]
+    missing_dirs = [path for path in nvidia_lib_dirs if path not in current_dirs]
+    if not missing_dirs:
+        os.environ["WMS_NVIDIA_LIB_PATH_READY"] = "1"
+        return
+
+    env = os.environ.copy()
+    env["LD_LIBRARY_PATH"] = ":".join(missing_dirs + current_dirs)
+    env["WMS_NVIDIA_LIB_PATH_READY"] = "1"
+    os.execvpe(sys.executable, [sys.executable, *sys.argv], env)
+
+
+def find_nvidia_library_dirs() -> list[str]:
+    site_dirs = [Path(path) for path in site.getsitepackages()]
+    user_site = site.getusersitepackages()
+    if user_site:
+        site_dirs.append(Path(user_site))
+
+    nvidia_lib_dirs: list[str] = []
+    for site_dir in site_dirs:
+        nvidia_dir = site_dir / "nvidia"
+        if not nvidia_dir.exists():
+            continue
+        nvidia_lib_dirs.extend(str(path) for path in sorted(nvidia_dir.glob("*/lib")) if path.is_dir())
+    return nvidia_lib_dirs
+
+
+def build_sft_config(sft_config_cls: type[Any], *, args: argparse.Namespace, output_dir: Path) -> Any:
+    sft_config_kwargs = {
+        "per_device_train_batch_size": args.batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "warmup_steps": args.warmup_steps,
+        "max_steps": args.max_steps,
+        "learning_rate": args.learning_rate,
+        "fp16": args.fp16,
+        "logging_steps": 1,
+        "optim": "adamw_8bit",
+        "weight_decay": 0.01,
+        "output_dir": str(output_dir),
+        "save_strategy": "steps",
+        "save_steps": args.save_steps,
+        "save_total_limit": 2,
+        "eval_strategy": "steps",
+        "eval_steps": args.eval_steps,
+        "report_to": "none",
+        "dataset_text_field": "text",
+        "max_length": args.max_seq_length,
+    }
+    return sft_config_cls(
+        **resolve_supported_kwargs(
+            sft_config_cls,
+            sft_config_kwargs,
+            aliases={
+                "eval_strategy": "evaluation_strategy",
+                "max_length": "max_seq_length",
+            },
+        )
+    )
+
+
+def build_sft_trainer(sft_trainer_cls: type[Any], **kwargs: Any) -> Any:
+    return sft_trainer_cls(
+        **resolve_supported_kwargs(
+            sft_trainer_cls,
+            kwargs,
+            aliases={"processing_class": "tokenizer"},
+        )
+    )
+
+
+def resolve_supported_kwargs(
+    callable_obj: Any,
+    kwargs: dict[str, Any],
+    *,
+    aliases: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    signature = inspect.signature(callable_obj)
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in signature.parameters.values()):
+        return kwargs
+
+    aliases = aliases or {}
+    supported = set(signature.parameters)
+    resolved: dict[str, Any] = {}
+    for key, value in kwargs.items():
+        if key in supported:
+            resolved[key] = value
+            continue
+        alias = aliases.get(key)
+        if alias and alias in supported:
+            resolved[alias] = value
+    return resolved
+
+
 def parse_args() -> argparse.Namespace:
     script_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Fine-tune the WMS query-template extractor.")
@@ -117,7 +205,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=script_dir / "wms_checkpoints")
     parser.add_argument("--adapter-dir", type=Path, default=script_dir / "wms_final_adapter")
     parser.add_argument("--merged-model-dir", type=Path, default=script_dir / "wms_final_model")
-    parser.add_argument("--model-name", default="unsloth/Llama-3.2-1B-Instruct-bnb-4bit")
+    parser.add_argument("--model-name", default="unsloth/Qwen2.5-Coder-7B-Instruct-bnb-4bit")
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--batch-size", type=int, default=1)
