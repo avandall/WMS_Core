@@ -1,0 +1,12 @@
+{
+  "name": "wms-dashboard-e2e",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.42.0"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug"
+  }
+}

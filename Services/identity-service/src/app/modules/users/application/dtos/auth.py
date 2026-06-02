@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(min_length=6)
     role: str = Field(default="user")
     full_name: Optional[str] = None
@@ -14,7 +14,7 @@ class UserCreate(BaseModel):
 
 class UserResponse(BaseModel):
     user_id: int
-    email: EmailStr
+    email: str
     role: str
     full_name: Optional[str]
     is_active: bool
@@ -31,7 +31,7 @@ class UserResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
@@ -44,4 +44,3 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
-

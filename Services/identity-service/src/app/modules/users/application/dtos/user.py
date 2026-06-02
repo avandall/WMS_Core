@@ -3,18 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 
 class UserCreate(BaseModel):
-    email: EmailStr = Field(..., description="User email address")
+    email: str = Field(..., description="User email address")
     password: str = Field(..., min_length=8, description="User password")
     full_name: Optional[str] = Field(None, max_length=100, description="User full name")
     is_active: bool = Field(True, description="Whether the user is active")
 
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     full_name: Optional[str] = Field(None, max_length=100)
     is_active: Optional[bool] = None
 
@@ -29,7 +29,7 @@ class UserResponse(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr = Field(..., description="User email")
+    email: str = Field(..., description="User email")
     password: str = Field(..., description="User password")
 
 

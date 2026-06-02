@@ -26,7 +26,7 @@ x-api-gateway-env: &api-gateway-env
   GRPC_CLIENT_ROOT_CERT_FILE: ""
   GRPC_CLIENT_CERT_FILE: ""
   GRPC_CLIENT_KEY_FILE: ""
-  CORS_ORIGINS: http://localhost:3000,http://localhost:8000
+  CORS_ORIGINS: http://localhost:3000,http://localhost:8000,http://localhost:8080
   CORS_ALLOW_CREDENTIALS: "0"
   MAX_REQUEST_BODY_BYTES: "1048576"
   RATE_LIMIT_RPS: "10"
@@ -69,6 +69,19 @@ services:
       - audit-service
       - reporting-service
 
+  dashboard:
+    image: wms/api-gateway:dev
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8000
+      DASHBOARD_GATEWAY_TIMEOUT: "20"
+    command: ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8080"]
+    volumes:
+      - ./dashboard:/app/dashboard:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api-gateway
+
   identity-service:
     image: wms/identity-service:dev
     build:
@@ -80,6 +93,8 @@ services:
     environment:
       <<: *service-env
     command: ["identity-grpc"]
+    volumes:
+      - ./Services/identity-service/src:/app/Services/identity-service/src:ro
     depends_on:
       - otel-collector
 
@@ -196,7 +211,7 @@ services:
       - "127.0.0.1:6379:6379"
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.115.0
+    image: otel/opentelemetry-collector-contrib:0.115.1
     command: ["--config=/etc/otel/otel-collector.yaml"]
     volumes:
       - ./deploy/otel-collector.local.yaml:/etc/otel/otel-collector.yaml:ro

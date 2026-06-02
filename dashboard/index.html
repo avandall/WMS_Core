@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Operations Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <h1>WMS Operations</h1>
+            <div class="header-info">
+                <span id="connection-status" class="status-connected">● Connected</span>
+                <span id="current-time"></span>
+                <div class="user-chip" id="user-chip">
+                    <span id="user-email">Guest</span>
+                    <button class="btn-secondary" id="login-btn" onclick="openLoginModal()">Login</button>
+                    <button class="btn-secondary" id="change-password-btn" style="display:none;" onclick="openChangePasswordModal()">Change Password</button>
+                    <button class="btn-secondary" id="logout-btn" style="display:none;" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="nav">
+            <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+            <button class="nav-btn" onclick="showSection('products')">Products</button>
+            <button class="nav-btn" onclick="showSection('warehouses')">Warehouses</button>
+            <button class="nav-btn" onclick="showSection('inventory')">Inventory</button>
+            <button class="nav-btn" onclick="showSection('documents')">Documents</button>
+            <button class="nav-btn" onclick="showSection('reports')">Reports</button>
+            <button class="nav-btn" onclick="showSection('customers')">Customers</button>
+            <button class="nav-btn" onclick="showSection('users')">Users</button>
+            <button class="nav-btn" onclick="showSection('ai-assistant')">AI Assistant</button>
+            <button class="nav-btn" onclick="showSection('settings')">Settings</button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Overview Section -->
+            <section id="overview-section" class="section active">
+                <h2>Operations Overview</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Products</h3>
+                        <div class="stat-number" id="total-products">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Warehouses</h3>
+                        <div class="stat-number" id="total-warehouses">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Inventory Items</h3>
+                        <div class="stat-number" id="total-inventory">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Today's Documents</h3>
+                        <div class="stat-number" id="today-documents">0</div>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h3>Recent Activity</h3>
+                    <div id="recent-activity-list" class="activity-list">
+                        <p>Loading recent activity...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Products Section -->
+            <section id="products-section" class="section">
+                <div class="section-header">
+                    <h2>Product Management</h2>
+                    <div class="section-actions">
+                        <input type="text" id="product-search" placeholder="Search products" oninput="filterProducts()">
+                        <button class="btn-secondary" onclick="exportProductsCsv()">Export CSV</button>
+                        <label class="btn-secondary file-btn">
+                            Import CSV
+                            <input type="file" id="product-csv" accept=".csv" onchange="importProductsCsv(event)" hidden>
+                        </label>
+                        <button class="btn-primary" onclick="showCreateProductModal()">+ Add Product</button>
+                    </div>
+                </div>
+                <div id="products-list" class="data-table">
+                    <p>Loading products...</p>
+                </div>
+            </section>
+
+            <!-- Warehouses Section -->
+            <section id="warehouses-section" class="section">
+                <div class="section-header">
+                    <h2>Warehouse Management</h2>
+                    <div class="section-actions">
+                        <input type="text" id="warehouse-search" placeholder="Search warehouses" oninput="filterWarehouses()">
+                        <button class="btn-primary" onclick="showCreateWarehouseModal()">+ Add Warehouse</button>
+                    </div>
+                </div>
+                <div id="warehouses-list" class="data-table">
+                    <p>Loading warehouses...</p>
+                </div>
+            </section>
+
+            <!-- Inventory Section -->
+            <section id="inventory-section" class="section">
+                <div class="section-header">
+                    <h2>Inventory Management</h2>
+                    <div class="section-actions">
+                        <input type="text" id="inventory-search" placeholder="Search inventory" oninput="filterInventory()">
+                    </div>
+                </div>
+                <div id="inventory-list" class="data-table">
+                    <p>Loading inventory data...</p>
+                </div>
+                <div id="inventory-overview" class="inventory-grid" style="margin-top: 20px;">
+                    <p>Loading inventory summary...</p>
+                </div>
+            </section>
+
+            <!-- Documents Section -->
+            <section id="documents-section" class="section">
+                <div class="section-header">
+                    <h2>Document Management</h2>
+                    <div class="section-actions">
+                        <input type="text" id="documents-search" placeholder="Search documents" oninput="filterDocuments()">
+                        <button class="btn-primary" onclick="showCreateDocumentModal()">+ New Document</button>
+                    </div>
+                </div>
+                <div id="documents-list" class="data-table">
+                    <p>Loading documents...</p>
+                </div>
+            </section>
+
+            <!-- Reports Section -->
+            <section id="reports-section" class="section">
+                <h2>Reports & Analytics</h2>
+                <div class="reports-grid">
+                    <div class="report-card" onclick="openInventoryReportModal()">
+                        <h3>Inventory Report</h3>
+                        <p>Current stock levels across all warehouses</p>
+                    </div>
+                    <div class="report-card" onclick="openProductReportModal()">
+                        <h3>Product Report</h3>
+                        <p>Product catalog and pricing information</p>
+                    </div>
+                    <div class="report-card" onclick="openDocumentReportModal()">
+                        <h3>Transaction Report</h3>
+                        <p>Import, export, and transfer history</p>
+                    </div>
+                    <div class="report-card" onclick="openWarehouseReportModal()">
+                        <h3>Warehouse Report</h3>
+                        <p>Warehouse utilization and performance</p>
+                    </div>
+                    <div class="report-card" onclick="openCustomerSalesReportModal()">
+                        <h3>Customer Sales Report</h3>
+                        <p>Sales by customer with debt tracking</p>
+                    </div>
+                </div>
+                <div id="report-results" class="report-results">
+                    <p>Select a report to generate</p>
+                </div>
+            </section>
+
+            <!-- Users Section -->
+            <section id="users-section" class="section">
+                <div class="section-header">
+                    <h2>User Management</h2>
+                    <div class="section-actions">
+                        <input type="text" id="users-search" placeholder="Search users" oninput="filterUsers()">
+                        <button class="btn-primary" onclick="openUserModal()">+ Add User</button>
+                    </div>
+                </div>
+                <div id="users-list" class="data-table">
+                    <p>Loading users...</p>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <button class="btn-secondary" id="manage-permissions-btn" onclick="openManageUserModal()">Manage Roles & Permissions</button>
+                </div>
+            </section>
+
+            <!-- Customers Section -->
+            <section id="customers-section" class="section">
+                <div class="section-header">
+                    <h2>Customers</h2>
+                    <div class="section-actions">
+                        <input type="text" id="customer-search" placeholder="Search customers" oninput="filterCustomers()">
+                        <button class="btn-secondary" onclick="openCustomerModal()">+ Add Customer</button>
+                    </div>
+                </div>
+                <div id="customers-list" class="data-table">
+                    <p>Loading customers...</p>
+                </div>
+                <div id="customer-detail" class="data-table" style="margin-top:16px; display:none;"></div>
+            </section>
+
+            <!-- AI Assistant Section -->
+            <section id="ai-assistant-section" class="section">
+                <div class="section-header">
+                    <h2>AI Assistant</h2>
+                    <div class="section-actions">
+                        <select id="ai-mode-select" class="form-input" style="width:150px;">
+                            <option value="hybrid">Hybrid Mode</option>
+                            <option value="rag">RAG Mode</option>
+                            <option value="agent">Agent Mode</option>
+                        </select>
+                        <button class="btn-primary" onclick="loadAISampleData()">Load Sample Data</button>
+                    </div>
+                </div>
+                
+                <div class="ai-assistant-container">
+                    <div class="ai-chat-main">
+                        <div class="ai-chat-messages" id="ai-assistant-messages">
+                            <div class="ai-welcome-message">
+                                <div class="ai-welcome-icon">AI</div>
+                                <div class="ai-welcome-text">
+                                    <h3>WMS AI Assistant</h3>
+                                    <p>Ask me about warehouse management, inventory, products, orders, or any WMS-related questions.</p>
+                                    <div class="ai-quick-questions">
+                                        <h4>Quick Questions:</h4>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('What is a Warehouse Management System?')">What is a WMS?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('How does inventory tracking work?')">How does inventory tracking work?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('What is order fulfillment process?')">Order fulfillment process?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('Check inventory for SKU12345')">Check inventory SKU12345</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-chat-input-container">
+                            <div class="ai-input-group">
+                                <input 
+                                    type="text" 
+                                    id="ai-question-input" 
+                                    placeholder="Ask about WMS, inventory, products, warehouses..."
+                                    class="ai-input"
+                                    onkeypress="handleAIKeyPress(event)"
+                                >
+                                <button 
+                                    id="ai-send-btn" 
+                                    class="btn-primary ai-send-btn"
+                                    onclick="sendAIQuestion()"
+                                    disabled
+                                >
+                                    Send
+                                </button>
+                            </div>
+                            <div class="ai-input-actions">
+                                <button class="btn-secondary" onclick="showAIDocumentUpload()">Upload Document</button>
+                                <button class="btn-secondary" onclick="clearAIChat()">Clear Chat</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="ai-sidebar">
+                        <div class="ai-info-card">
+                            <h4>Engine Status</h4>
+                            <div class="ai-status-item">
+                                <span>Mode:</span>
+                                <span id="ai-current-mode" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>LLM:</span>
+                                <span id="ai-current-llm" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>Documents:</span>
+                                <span id="ai-doc-count" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>Status:</span>
+                                <span id="ai-engine-status" class="ai-status-value ai-status-online">Online</span>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-info-card">
+                            <h4>Processing Info</h4>
+                            <div class="ai-stats">
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Total Queries:</span>
+                                    <span id="ai-total-queries" class="ai-stat-value">0</span>
+                                </div>
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Avg Response Time:</span>
+                                    <span id="ai-avg-time" class="ai-stat-value">0.0s</span>
+                                </div>
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Success Rate:</span>
+                                    <span id="ai-success-rate" class="ai-stat-value">100%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings-section" class="section">
+                <div class="section-header">
+                    <h2>Settings</h2>
+                    <div class="section-actions">
+                        <label class="toggle">
+                            <input type="checkbox" id="realtime-toggle" onchange="toggleRealtime(this.checked)">
+                            <span>Real-time updates</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-grid">
+                    <div class="setting-card">
+                        <h3>API Endpoint</h3>
+                        <input type="text" id="api-base-input" value="" onchange="updateApiBase(this.value)">
+                    </div>
+                    <div class="setting-card">
+                        <h3>Export Data</h3>
+                        <button class="btn-secondary" onclick="exportInventoryCsv()">Export Inventory CSV</button>
+                        <button class="btn-secondary" onclick="exportDocumentsCsv()">Export Documents CSV</button>
+                    </div>
+                    <div class="setting-card">
+                        <h3>Status</h3>
+                        <div id="settings-status">Ready</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Persistent AI Chat Box -->
+    <div id="persistent-ai-chat" class="persistent-ai-chat">
+        <div class="ai-chat-header">
+            <span>AI Assistant</span>
+            <div class="ai-chat-controls">
+                <button id="ai-minimize-btn" onclick="toggleAiChat()" title="Minimize">−</button>
+                <button id="ai-close-btn" onclick="closeAiChat()" title="Close">×</button>
+            </div>
+        </div>
+        <div class="ai-chat-messages" id="ai-chat-messages">
+            <div class="ai-msg ai-msg--system">
+                AI Assistant ready. Ask about products, inventory, warehouses, or customers.
+            </div>
+        </div>
+        <div class="ai-chat-input">
+            <textarea id="persistent-ai-message" placeholder="Ask about warehouse data..." rows="2"></textarea>
+            <button id="persistent-ai-send" onclick="sendPersistentAiMessage()">Send</button>
+        </div>
+        <div class="ai-chat-status" id="ai-chat-status">Ready</div>
+    </div>
+
+    <!-- Modals -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('product-modal')">&times;</span>
+            <h2>Create New Product</h2>
+            <form id="product-form">
+                <div class="form-group">
+                    <label for="product-name">Product Name:</label>
+                    <input type="text" id="product-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="product-description">Description:</label>
+                    <textarea id="product-description"></textarea>
+                </div>
+                <button type="submit" class="btn-primary">Create Product</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="warehouse-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('warehouse-modal')">&times;</span>
+            <h2>Create New Warehouse</h2>
+            <form id="warehouse-form">
+                <div class="form-group">
+                    <label for="warehouse-location">Name:</label>
+                    <input type="text" id="warehouse-location" required>
+                </div>
+                <button type="submit" class="btn-primary">Create Warehouse</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="document-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close" onclick="closeModal('document-modal')">&times;</span>
+            <h2>Create New Document</h2>
+            <form id="document-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="doc-type">Document Type:</label>
+                        <select id="doc-type" required onchange="updateDocumentForm()">
+                            <option value="import">Import</option>
+                            <option value="export">Export</option>
+                            <option value="transfer">Transfer</option>
+                            <option value="sale">Sale</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="customer-group" style="display:none;">
+                        <label for="sale-customer">Customer (optional for Sale)</label>
+                        <select id="sale-customer">
+                            <option value="">No Customer</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="source-warehouse-group" style="display: none;">
+                        <label for="source-warehouse">Source Warehouse:</label>
+                        <select id="source-warehouse"></select>
+                    </div>
+                    <div class="form-group" id="dest-warehouse-group">
+                        <label for="dest-warehouse">Destination Warehouse:</label>
+                        <select id="dest-warehouse"></select>
+                    </div>
+                </div>
+                <div id="document-items">
+                    <h3>Items</h3>
+                    <div class="item-row">
+                        <select class="product-select" required>
+                            <option value="">Select Product</option>
+                        </select>
+                        <input type="number" class="quantity-input" placeholder="Quantity" min="1" required>
+                        <input type="number" class="price-input" placeholder="Unit Price" step="0.01">
+                        <button type="button" class="btn-secondary" onclick="removeItem(this)">Remove</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-secondary" onclick="addItem()">+ Add Item</button>
+                <br><br>
+                <button type="submit" class="btn-primary">Create Document</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Product Modal -->
+    <div id="edit-product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit-product-modal')">&times;</span>
+            <h2>Edit Product</h2>
+            <form id="edit-product-form">
+                <div class="form-group">
+                    <label for="edit-product-name">Product Name:</label>
+                    <input type="text" id="edit-product-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-product-price">Price:</label>
+                    <input type="number" id="edit-product-price" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-product-description">Description:</label>
+                    <textarea id="edit-product-description"></textarea>
+                </div>
+                <button type="submit" class="btn-primary">Update Product</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Warehouse Modal -->
+    <div id="edit-warehouse-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit-warehouse-modal')">&times;</span>
+            <h2>Edit Warehouse</h2>
+            <form id="edit-warehouse-form">
+                <div class="form-group">
+                    <label for="edit-warehouse-location">Name:</label>
+                    <input type="text" id="edit-warehouse-location" required>
+                </div>
+                <button type="submit" class="btn-primary">Update Warehouse</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Warehouse Inventory Modal -->
+    <div id="warehouse-inventory-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close" onclick="closeModal('warehouse-inventory-modal')">&times;</span>
+            <h2>Warehouse Inventory</h2>
+            <div id="warehouse-inventory-content">
+                <p>Loading warehouse inventory...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Document Modal -->
+    <div id="view-document-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close" onclick="closeModal('view-document-modal')">&times;</span>
+            <h2>Document Details</h2>
+            <div id="document-details-content">
+                <p>Loading document details...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirmation-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('delete-confirmation-modal')">&times;</span>
+            <h2>Confirm Delete</h2>
+            <p id="delete-confirmation-message">Are you sure you want to delete this item?</p>
+            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn-secondary" onclick="closeModal('delete-confirmation-modal')">Cancel</button>
+                <button class="btn-primary" id="confirm-delete-btn" style="background: #dc3545;" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('login-modal')">&times;</span>
+            <h2>Login</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('user-modal')">&times;</span>
+            <h2>Create User</h2>
+            <form id="user-form">
+                <div class="form-group">
+                    <label for="create-user-email">Email</label>
+                    <input type="email" id="create-user-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="create-user-password">Password</label>
+                    <input type="password" id="create-user-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="create-user-role">Role</label>
+                    <select id="create-user-role">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">Create</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customer-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('customer-modal')">&times;</span>
+            <h2>Create Customer</h2>
+            <form id="customer-form">
+                <div class="form-group">
+                    <label for="customer-name">Name</label>
+                    <input type="text" id="customer-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="customer-email">Email</label>
+                    <input type="email" id="customer-email">
+                </div>
+                <div class="form-group">
+                    <label for="customer-phone">Phone</label>
+                    <input type="text" id="customer-phone">
+                </div>
+                <div class="form-group">
+                    <label for="customer-address">Address</label>
+                    <input type="text" id="customer-address">
+                </div>
+                <button type="submit" class="btn-primary">Create Customer</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer Detail Modal -->
+    <div id="customer-detail-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close" onclick="closeModal('customer-detail-modal')">&times;</span>
+            <h2>Customer Detail</h2>
+            <div id="customer-detail-content"><p>Loading...</p></div>
+        </div>
+    </div>
+
+    <!-- Edit Customer Modal -->
+    <div id="edit-customer-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit-customer-modal')">&times;</span>
+            <h2>Edit Customer</h2>
+            <form id="edit-customer-form">
+                <input type="hidden" id="edit-customer-id">
+                <div class="form-group">
+                    <label for="edit-customer-name">Name</label>
+                    <input type="text" id="edit-customer-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-customer-email">Email</label>
+                    <input type="email" id="edit-customer-email">
+                </div>
+                <div class="form-group">
+                    <label for="edit-customer-phone">Phone</label>
+                    <input type="text" id="edit-customer-phone">
+                </div>
+                <div class="form-group">
+                    <label for="edit-customer-address">Address</label>
+                    <input type="text" id="edit-customer-address">
+                </div>
+                <button type="submit" class="btn-primary">Save Customer</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="change-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('change-password-modal')">&times;</span>
+            <h2>Change Password</h2>
+            <form id="change-password-form">
+                <div class="form-group">
+                    <label for="current-password">Current Password</label>
+                    <input type="password" id="current-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password</label>
+                    <input type="password" id="new-password" minlength="6" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm New Password</label>
+                    <input type="password" id="confirm-password" minlength="6" required>
+                </div>
+                <button type="submit" class="btn-primary">Change Password</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Inventory Report Modal -->
+    <div id="inventory-report-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('inventory-report-modal')">&times;</span>
+            <h2>Inventory Report</h2>
+            <form id="inventory-report-form">
+                <div class="form-group">
+                    <label for="inventory-warehouse-filter">Warehouse (Optional)</label>
+                    <select id="inventory-warehouse-filter">
+                        <option value="">All Warehouses</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="inventory-product-filter">Product (Optional)</label>
+                    <select id="inventory-product-filter">
+                        <option value="">All Products</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="inventory-date-from">Date From</label>
+                    <input type="date" id="inventory-date-from">
+                </div>
+                <div class="form-group">
+                    <label for="inventory-date-to">Date To</label>
+                    <input type="date" id="inventory-date-to">
+                </div>
+                <button type="button" class="btn-primary" onclick="generateInventoryReport()">Generate Report</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Product Report Modal -->
+    <div id="product-report-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('product-report-modal')">&times;</span>
+            <h2>Product Report</h2>
+            <form id="product-report-form">
+                <div class="form-group">
+                    <label for="product-filter">Product (Optional)</label>
+                    <select id="product-filter">
+                        <option value="">All Products</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="product-date-from">Date From</label>
+                    <input type="date" id="product-date-from">
+                </div>
+                <div class="form-group">
+                    <label for="product-date-to">Date To</label>
+                    <input type="date" id="product-date-to">
+                </div>
+                <button type="button" class="btn-primary" onclick="generateProductReport()">Generate Report</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Document Report Modal -->
+    <div id="document-report-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('document-report-modal')">&times;</span>
+            <h2>Transaction Report</h2>
+            <form id="document-report-form">
+                <div class="form-group">
+                    <label for="document-type-filter">Document Type (Optional)</label>
+                    <select id="document-type-filter">
+                        <option value="">All Types</option>
+                        <option value="import">Import</option>
+                        <option value="export">Export</option>
+                        <option value="transfer">Transfer</option>
+                        <option value="sale">Sale</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="document-status-filter">Status (Optional)</label>
+                    <select id="document-status-filter">
+                        <option value="">All Status</option>
+                        <option value="DRAFT">Draft</option>
+                        <option value="POSTED">Posted</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="document-date-from">Date From</label>
+                    <input type="date" id="document-date-from">
+                </div>
+                <div class="form-group">
+                    <label for="document-date-to">Date To</label>
+                    <input type="date" id="document-date-to">
+                </div>
+                <button type="button" class="btn-primary" onclick="generateDocumentReport()">Generate Report</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer Sales Report Modal -->
+    <div id="customer-sales-report-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('customer-sales-report-modal')">&times;</span>
+            <h2>Customer Sales Report</h2>
+            <form id="customer-sales-report-form">
+                <div class="form-group">
+                    <label for="sales-customer-filter">Customer (Optional)</label>
+                    <select id="sales-customer-filter">
+                        <option value="">All Customers</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="sales-salesperson-filter">Salesperson (Optional)</label>
+                    <select id="sales-salesperson-filter">
+                        <option value="">All Salespersons</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="sales-date-from">Date From</label>
+                    <input type="date" id="sales-date-from">
+                </div>
+                <div class="form-group">
+                    <label for="sales-date-to">Date To</label>
+                    <input type="date" id="sales-date-to">
+                </div>
+                <button type="button" class="btn-primary" onclick="generateCustomerSalesReport()">Generate Report</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Warehouse Report Modal -->
+    <div id="warehouse-report-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('warehouse-report-modal')">&times;</span>
+            <h2>Warehouse Report</h2>
+            <form id="warehouse-report-form">
+                <div class="form-group">
+                    <label for="warehouse-filter">Warehouse (Optional)</label>
+                    <select id="warehouse-filter">
+                        <option value="">All Warehouses</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="warehouse-date-from">Date From</label>
+                    <input type="date" id="warehouse-date-from">
+                </div>
+                <div class="form-group">
+                    <label for="warehouse-date-to">Date To</label>
+                    <input type="date" id="warehouse-date-to">
+                </div>
+                <button type="button" class="btn-primary" onclick="generateWarehouseReport()">Generate Report</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js?v=20260128q"></script>
+</body>
+</html>

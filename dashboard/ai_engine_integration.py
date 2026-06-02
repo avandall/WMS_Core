@@ -10,7 +10,8 @@ from time import perf_counter
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 
 
 API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://localhost:8000").rstrip("/")
@@ -54,7 +55,7 @@ def _request_json(
     if headers:
         request_headers.update(headers)
     body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = Request(url, data=body, method=method, headers=request_headers)
+    request = UrlRequest(url, data=body, method=method, headers=request_headers)
 
     started = perf_counter()
     try:
@@ -425,4 +426,4 @@ if __name__ == "__main__":
 
     app = Flask(__name__)
     add_ai_routes_to_flask(app)
-    app.run(debug=True, port=8080)
+    app.run(debug=True, host="0.0.0.0", port=8080)
