@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 
 import grpc
 
@@ -32,8 +33,8 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         session_gen = get_session()
         db = next(session_gen)
         try:
-            service = UserService(UserRepo(db), session=db)
-            user = service.get_user(user_id)
+            service = UserService(UserRepo(db))
+            user = asyncio.run(service.get_user(user_id))
             return identity_pb2.ValidateTokenResponse(
                 valid=True,
                 user_id=int(user.user_id),
