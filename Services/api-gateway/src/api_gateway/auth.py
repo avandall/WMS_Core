@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from api_gateway.errors import grpc_http_exception
 from api_gateway.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
 from api_gateway.grpc_security import configured_grpc_channel
+from api_gateway.observability import json_log
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -50,6 +51,7 @@ def get_current_user(
                 timeout=5,
                 metadata=metadata or None,
             )
+            json_log(level="info", message="validate_token_called", request_id=request_id, token_len=len(token) if token else 0, resp_valid=getattr(resp, "valid", None), resp_user_id=getattr(resp, "user_id", None))
     except grpc.RpcError as exc:
         raise grpc_http_exception(exc, fallback_detail="Identity service unavailable")
     if not resp.valid:
