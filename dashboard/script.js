@@ -1141,21 +1141,23 @@ async function loadDocuments() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${documents.slice(0, 20).map(doc => `
+                    ${documents.slice(0, 20).map(doc => {
+                        const status = (doc.status || '').toString().toLowerCase();
+                        return `
                         <tr>
                             <td>${doc.document_id}</td>
                             <td>${doc.doc_type}</td>
-                            <td><span style="padding:4px 8px;border-radius:4px;background:#${doc.status.toLowerCase() === 'draft' ? 'fff3cd' : doc.status.toLowerCase() === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status}</span></td>
+                            <td><span style="padding:4px 8px;border-radius:4px;background:#${status === 'draft' ? 'fff3cd' : status === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status || 'UNKNOWN'}</span></td>
                             <td>${doc.created_by || '-'}</td>
-                            <td>${new Date(doc.date).toLocaleDateString()}</td>
+                            <td>${doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '-'}</td>
                             <td>
                                 <button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>
-                                ${doc.status.toLowerCase() === 'draft' ? `<button class="btn-primary" onclick="postDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">Approve & Post</button>` : ''}
-                                ${doc.status.toLowerCase() === 'draft' ? `<button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>` : ''}
-                                ${doc.status.toLowerCase() === 'posted' ? `<span style="color:#6c757d;font-size:0.9em">Posted</span>` : ''}
+                                ${status === 'draft' ? `<button class="btn-primary" onclick="postDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">Approve & Post</button>` : ''}
+                                ${status === 'draft' ? `<button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>` : ''}
+                                ${status === 'posted' ? `<span style="color:#6c757d;font-size:0.9em">Posted</span>` : ''}
                             </td>
                         </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
             </table>
         `;
@@ -3444,12 +3446,13 @@ async function loadDocumentDetails(documentId, silent = false) {
             `;
         }
 
+        const documentStatus = (document_data.status || 'UNKNOWN').toString().toLowerCase();
         const detailsHTML = `
             <div class="document-header">
                 <div>
                     <h3>Document #${document_data.document_id}</h3>
                     <p><strong>Type:</strong> ${document_data.doc_type.toUpperCase()}</p>
-                    <p><strong>Status:</strong> <span class="status-badge" style="background: ${document_data.status === 'posted' ? '#28a745' : '#ffc107'};">${document_data.status.toUpperCase()}</span></p>
+                    <p><strong>Status:</strong> <span class="status-badge" style="background: ${documentStatus === 'posted' ? '#28a745' : '#ffc107'};">${(document_data.status || 'UNKNOWN').toUpperCase()}</span></p>
                     <p><strong>Created:</strong> ${new Date(document_data.created_at).toLocaleString()}</p>
                     ${warehouseInfo}
                 </div>
@@ -3474,6 +3477,7 @@ async function loadDocumentDetails(documentId, silent = false) {
                 <p><strong>Total Items:</strong> ${items.reduce((sum, item) => sum + item.quantity, 0)}</p>
                 <p><strong>Total Value:</strong> $${totalValue.toFixed(2)}</p>
             </div>
+            ${documentStatus === 'draft' ? `<div style="margin-top: 20px;"><button class="btn-primary" onclick="postDocument(${document_data.document_id})">Approve & Post</button></div>` : ''}
         `;
 
         if (detailsDiv) detailsDiv.innerHTML = detailsHTML;

@@ -612,7 +612,13 @@ def list_documents(request: Request, doc_type: str | None = None, page: int = 1,
             idempotent=True,
         )
     return [
-        {"document_id": int(d.document_id), "doc_type": d.doc_type, "status": d.status}
+        {
+            "document_id": int(d.document_id),
+            "doc_type": d.doc_type,
+            "status": d.status,
+            "created_by": getattr(d, "created_by", None),
+            "created_at": getattr(d, "created_at", None),
+        }
         for d in resp.documents
     ]
 
