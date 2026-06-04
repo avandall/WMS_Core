@@ -42,6 +42,14 @@ def document_to_dict(document: Any) -> dict[str, Any]:
         "document_id": int(document.document_id),
         "doc_type": document.doc_type,
         "status": document.status,
+        "created_by": document.created_by,
+        "approved_by": getattr(document, "approved_by", None),
+        "note": getattr(document, "note", None),
+        "created_at": getattr(document, "created_at", None),
+        "posted_at": getattr(document, "posted_at", None),
+        "from_warehouse_id": getattr(document, "from_warehouse_id", None),
+        "to_warehouse_id": getattr(document, "to_warehouse_id", None),
+        "customer_id": getattr(document, "customer_id", None),
         "items": [
             {
                 "product_id": int(item.product_id),
