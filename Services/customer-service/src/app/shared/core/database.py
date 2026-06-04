@@ -90,6 +90,7 @@ def import_all_models():
 
     model_modules = [
         "app.modules.customers.infrastructure.models.customer",
+        "app.modules.customers.infrastructure.models.customer_purchase",
     ]
     for module in model_modules:
         try:
