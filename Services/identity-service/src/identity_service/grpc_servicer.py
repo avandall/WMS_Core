@@ -19,6 +19,17 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         if not token:
             return identity_pb2.ValidateTokenResponse(valid=False)
 
+        # Log incoming ValidateToken call for debugging
+        try:
+            import json
+            request_id = None
+            for k, v in context.invocation_metadata() or []:
+                if k.lower() == "x-request-id":
+                    request_id = v
+            print(json.dumps({"msg": "validate_token_received", "request_id": request_id, "token_len": len(token)}))
+        except Exception:
+            pass
+
         # In this codebase, decode_token validates signature/exp.
         try:
             payload = decode_token(token)

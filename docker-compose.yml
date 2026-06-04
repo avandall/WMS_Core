@@ -3,7 +3,7 @@ x-build-common: &build-common
   dockerfile: Dockerfile
 
 x-api-gateway-env: &api-gateway-env
-  SECRET_KEY: ${SECRET_KEY:-wms-local-dev-secret}
+  SECRET_KEY: replace-with-local-dev-secret
   PYTHONUNBUFFERED: "1"
   IDENTITY_GRPC_ADDR: identity-service:50051
   CUSTOMER_GRPC_ADDR: customer-service:50052
