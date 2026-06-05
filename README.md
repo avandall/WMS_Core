@@ -1,80 +1,89 @@
 # Warehouse Management System (WMS)
 
-A modern warehouse management platform built as a gRPC-first microservices system. The codebase follows Clean Architecture, Domain-Driven Design (DDD), and service-owned data boundaries. It also integrates AI capabilities, event-driven messaging, observability, and Kubernetes deployment support.
+A modern warehouse orchestration platform built as a gRPC-first Python microservices system. This repository follows Clean Architecture, Domain-Driven Design (DDD), service-owned data boundaries, event-driven messaging, and AI-enhanced warehouse intelligence.
 
-## What this repository contains
+## Repository Overview
 
-- A **microservices architecture** with a dedicated API gateway and service runtimes.
-- **Clean Architecture** boundaries separating transport, application, domain, and infrastructure.
-- **Domain-Driven Design** for service ownership, aggregates, and bounded contexts.
-- **Event-driven integration** using **Redis Streams**.
-- **Observability** with **OpenTelemetry / OTLP**.
-- **AI capabilities** via LangChain, ChromaDB, and model adapters.
-- **Kubernetes examples** in `deploy/kubernetes`.
+- **Microservices architecture** with an API gateway and dedicated service runtimes.
+- **Clean Architecture** separating transport, application, domain, and infrastructure layers.
+- **DDD** with bounded contexts, aggregates, domain services, and repository abstractions.
+- **Event-driven integration** using **Redis Streams** for async workflows.
+- **Observability** via **OpenTelemetry / OTLP**.
+- **AI capabilities** with LangChain, ChromaDB, and provider adapters.
+- **Kubernetes deployment examples** in `deploy/kubernetes`.
 
 ## Core Services
 
-- `api-gateway` — API gateway, auth, validation, and request composition
-- `identity-service` — identity, users, credentials, authorization
+- `api-gateway` — unified REST/façade, auth, validation, request composition
+- `identity-service` — identity, users, authentication, authorization
 - `customer-service` — customer domain and service-owned customer data
 - `product-service` — product catalog, SKUs, pricing, lifecycle rules
 - `warehouse-service` — warehouses, locations, bins, capacity metadata
 - `inventory-service` — inventory stock, reservations, movement ledger
-- `documents-service` — document workflows, import/export, transfers
-- `audit-service` — audit event append/read service
-- `reporting-service` — projection read models and reporting
-- `ai-service` — AI ingestion, retrieval, and generation pipelines
-- `dashboard` — browser UI for operational views
+- `documents-service` — document workflow, import/export, transfers
+- `audit-service` — append/read audit event service
+- `reporting-service` — read-model projections and analytics
+- `ai-service` — AI ingestion, retrieval, generation, and vector search
+- `dashboard` — browser-based operational UI
 
-## Architecture Overview
+## Architecture and Patterns
 
-### Principles
-- **Clean Architecture** with layered modules and explicit adapters.
-- **DDD** with service-owned aggregates, repositories, and domain services.
-- **Microservices** using gRPC for inter-service communication.
-- **Event-driven design** using Redis Streams for async flows and decoupling.
-- **Service-owned datastore** rules enforced by architecture and contract checks.
+### Design principles
+- **Clean Architecture** with explicit adapter boundaries and layered dependencies.
+- **Domain-Driven Design** with service ownership, aggregates, and rich domain logic.
+- **Microservices** with gRPC service contracts and independent deployable units.
+- **Service-owned data** ensures each service controls its own datastore and schema.
+- **Event-driven architecture** using Redis Streams for decoupled asynchronous flows.
+- **API gateway** as a composition layer for client-facing APIs.
 
-### Integration Patterns
-- `gRPC` for synchronous service APIs.
-- `Redis Streams` for async events and eventual consistency.
-- **OpenTelemetry** for distributed tracing.
-- **Service-specific `DATABASE_URL`** configuration for data separation.
+### Integration patterns
+- `gRPC` for service-to-service communication.
+- `Redis Streams` for event publishing, consumer replay, and async coordination.
+- `OpenTelemetry` for distributed tracing and observability.
+- `DATABASE_URL` per service to enforce isolated datastore connections.
 
 ## Technology Stack
 
-- **Backend**: Python, FastAPI, gRPC
-- **Data**: PostgreSQL (production), SQLite for local/test workflows
+- **Language**: Python 3.11+
+- **Web/API**: FastAPI, gRPC
+- **Database**: PostgreSQL (production), SQLite for local/test flows
 - **Messaging**: Redis Streams
 - **AI / Vector Search**: LangChain, ChromaDB, OpenAI/Groq adapters
 - **Containerization**: Docker, Docker Compose
-- **Orchestration**: Kubernetes manifests in `deploy/kubernetes`
+- **Orchestration**: Kubernetes manifests under `deploy/kubernetes`
 - **Observability**: OpenTelemetry / OTLP
-- **Testing**: pytest, contract and integration tests
+- **Testing**: pytest, contract, integration, security, and e2e tests
 - **Packaging**: `pyproject.toml`, `requirements.txt`
 
 ## Local Development
 
 ### Prerequisites
 - Docker and Docker Compose
-- Python 3.11+ for local tooling and service development
+- Python 3.11+ for local tooling
 - PostgreSQL for production-like datastore access, or SQLite for local/test execution
 
 ### Startup
 
-1. Copy service environment examples and adjust settings:
+1. Copy service environment examples and configure secrets:
    - `Services/api-gateway/.env.example`
    - `Services/identity-service/.env.example`
    - `Services/customer-service/.env.example`
-   - ...
-2. Configure service database URLs and secrets.
-3. Start the core platform:
+   - `Services/product-service/.env.example`
+   - `Services/warehouse-service/.env.example`
+   - `Services/inventory-service/.env.example`
+   - `Services/documents-service/.env.example`
+   - `Services/audit-service/.env.example`
+   - `Services/reporting-service/.env.example`
+   - `Services/ai-service/.env.example`
+
+2. Configure each service `DATABASE_URL` or service-specific database secret.
+3. Start the platform:
 
 ```bash
 docker compose up -d api-gateway event-bus otel-collector identity-service customer-service product-service warehouse-service inventory-service documents-service audit-service reporting-service
 ```
 
-4. If AI functionality is required, start the AI profile:
+4. Start AI support when required:
 
 ```bash
 docker compose up -d --profile ai ai-service
@@ -93,32 +102,24 @@ docker compose up -d --profile ai ai-service
 pytest
 ```
 
-## Key Capabilities
+## Project Layout
 
-### Domain and Architecture
-- Service boundaries defined by DDD ownership and data contracts
-- Clean separation of domain, application, and infrastructure layers
-- Repository pattern for persistence abstraction and testability
-- Event contract rules enforced through docs and contract tests
-
-### Infrastructure
-- Redis Streams as the async event backbone
-- PostgreSQL as primary relational storage
-- Kubernetes manifests for deployment and platform portability
-- OpenTelemetry tracing for distributed observability
-
-### AI and Intelligence
-- AI service for retrieval-augmented generation and custom query handling
-- Vector search using ChromaDB
-- Support for Groq, OpenAI, and local fine-tuned models
+- `Services/` — microservice packages and source code
+- `dashboard/` — UI assets and dashboard application
+- `deploy/` — Kubernetes manifests and deployment examples
+- `docs/` — architecture, governance, events, and operations documentation
+- `proto/` — Protobuf service contract definitions
+- `scripts/` — dev tooling, seeding, migrations, replay, and validation
+- `shared_utils/` — cross-service shared libraries and helpers
+- `tests/` — unit, integration, contract, security, and e2e tests
 
 ## Documentation
 
 - `docs/architecture.md` — architecture decisions and service patterns
-- `docs/data_ownership.md` — data ownership rules and service boundaries
-- `docs/events.md` — event contract and Redis Streams guidance
-- `deploy/kubernetes/README.md` — Kubernetes deployment guidance
-- `proto/` — gRPC service contract definitions
+- `docs/data_ownership.md` — service data ownership and repository boundaries
+- `docs/events.md` — event contract rules and Redis Streams guidance
+- `deploy/kubernetes/README.md` — Kubernetes deployment and config guidance
+- `proto/` — gRPC service definitions and contract sources
 
 ## Contributing
 
@@ -132,5 +133,5 @@ pytest
 ## Notes
 
 - Active development targets the gRPC microservices runtime.
-- The legacy monolith implementation is archived separately.
+- The legacy monolith is archived separately and is not part of active development.
 - Architecture guardrails prioritize service ownership, event-driven integration, and clean design.
