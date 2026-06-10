@@ -5,7 +5,11 @@ from typing import Dict, Any, Optional
 from enum import Enum
 import hashlib
 
-from app.shared.core.cache import cached
+def cached(prefix="", ttl=0):
+    """No-op cache decorator for standalone ai-engine runtime."""
+    def decorator(fn):
+        return fn
+    return decorator
 from ..workflows import AdvancedRAGWorkflow
 from ..agents import WMSAgent
 from ..retrieval import HybridRetriever, DocumentProcessor

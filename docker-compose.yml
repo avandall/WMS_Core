@@ -54,7 +54,11 @@ services:
       - Services/api-gateway/.env.example
     environment:
       <<: *api-gateway-env
+      PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
     command: ["api-gateway"]
+    volumes:
+      - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -73,10 +77,14 @@ services:
     image: wms/api-gateway:dev
     environment:
       API_GATEWAY_URL: http://api-gateway:8000
-      DASHBOARD_GATEWAY_TIMEOUT: "20"
+      DASHBOARD_GATEWAY_TIMEOUT: "65"
+      DASHBOARD_DEV_JWT_SECRET: replace-with-local-dev-secret
+      DASHBOARD_DEV_JWT_ALGORITHM: HS256
+      PYTHONPATH: /app:/app/Libraries/shared-utils/src
     command: ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8080"]
     volumes:
       - ./dashboard:/app/dashboard:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     ports:
       - "8080:8080"
     depends_on:
@@ -92,9 +100,11 @@ services:
       - Services/identity-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/identity-service/src:/app/Libraries/shared-utils/src
     command: ["identity-grpc"]
     volumes:
       - ./Services/identity-service/src:/app/Services/identity-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - otel-collector
 
@@ -108,7 +118,11 @@ services:
       - Services/customer-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/customer-service/src:/app/Libraries/shared-utils/src
     command: ["customer-grpc"]
+    volumes:
+      - ./Services/customer-service/src:/app/Services/customer-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
@@ -123,7 +137,11 @@ services:
       - Services/product-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/product-service/src:/app/Libraries/shared-utils/src
     command: ["product-grpc"]
+    volumes:
+      - ./Services/product-service/src:/app/Services/product-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
@@ -138,7 +156,11 @@ services:
       - Services/warehouse-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/warehouse-service/src:/app/Libraries/shared-utils/src
     command: ["warehouse-grpc"]
+    volumes:
+      - ./Services/warehouse-service/src:/app/Services/warehouse-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
@@ -153,7 +175,11 @@ services:
       - Services/inventory-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/inventory-service/src:/app/Libraries/shared-utils/src
     command: ["inventory-grpc"]
+    volumes:
+      - ./Services/inventory-service/src:/app/Services/inventory-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
@@ -169,7 +195,11 @@ services:
       - Services/documents-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/documents-service/src:/app/Libraries/shared-utils/src
     command: ["documents-grpc"]
+    volumes:
+      - ./Services/documents-service/src:/app/Services/documents-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
@@ -184,7 +214,11 @@ services:
       - Services/audit-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/audit-service/src:/app/Libraries/shared-utils/src
     command: ["audit-grpc"]
+    volumes:
+      - ./Services/audit-service/src:/app/Services/audit-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
@@ -199,10 +233,23 @@ services:
       - Services/reporting-service/.env.example
     environment:
       <<: *service-env
+      PYTHONPATH: /app/Services/reporting-service/src:/app/Libraries/shared-utils/src
     command: ["reporting-grpc"]
+    volumes:
+      - ./Services/reporting-service/src:/app/Services/reporting-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     depends_on:
       - event-bus
       - otel-collector
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+      - "4319:4317"
 
   event-bus:
     image: redis:7-alpine
@@ -227,7 +274,7 @@ services:
       args:
         UV_PACKAGE: ai-service
     env_file:
-      - Services/ai-service/.env.example
+      - Services/ai-service/.env
     environment:
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
@@ -249,7 +296,15 @@ services:
       AI_BACKEND_QUERY_TIMEOUT: "10"
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      PYTHONPATH: /app/Services/ai-service/src:/app/Libraries/shared-utils/src
     command: ["ai-grpc"]
+    volumes:
+      - ./Services/ai-service/src:/app/Services/ai-service/src
+      - ./Libraries/shared-utils/src/shared_utils:/app/shared_utils
+      - ai-hf-cache:/root/.cache/huggingface
     depends_on:
       - event-bus
       - otel-collector
+
+volumes:
+  ai-hf-cache:

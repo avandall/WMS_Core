@@ -31,12 +31,10 @@ class TemplateBackendQueryClient:
     """
 
     def execute(self, *, template: QueryTemplate) -> BackendQueryResponse:
+        answer = _template_to_natural_language(template)
         return BackendQueryResponse(
             success=True,
-            payload={
-                "status": "template_prepared",
-                "template": template.to_dict(),
-            },
+            payload={"answer": answer},
         )
 
 
@@ -82,4 +80,61 @@ def default_backend_query_client() -> BackendQueryClient:
 
 
 def render_backend_response(response: BackendQueryResponse) -> str:
+    if "answer" in response.payload:
+        return str(response.payload["answer"])
     return json.dumps(response.payload, ensure_ascii=False, sort_keys=True)
+
+
+def _template_to_natural_language(template: QueryTemplate) -> str:
+    """Convert a parsed query template into a human-readable response."""
+    intent = template.intent
+    target = template.target
+    q = template.raw_question.strip()
+
+    if intent == "unknown" and target == "unknown":
+        return (
+            "I'm a WMS data assistant. I can help you look up inventory levels, "
+            "warehouse stock, products, documents, customers, and sales reports. "
+            "Try asking something like: 'How many units of product X are in warehouse Y?' "
+            "or 'Show me all sale documents this month'."
+        )
+
+    filters_desc = ""
+    if template.filters:
+        parts = [f"{k}={v}" for k, v in template.filters.items()]
+        filters_desc = " with filters: " + ", ".join(parts)
+
+    metrics_desc = ""
+    if template.metrics:
+        metrics_desc = " — looking for: " + ", ".join(template.metrics)
+
+    target_labels = {
+        "inventory": "inventory",
+        "orders": "orders",
+        "reporting": "reports",
+        "warehouses": "warehouses",
+        "documents": "documents",
+        "products": "products",
+        "customers": "customers",
+        "positions": "stock positions",
+    }
+    target_label = target_labels.get(target, target)
+
+    intent_labels = {
+        "inventory_lookup": "Inventory lookup",
+        "order_status": "Order status",
+        "report_lookup": "Report",
+        "warehouse_lookup": "Warehouse lookup",
+        "document_lookup": "Document lookup",
+        "product_lookup": "Product lookup",
+        "customer_lookup": "Customer lookup",
+    }
+    intent_label = intent_labels.get(intent, intent.replace("_", " ").capitalize())
+
+    limit_desc = f" (top {template.limit})" if template.limit else ""
+
+    return (
+        f"{intent_label} for {target_label}{filters_desc}{metrics_desc}{limit_desc}. "
+        f"To get live data, please configure AI_BACKEND_QUERY_URL in the ai-service "
+        f"environment pointing to the API gateway (e.g. http://api-gateway:8000/api/v1/ai/backend-query)."
+    )

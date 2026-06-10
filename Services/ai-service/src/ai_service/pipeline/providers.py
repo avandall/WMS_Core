@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -29,10 +30,11 @@ class WMSEngineProviderAdapter:
         from ai_service.pipeline.generation import QueryResult
 
         selected_mode = mode if mode in {"rag", "agent", "hybrid"} else "rag"
-        result = self._get_engine().process_query(
+        coro = self._get_engine().process_query(
             question,
             mode=ProcessingMode(selected_mode),
         )
+        result = asyncio.run(coro) if asyncio.iscoroutine(coro) else coro
         return QueryResult(
             success=bool(result.get("success", False)),
             mode=str(result.get("mode", selected_mode)),

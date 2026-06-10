@@ -7,6 +7,9 @@ option java_package = "com.wms.identity.v1";
 
 service IdentityService {
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
 }
 
 message ValidateTokenRequest {
@@ -20,5 +23,41 @@ message ValidateTokenResponse {
   string full_name = 4;
   string role = 5;
   bool is_active = 6;
+}
+
+message DeleteUserRequest {
+  int64 user_id = 1;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string password = 2;
+  string role = 3;
+  string full_name = 4;
+}
+
+message CreateUserResponse {
+  bool success = 1;
+  string message = 2;
+  int64 user_id = 3;
+}
+
+message ListUsersRequest {}
+
+message UserEntry {
+  int64 user_id = 1;
+  string email = 2;
+  string role = 3;
+  string full_name = 4;
+  bool is_active = 5;
+}
+
+message ListUsersResponse {
+  repeated UserEntry users = 1;
 }
 

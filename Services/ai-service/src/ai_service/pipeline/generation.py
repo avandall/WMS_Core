@@ -45,6 +45,9 @@ class AIQueryPipeline:
         decision = self.router.route(question=question, requested_mode=mode)
         if decision.route == "data_query":
             template = self.template_extractor.extract(question=question)
+            # Unknown intent with no filters = conversational question, answer with Groq directly
+            if template.intent == "unknown" and not template.filters:
+                return self._groq_chat(question)
             backend_response = self.backend_query.execute(template=template)
             return QueryResult(
                 success=backend_response.success,
@@ -55,6 +58,24 @@ class AIQueryPipeline:
 
         context = self.retrieval.build_context(question=question, mode="rag")
         return self.provider.generate(question=context.query, mode=context.mode)
+
+    def _groq_chat(self, question: str) -> QueryResult:
+        try:
+            from ai_engine.config import settings
+            from langchain_groq import ChatGroq
+            from langchain_core.messages import HumanMessage, SystemMessage
+            llm = ChatGroq(model=settings.LLM_MODEL, temperature=0.7)
+            response = llm.invoke([
+                SystemMessage(content=(
+                    "You are a helpful WMS (Warehouse Management System) assistant. "
+                    "You help users with questions about inventory, products, warehouses, "
+                    "documents, customers, and sales. Be concise and helpful."
+                )),
+                HumanMessage(content=question),
+            ])
+            return QueryResult(success=True, mode="chat", response=str(response.content))
+        except Exception as exc:
+            return QueryResult(success=False, mode="chat", response="", error=str(exc))
 
     def status(self) -> dict[str, object]:
         status = self.provider.status()

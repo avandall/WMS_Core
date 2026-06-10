@@ -17,6 +17,10 @@ class AIServiceServicer(ai_pb2_grpc.AIServiceServicer):
             cls._pipeline = AIQueryPipeline(provider=WMSEngineProviderAdapter())
         return cls._pipeline
 
+    @classmethod
+    def reset_pipeline(cls) -> None:
+        cls._pipeline = None
+
     def Query(self, request: ai_pb2.QueryRequest, context: grpc.ServicerContext):
         # Read request id for observability (future structured logs)
         for k, v in context.invocation_metadata() or []:

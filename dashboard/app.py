@@ -23,6 +23,7 @@ add_ai_routes_to_fastapi(app)
 
 BASE_DIR = Path(__file__).resolve().parent
 API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://localhost:8000").rstrip("/")
+GATEWAY_TIMEOUT = int(os.getenv("DASHBOARD_GATEWAY_TIMEOUT", "65"))
 DEV_JWT_SECRET = os.getenv("DASHBOARD_DEV_JWT_SECRET", "replace-with-local-dev-secret")
 DEV_JWT_ALGORITHM = os.getenv("DASHBOARD_DEV_JWT_ALGORITHM", "HS256")
 
@@ -107,39 +108,54 @@ async def refresh(request: Request) -> JSONResponse:
 
 
 @app.get("/api/users/me")
-async def current_user(request: Request) -> JSONResponse:
+async def current_user_me(request: Request) -> JSONResponse:
     user = _current_dev_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
     return JSONResponse(content=user)
 
 
-@app.get("/api/users")
-async def list_users() -> JSONResponse:
-    users = [_public_user(email, user) for email, user in DEV_USERS.items()]
-    return JSONResponse(content=users)
-
-
-@app.post("/api/users")
-async def create_user_stub() -> JSONResponse:
-    return JSONResponse(status_code=501, content={"detail": "User creation is not exposed by the gRPC gateway yet."})
-
-
 @app.get("/api/users/permissions")
 async def user_permissions() -> JSONResponse:
     return JSONResponse(
         content={
-            "admin": ["*"],
-            "warehouse": ["view_products", "view_warehouses", "view_inventory", "manage_documents"],
-            "sales": ["view_products", "view_customers", "manage_customers", "manage_documents"],
-            "accountant": ["view_reports", "view_customers", "view_documents"],
+            "roles": {
+                "admin": ["*"],
+                "warehouse": ["view_products", "view_warehouses", "view_inventory", "manage_documents"],
+                "sales": ["view_products", "view_customers", "manage_customers", "manage_documents"],
+                "accountant": ["view_reports", "view_customers", "view_documents"],
+            },
+            "permissions": [
+                "view_products", "manage_products",
+                "view_warehouses", "manage_warehouses",
+                "view_inventory",
+                "view_documents", "manage_documents",
+                "doc_create_import", "doc_create_export", "doc_create_transfer", "doc_post",
+                "view_customers", "manage_customers",
+                "view_reports",
+                "manage_users",
+            ],
         }
     )
 
 
-@app.api_route("/api/users/{_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def user_management_stub(_path: str) -> JSONResponse:
-    return JSONResponse(status_code=501, content={"detail": "User management is not exposed by the gRPC gateway yet."})
+@app.post("/api/users/me/change-password")
+async def change_password(request: Request) -> JSONResponse:
+    user_payload = _current_dev_user(request)
+    if not user_payload:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+
+    payload = await request.json()
+    old_password = str(payload.get("old_password", ""))
+    new_password = str(payload.get("new_password", ""))
+
+    email = user_payload["email"]
+    user = DEV_USERS.get(email)
+    if not user or user["password"] != old_password:
+        return JSONResponse(status_code=400, content={"detail": "Invalid old password"})
+
+    user["password"] = new_password
+    return JSONResponse(content={"success": True, "message": "Password changed successfully"})
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
@@ -171,7 +187,7 @@ async def _proxy_to_gateway(path: str, request: Request) -> JSONResponse:
 
     req = UrlRequest(url, data=body or None, method=method, headers=headers)
     try:
-        with urlopen(req, timeout=20) as response:
+        with urlopen(req, timeout=GATEWAY_TIMEOUT) as response:
             raw = response.read().decode("utf-8") or "{}"
             payload = _json_or_data(raw)
             if gateway_path == "/api/v1/ai/query" and isinstance(payload, dict):
@@ -241,6 +257,7 @@ def _public_user(email: str, user: dict[str, object]) -> dict[str, object]:
         "role": user["role"],
         "full_name": user["full_name"],
         "is_active": True,
+        "custom_permissions": user.get("custom_permissions", []),
     }
 
 
