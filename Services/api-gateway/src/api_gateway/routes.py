@@ -106,7 +106,41 @@ def list_customers(request: Request):
             timeout=GRPC_TIMEOUT_DEFAULT,
             idempotent=True,
         )
-    return [customer_to_dict(c) for c in resp.customers]
+    customers_list = list(resp.customers)
+    if not customers_list:
+        return []
+
+    # Fetch all purchases in parallel threads to avoid N+1 serial gRPC calls
+    import concurrent.futures
+    md = _md(request)
+
+    def fetch_purchases(customer_id: int) -> tuple[int, list]:
+        try:
+            with customer_stub() as stub2:
+                pr = stub2.ListPurchases(
+                    customer_pb2.ListPurchasesRequest(customer_id=customer_id),
+                    timeout=GRPC_TIMEOUT_FAST,
+                    metadata=md,
+                )
+            return customer_id, list(pr.purchases)
+        except Exception:
+            return customer_id, []
+
+    purchase_map: dict[int, list] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(customers_list), 10)) as executor:
+        futures = {executor.submit(fetch_purchases, int(c.customer_id)): int(c.customer_id) for c in customers_list}
+        for future in concurrent.futures.as_completed(futures):
+            cid, purchases = future.result()
+            purchase_map[cid] = purchases
+
+    results = []
+    for c in customers_list:
+        d = customer_to_dict(c)
+        purchases = purchase_map.get(int(c.customer_id), [])
+        d["purchase_count"] = len(purchases)
+        d["total_purchased"] = sum(float(p.amount) for p in purchases)
+        results.append(d)
+    return results
 
 
 @router.post(
@@ -114,6 +148,22 @@ def list_customers(request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_CUSTOMERS))],
 )
 def create_customer(payload: CustomerPayload, request: Request):
+    if not payload.name or not payload.name.strip():
+        raise HTTPException(status_code=422, detail="Customer name is required")
+    # Duplicate name and email check
+    with customer_stub() as stub:
+        existing = _grpc_call(
+            stub.ListCustomers,
+            customer_pb2.ListCustomersRequest(),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    for c in existing.customers:
+        if c.name.strip().lower() == payload.name.strip().lower():
+            raise HTTPException(status_code=409, detail=f"Customer with name '{payload.name}' already exists")
+        if payload.email and c.email and c.email.strip().lower() == payload.email.strip().lower():
+            raise HTTPException(status_code=409, detail=f"Customer with email '{payload.email}' already exists")
     with customer_stub() as stub:
         resp = _grpc_call(
             stub.CreateCustomer,
@@ -126,7 +176,10 @@ def create_customer(payload: CustomerPayload, request: Request):
             request=request,
             timeout=GRPC_TIMEOUT_DEFAULT,
         )
-    return customer_to_dict(resp)
+    d = customer_to_dict(resp)
+    d["purchase_count"] = 0
+    d["total_purchased"] = 0.0
+    return d
 
 
 @router.get(
@@ -807,23 +860,65 @@ def report_sales(
         )
     raw = parse_json(resp.json)
     items = raw.get("items", []) if isinstance(raw, dict) else []
+
+    # Fetch customer names so report shows real names instead of IDs
+    customer_map: dict[int, str] = {}
+    try:
+        with customer_stub() as cstub:
+            cresp = _grpc_call(
+                cstub.ListCustomers,
+                customer_pb2.ListCustomersRequest(),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+                idempotent=True,
+            )
+        for c in cresp.customers:
+            customer_map[int(c.customer_id)] = c.name
+    except Exception:
+        pass
+
     total_sales = sum(float(i.get("total_value", 0)) for i in items)
     unique_customers = len({i["customer_id"] for i in items if i.get("customer_id")})
-    sales = [
-        {
-            "document_id": i.get("document_id"),
+    total_debt = sum(customer_map.get(int(i["customer_id"]), "") and 0 or 0 for i in items)
+
+    # Fetch document details for salesperson info
+    doc_salesperson_map: dict[int, str] = {}
+    try:
+        with documents_stub() as dstub:
+            dresp = _grpc_call(
+                dstub.ListDocuments,
+                documents_pb2.ListDocumentsRequest(doc_type="sale", page=1, page_size=200),
+                request=request,
+                timeout=GRPC_TIMEOUT_SLOW,
+                idempotent=True,
+            )
+        for d in dresp.documents:
+            doc_salesperson_map[int(d.document_id)] = getattr(d, "created_by", "-") or "-"
+    except Exception:
+        pass
+
+    sales = []
+    for i in items:
+        cid = i.get("customer_id")
+        cname = customer_map.get(int(cid), f"Customer #{cid}") if cid else "-"
+        doc_id = i.get("document_id")
+        sp = doc_salesperson_map.get(int(doc_id), i.get("created_by", "-")) if doc_id else i.get("created_by", "-")
+        sales.append({
+            "document_id": doc_id,
             "sale_date": i.get("created_at") or i.get("updated_at"),
-            "customer_name": f"Customer #{i.get('customer_id', '?')}",
+            "customer_id": cid,
+            "customer_name": cname,
             "customer_debt": 0.0,
-            "salesperson": i.get("created_by", "-"),
+            "salesperson": sp or "-",
             "total_sale": float(i.get("total_value", 0)),
-        }
-        for i in items
-    ]
+            "total_quantity": int(i.get("total_quantity", 0)),
+            "status": i.get("status", ""),
+        })
+
     return {
         "summary": {
             "total_sales": total_sales,
-            "total_debt": 0.0,
+            "total_debt": total_debt,
             "transaction_count": len(items),
             "unique_customers": unique_customers,
             "period": {"start": start_date, "end": end_date},
@@ -833,6 +928,156 @@ def report_sales(
 
 
 # ---- AI ----
+@router.post("/ai/backend-query")
+def ai_backend_query(request: Request, payload: dict):
+    """Called by the AI service to execute structured data queries against real data."""
+    template = payload.get("template", {})
+    intent = template.get("intent", "unknown")
+    target = template.get("target", "unknown")
+    filters = template.get("filters", {})
+    limit = int(template.get("limit") or 20)
+    raw_question = template.get("raw_question", "")
+
+    def _int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_product(pid_raw, all_products):
+        """Map user-supplied product number to actual product_id.
+        If the number matches an actual ID use it; otherwise treat as 1-based index."""
+        pid = _int(pid_raw)
+        if pid is None:
+            return None, None
+        actual_ids = [p["product_id"] for p in all_products]
+        if pid in actual_ids:
+            idx = actual_ids.index(pid)
+            return pid, all_products[idx]
+        if 1 <= pid <= len(all_products):
+            p = all_products[pid - 1]
+            return p["product_id"], p
+        return pid, None
+
+    results: dict = {}
+    try:
+        is_inventory = target in ("inventory", "positions") or intent == "inventory_lookup"
+        is_customer = target == "customers" or intent == "customer_lookup"
+        is_product = target == "products" or intent == "product_lookup"
+        is_document = target == "documents" or intent == "document_lookup"
+        is_warehouse = target == "warehouses" or intent == "warehouse_lookup"
+        is_reporting = target in ("reporting", "orders")
+
+        if is_inventory:
+            # Always fetch product list first for ID resolution
+            with product_stub() as stub:
+                presp = _grpc_call(stub.ListProducts, product_pb2.ListProductsRequest(),
+                                   request=request, timeout=GRPC_TIMEOUT_DEFAULT, idempotent=True)
+            all_products = [product_to_dict(p) for p in presp.products]
+
+            with inventory_stub() as stub:
+                iresp = _grpc_call(stub.GetInventoryByWarehouse,
+                                   inventory_pb2.GetInventoryByWarehouseRequest(),
+                                   request=request, timeout=GRPC_TIMEOUT_DEFAULT, idempotent=True)
+            all_rows = [{"product_id": int(r.product_id), "warehouse_id": int(r.warehouse_id),
+                         "warehouse_name": r.warehouse_name, "quantity": int(r.quantity)}
+                        for r in iresp.rows]
+            product_by_id = {p["product_id"]: p for p in all_products}
+
+            pid_raw = filters.get("product_id") or filters.get("sku")
+            wid = _int(filters.get("warehouse_id"))
+            pid, pinfo = _resolve_product(pid_raw, all_products) if pid_raw is not None else (None, None)
+            pname = pinfo["name"] if pinfo else (f"Product {pid}" if pid else None)
+
+            if pid is not None and wid is not None:
+                rows = [r for r in all_rows if r["product_id"] == pid and r["warehouse_id"] == wid]
+                qty = rows[0]["quantity"] if rows else 0
+                wname = rows[0]["warehouse_name"] if rows else f"Warehouse {wid}"
+                answer = f"{pname} has {qty} unit(s) in {wname} (warehouse ID {wid})."
+                results = {"items": rows, "total_quantity": qty, "answer": answer}
+            elif pid is not None:
+                rows = [r for r in all_rows if r["product_id"] == pid]
+                total = sum(r["quantity"] for r in rows)
+                detail = "; ".join(f"{r['warehouse_name']}: {r['quantity']}" for r in rows) or "no stock"
+                answer = f"{pname} total stock: {total} unit(s). {detail}."
+                results = {"items": rows, "total_quantity": total, "answer": answer}
+            elif wid is not None:
+                rows = [r for r in all_rows if r["warehouse_id"] == wid]
+                total = sum(r["quantity"] for r in rows)
+                wname = rows[0]["warehouse_name"] if rows else f"Warehouse {wid}"
+                lines = "; ".join(f"{product_by_id.get(r['product_id'], {}).get('name', r['product_id'])}: {r['quantity']}" for r in rows[:10])
+                answer = f"{wname}: {len(rows)} product type(s), {total} total unit(s). {lines}."
+                results = {"items": rows[:limit], "total_quantity": total, "answer": answer}
+            else:
+                total = sum(r["quantity"] for r in all_rows)
+                answer = f"Total inventory: {total} unit(s) across {len(all_rows)} product-warehouse combination(s)."
+                results = {"items": all_rows[:limit], "total_quantity": total, "answer": answer}
+
+        elif is_customer:
+            with customer_stub() as stub:
+                resp = _grpc_call(stub.ListCustomers, customer_pb2.ListCustomersRequest(),
+                                  request=request, timeout=GRPC_TIMEOUT_DEFAULT, idempotent=True)
+            rows = [customer_to_dict(c) for c in resp.customers]
+            cid = _int(filters.get("customer_id"))
+            if cid:
+                rows = [r for r in rows if r["customer_id"] == cid]
+            rows = rows[:limit]
+            names = ", ".join(r["name"] for r in rows[:5])
+            results = {"items": rows, "count": len(rows), "answer": f"Found {len(rows)} customer(s): {names}."}
+
+        elif is_product:
+            with product_stub() as stub:
+                resp = _grpc_call(stub.ListProducts, product_pb2.ListProductsRequest(),
+                                  request=request, timeout=GRPC_TIMEOUT_DEFAULT, idempotent=True)
+            rows = [product_to_dict(p) for p in resp.products][:limit]
+            names = ", ".join(r["name"] for r in rows[:5])
+            results = {"items": rows, "count": len(rows), "answer": f"Found {len(rows)} product(s): {names}."}
+
+        elif is_document:
+            with documents_stub() as stub:
+                resp = _grpc_call(stub.ListDocuments,
+                                  documents_pb2.ListDocumentsRequest(doc_type=str(filters.get("doc_type", "")), page=1, page_size=limit),
+                                  request=request, timeout=GRPC_TIMEOUT_SLOW, idempotent=True)
+            rows = [{"document_id": int(d.document_id),
+                     "doc_type": (d.doc_type.split(".")[-1].lower() if d.doc_type and "." in d.doc_type else (d.doc_type.lower() if d.doc_type else "unknown")),
+                     "status": (d.status.split(".")[-1].lower() if d.status and "." in d.status else (d.status.lower() if d.status else "draft")),
+                     "created_by": getattr(d, "created_by", None),
+                     "created_at": getattr(d, "created_at", None)}
+                    for d in resp.documents]
+            results = {"items": rows, "count": len(rows), "answer": f"Found {len(rows)} document(s)."}
+
+        elif is_warehouse:
+            with warehouse_stub() as stub:
+                resp = _grpc_call(stub.ListWarehouses, warehouse_pb2.ListWarehousesRequest(),
+                                  request=request, timeout=GRPC_TIMEOUT_DEFAULT, idempotent=True)
+            rows = [warehouse_to_dict(w) for w in resp.warehouses][:limit]
+            names = ", ".join(r["name"] for r in rows[:5])
+            results = {"items": rows, "count": len(rows), "answer": f"Found {len(rows)} warehouse(s): {names}."}
+
+        elif is_reporting:
+            with reporting_stub() as stub:
+                resp = _grpc_call(stub.SalesReport,
+                                  reporting_pb2.SalesReportRequest(
+                                      customer_id=_int(filters.get("customer_id")) or 0,
+                                      salesperson=str(filters.get("salesperson", "")),
+                                      start_date="", end_date=""),
+                                  request=request, timeout=GRPC_TIMEOUT_SLOW, idempotent=True)
+            raw = parse_json(resp.json)
+            items = raw.get("items", []) if isinstance(raw, dict) else []
+            total = sum(float(i.get("total_value", 0)) for i in items)
+            results = {"items": items[:limit], "total_value": total,
+                       "answer": f"Sales: {len(items)} transaction(s), total ${total:.2f}."}
+
+        else:
+            # General question — return None answer so generation.py falls back to Groq chat
+            results = {"answer": None}
+
+    except Exception as exc:
+        results = {"answer": f"Data query failed: {exc}", "error": str(exc)}
+
+    return results
+
+
 @router.post("/ai/query", dependencies=[Depends(get_current_user)])
 def ai_query(payload: AIQueryPayload, request: Request):
     with ai_stub() as stub:
@@ -888,11 +1133,27 @@ def inventory_by_warehouse(request: Request):
             timeout=GRPC_TIMEOUT_SLOW,
             idempotent=True,
         )
+    # Fetch warehouse names to replace numeric-string warehouse_name values
+    warehouse_name_map: dict[int, str] = {}
+    try:
+        with warehouse_stub() as wstub:
+            wresp = _grpc_call(
+                wstub.ListWarehouses,
+                warehouse_pb2.ListWarehousesRequest(),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+                idempotent=True,
+            )
+        for w in wresp.warehouses:
+            warehouse_name_map[int(w.warehouse_id)] = w.location or str(w.warehouse_id)
+    except Exception:
+        pass
+
     return [
         {
             "product_id": int(r.product_id),
             "warehouse_id": int(r.warehouse_id),
-            "warehouse_name": r.warehouse_name,
+            "warehouse_name": warehouse_name_map.get(int(r.warehouse_id), r.warehouse_name or str(r.warehouse_id)),
             "quantity": int(r.quantity),
         }
         for r in resp.rows

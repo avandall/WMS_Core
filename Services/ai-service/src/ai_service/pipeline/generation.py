@@ -45,16 +45,15 @@ class AIQueryPipeline:
         decision = self.router.route(question=question, requested_mode=mode)
         if decision.route == "data_query":
             template = self.template_extractor.extract(question=question)
-            # Unknown intent with no filters = conversational question, answer with Groq directly
-            if template.intent == "unknown" and not template.filters:
-                return self._groq_chat(question)
             backend_response = self.backend_query.execute(template=template)
-            return QueryResult(
-                success=backend_response.success,
-                mode="data_query",
-                response=render_backend_response(backend_response),
-                error=backend_response.error,
-            )
+            if backend_response.success:
+                answer_text = backend_response.payload.get("answer")
+                # None answer means no data handler matched — use Groq chat
+                if answer_text is None:
+                    return self._groq_chat(question)
+                return QueryResult(success=True, mode="data_query", response=answer_text)
+            # Backend unreachable — fall back to Groq
+            return self._groq_chat(question)
 
         context = self.retrieval.build_context(question=question, mode="rag")
         return self.provider.generate(question=context.query, mode=context.mode)

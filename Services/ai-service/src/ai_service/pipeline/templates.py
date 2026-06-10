@@ -36,9 +36,33 @@ QUERY_TEMPLATE_SCHEMA = """{
 
 
 def build_query_template_prompt(*, question: str) -> str:
-    return f"""You are a WMS query planner.
-Return only valid JSON with this shape:
+    return f"""You are a WMS query planner. Extract structured query parameters from the user question.
+Return ONLY valid JSON with this exact shape (no explanation, no markdown):
 {QUERY_TEMPLATE_SCHEMA}
+
+Rules:
+- If the question mentions a product ID or product number, put it in filters as "product_id"
+- If the question mentions a warehouse ID or warehouse number, put it in filters as "warehouse_id"
+- If the question asks about quantity/stock/inventory, set intent="inventory_lookup" and target="inventory"
+- If the question asks about customers, set intent="customer_lookup" and target="customers"
+- If the question asks about documents/orders/sales, set intent="document_lookup" and target="documents"
+- If the question asks about products, set intent="product_lookup" and target="products"
+- If the question asks about warehouses, set intent="warehouse_lookup" and target="warehouses"
+- Always extract numeric IDs from the question into filters
+- Set limit to a reasonable number (default 20)
+
+Examples:
+Q: "how many product ID 2 in warehouse ID 2"
+A: {{"intent":"inventory_lookup","target":"inventory","filters":{{"product_id":"2","warehouse_id":"2"}},"metrics":["quantity"],"limit":1,"sql":null}}
+
+Q: "stock of product 5 across all warehouses"
+A: {{"intent":"inventory_lookup","target":"inventory","filters":{{"product_id":"5"}},"metrics":["quantity"],"limit":20,"sql":null}}
+
+Q: "list all customers"
+A: {{"intent":"customer_lookup","target":"customers","filters":{{}},"metrics":["name","debt"],"limit":20,"sql":null}}
+
+Q: "show sale documents this month"
+A: {{"intent":"document_lookup","target":"documents","filters":{{"doc_type":"sale"}},"metrics":["status","total"],"limit":20,"sql":null}}
 
 Question: {question}
 """
@@ -128,34 +152,97 @@ class HeuristicQueryTemplateExtractor:
     """Fallback extractor used when the Groq extractor cannot produce a template."""
 
     _sku_pattern = re.compile(r"\b([A-Z]{2,}-\d{2,})\b")
+    _product_id_pattern = re.compile(r"product\s+(?:id\s+|ID\s+|#\s*)?(\d+)", re.IGNORECASE)
+    _warehouse_id_pattern = re.compile(r"warehouse\s+(?:id\s+|ID\s+|#\s*)?(\d+)", re.IGNORECASE)
+    _inventory_keywords = re.compile(r"\b(how many|quantity|stock|inventory|units?|items? in)\b", re.IGNORECASE)
+    _customer_keywords = re.compile(r"\b(list (all )?customers|show (all )?customers|customer (id|name|debt|list))\b", re.IGNORECASE)
+    _product_keywords = re.compile(r"\b(list (all )?products|show (all )?products|product (id|name|price|list))\b", re.IGNORECASE)
+    _document_keywords = re.compile(r"\b(list (all )?(documents?|orders?|sales?|invoices?)|show (all )?(documents?|sale documents?))\b", re.IGNORECASE)
+    _warehouse_list_keywords = re.compile(r"\b(list (all )?warehouses?|show (all )?warehouses?|warehouse (id|name|list))\b", re.IGNORECASE)
 
     def extract(self, *, question: str) -> QueryTemplate:
-        sku = self._sku_pattern.search(question)
         filters: dict[str, Any] = {}
+
+        # Extract explicit numeric IDs first
+        product_match = self._product_id_pattern.search(question)
+        if product_match:
+            filters["product_id"] = product_match.group(1)
+
+        warehouse_match = self._warehouse_id_pattern.search(question)
+        if warehouse_match:
+            filters["warehouse_id"] = warehouse_match.group(1)
+
+        sku = self._sku_pattern.search(question)
         if sku:
             filters["sku"] = sku.group(1)
-        return QueryTemplate(
-            intent="inventory_lookup" if filters else "unknown",
-            target="inventory" if filters else "unknown",
-            filters=filters,
-            metrics=("quantity", "location") if filters else (),
-            raw_question=question,
-        )
+
+        # If any IDs were found, it's definitely an inventory lookup
+        if filters:
+            return QueryTemplate(
+                intent="inventory_lookup",
+                target="inventory",
+                filters=filters,
+                metrics=("quantity", "location"),
+                raw_question=question,
+            )
+
+        # Match broader inventory keywords only (not just "inventory" the word)
+        if self._inventory_keywords.search(question):
+            return QueryTemplate(
+                intent="inventory_lookup",
+                target="inventory",
+                filters=filters,
+                metrics=("quantity",),
+                raw_question=question,
+            )
+
+        if self._customer_keywords.search(question):
+            return QueryTemplate(intent="customer_lookup", target="customers", filters={}, metrics=("name", "debt"), raw_question=question)
+
+        if self._document_keywords.search(question):
+            return QueryTemplate(intent="document_lookup", target="documents", filters={}, metrics=("status", "total"), raw_question=question)
+
+        if self._warehouse_list_keywords.search(question):
+            return QueryTemplate(intent="warehouse_lookup", target="warehouses", filters={}, metrics=("name",), raw_question=question)
+
+        if self._product_keywords.search(question):
+            return QueryTemplate(intent="product_lookup", target="products", filters={}, metrics=("name", "price"), raw_question=question)
+
+        # Unknown — will fall through to Groq chat
+        return QueryTemplate(intent="unknown", target="unknown", filters={}, metrics=(), raw_question=question)
 
 
 class SafeQueryTemplateExtractor:
     def __init__(self, primary: QueryTemplateExtractor | None = None, fallback: QueryTemplateExtractor | None = None):
         self.primary = primary or _default_primary_extractor()
         self.fallback = fallback or HeuristicQueryTemplateExtractor()
+        self._heuristic = HeuristicQueryTemplateExtractor()
 
     def extract(self, *, question: str) -> QueryTemplate:
+        # Always run heuristic first to extract any numeric IDs from the question
+        heuristic = self._heuristic.extract(question=question)
+
         try:
             template = self.primary.extract(question=question)
-            if template.intent != "unknown" or template.filters:
-                return template
+            # If Groq returned unknown but heuristic found something useful, merge
+            if template.intent == "unknown" and heuristic.intent != "unknown":
+                return heuristic
+            # If Groq found intent but missed filters that heuristic caught, merge filters
+            merged_filters = {**heuristic.filters, **template.filters}
+            if merged_filters != template.filters:
+                return QueryTemplate(
+                    intent=template.intent,
+                    target=template.target,
+                    filters=merged_filters,
+                    metrics=template.metrics or heuristic.metrics,
+                    limit=template.limit,
+                    sql=template.sql,
+                    raw_question=question,
+                )
+            return template
         except Exception:
             pass
-        return self.fallback.extract(question=question)
+        return heuristic
 
 
 def parse_query_template_content(*, question: str, content: str) -> QueryTemplate:

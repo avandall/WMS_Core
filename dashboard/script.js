@@ -268,9 +268,9 @@ async function apiRequest(endpoint, options = {}) {
     // Get abort controller for this endpoint
     const controller = RequestManager.getController(endpoint);
     
-    // Add request timeout (70 seconds for AI, 30 seconds for others)
+    // Add request timeout (70 seconds for AI, 15 seconds for others)
     const isAiRequest = endpoint.includes('/ai/');
-    const timeoutMs = isAiRequest ? 70000 : 30000;
+    const timeoutMs = isAiRequest ? 70000 : 15000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -1009,7 +1009,15 @@ async function loadInventory() {
                         ${inventory.map(item => {
                             const product = products.find(p => p.product_id === item.product_id);
                             const wh = warehouses.find(w => w.warehouse_id === item.warehouse_id);
-                            const warehouseName = item.warehouse_name || wh?.name || wh?.location || `Warehouse ${item.warehouse_id}`;
+                            // Prefer the warehouse name from the warehouses list over the raw warehouse_name
+                            // (warehouse_name from inventory API is sometimes just the numeric ID string)
+                            const warehouseName = (wh?.name && wh.name !== String(item.warehouse_id))
+                                ? wh.name
+                                : (wh?.location && wh.location !== String(item.warehouse_id))
+                                    ? wh.location
+                                    : (item.warehouse_name && item.warehouse_name !== String(item.warehouse_id))
+                                        ? item.warehouse_name
+                                        : `Warehouse ${item.warehouse_id}`;
                             const totalValue = (product?.price || 0) * item.quantity;
                             return `
                                 <tr>
@@ -1179,122 +1187,86 @@ async function loadDocuments() {
 
 // Load users (admin only)
 async function loadUsers() {
-    const endpoint = '/api/users';
-    RequestManager.debounce(endpoint, async () => {
-        try {
-            const usersList = document.getElementById('users-list');
-            if (RequestManager.isCancelled(endpoint)) return;
-            
-            usersList.innerHTML = '<p>Loading users...</p>';
-            
-            const response = await apiRequest(endpoint);
-            if (response === null || RequestManager.isCancelled(endpoint)) return;
-            
-            if (!response || response.length === 0) {
-                usersList.innerHTML = '<p>No users found.</p>';
-                return;
-            }
-            
-            // Create table manually to avoid onclick issues
-            const table = document.createElement('table');
-            
-            // Create header
-            const thead = document.createElement('thead');
-            const headerRow = document.createElement('tr');
-            ['ID', 'Email', 'Role', 'Status', 'Actions'].forEach(header => {
-                const th = document.createElement('th');
-                th.textContent = header;
-                headerRow.appendChild(th);
-            });
-            thead.appendChild(headerRow);
+    try {
+        const usersList = document.getElementById('users-list');
+        if (!usersList) return;
 
-            // Create filter row
-            const filterRow = document.createElement('tr');
-            filterRow.className = 'filter-row';
-            const filterColumns = [
-                { label: 'Filter ID', data: 'user_id' },
-                { label: 'Filter Email', data: 'email' },
-                { label: 'Filter Role', data: 'role' },
-                { label: 'Filter Status', data: 'status' },
-                { label: '', data: '' }
-            ];
-            filterColumns.forEach(col => {
-                const th = document.createElement('th');
-                if (col.data) {
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.className = 'filter-input';
-                    input.dataset.column = col.data;
-                    input.placeholder = col.label;
-                    input.onkeyup = () => applyUserFilters();
-                    th.appendChild(input);
-                }
-                filterRow.appendChild(th);
-            });
-            thead.appendChild(filterRow);
-            table.appendChild(thead);
-            
-            // Create body
-            const tbody = document.createElement('tbody');
-            response.forEach(u => {
-                const row = document.createElement('tr');
-                
-                // ID
-                const tdId = document.createElement('td');
-                tdId.textContent = u.user_id;
-                row.appendChild(tdId);
-                
-                // Email
-                const tdEmail = document.createElement('td');
-                tdEmail.textContent = u.email;
-                row.appendChild(tdEmail);
-                
-                // Role
-                const tdRole = document.createElement('td');
-                tdRole.textContent = u.role;
-                row.appendChild(tdRole);
-                
-                // Status
-                const tdStatus = document.createElement('td');
-                tdStatus.textContent = u.is_active ? 'Active' : 'Inactive';
-                row.appendChild(tdStatus);
-                
-                // Actions
-                const tdActions = document.createElement('td');
-                
-                // Manage button
-                const manageBtn = document.createElement('button');
-                manageBtn.className = 'btn-secondary';
-                manageBtn.textContent = 'Manage';
-                manageBtn.onclick = () => openManageUserModal(u.user_id);
-                tdActions.appendChild(manageBtn);
-                
-                // Delete button
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'btn-danger';
-                deleteBtn.textContent = 'Delete';
-                deleteBtn.onclick = () => deleteUserConfirm(u.user_id, u.email);
-                tdActions.appendChild(deleteBtn);
-                
-                row.appendChild(tdActions);
-                tbody.appendChild(row);
-            });
-            table.appendChild(tbody);
-            
-            usersList.innerHTML = '';
-            usersList.appendChild(table);
-            
-        } catch (error) {
-            console.error('Failed to load users:', error);
-            if (error.isNetworkError) {
-                document.getElementById('users-list').innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
-                return;
-            }
-            // Show the actual error message from the API
-            const errorMsg = error.detail || error.message || 'Failed to load users. You may not have sufficient permissions.';
-            document.getElementById('users-list').innerHTML = `<p class="error">${errorMsg}</p>`;
+        usersList.innerHTML = '<p>Loading users...</p>';
+
+        // Always fetch fresh — bypass RequestManager debounce/cancel for mutations
+        const response = await apiRequest('/api/users');
+        if (!response) return;
+
+        if (response.length === 0) {
+            usersList.innerHTML = '<p>No users found.</p>';
+            return;
         }
-    });
+
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        ['ID', 'Email', 'Role', 'Full Name', 'Status', 'Actions'].forEach(header => {
+            const th = document.createElement('th');
+            th.textContent = header;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+
+        const filterRow = document.createElement('tr');
+        filterRow.className = 'filter-row';
+        [
+            { label: 'Filter ID', data: 'user_id' },
+            { label: 'Filter Email', data: 'email' },
+            { label: 'Filter Role', data: 'role' },
+            { label: 'Filter Name', data: 'full_name' },
+            { label: 'Filter Status', data: 'status' },
+            { label: '', data: '' }
+        ].forEach(col => {
+            const th = document.createElement('th');
+            if (col.data) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'filter-input';
+                input.dataset.column = col.data;
+                input.placeholder = col.label;
+                input.onkeyup = () => applyUserFilters();
+                th.appendChild(input);
+            }
+            filterRow.appendChild(th);
+        });
+        thead.appendChild(filterRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        response.forEach(u => {
+            const row = document.createElement('tr');
+            [u.user_id, u.email, u.role, u.full_name || '-', u.is_active ? 'Active' : 'Inactive'].forEach(val => {
+                const td = document.createElement('td');
+                td.textContent = val;
+                row.appendChild(td);
+            });
+            const tdActions = document.createElement('td');
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn-danger';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.onclick = () => deleteUserConfirm(u.user_id, u.email);
+            tdActions.appendChild(deleteBtn);
+            row.appendChild(tdActions);
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+
+        usersList.innerHTML = '';
+        usersList.appendChild(table);
+
+    } catch (error) {
+        console.error('Failed to load users:', error);
+        const usersList = document.getElementById('users-list');
+        if (usersList) {
+            const errorMsg = error.detail || error.message || 'Failed to load users. You may not have sufficient permissions.';
+            usersList.innerHTML = `<p class="error">${errorMsg}</p>`;
+        }
+    }
 }
 
 // Load customers
@@ -1387,10 +1359,9 @@ async function handleCreateProduct(event) {
     event.preventDefault();
 
     const submitButton = event.target.querySelector('button[type="submit"]');
-    const formData = new FormData(event.target);
     const productData = {
-        product_id: Date.now(), // Simple ID generation
         name: document.getElementById('product-name').value,
+        price: parseFloat(document.getElementById('product-price')?.value || 0),
         description: document.getElementById('product-description').value
     };
 
@@ -1597,7 +1568,13 @@ async function handleCreateDocument(event) {
         const destVal = parseInt(document.getElementById('dest-warehouse').value);
         if (!destVal) { showError('Please select a destination warehouse'); return; }
         documentData.destination_warehouse_id = destVal;
-    } else if (docType === 'export' || docType === 'sale') {
+        documentData.created_by = currentUser?.email || 'system';
+    } else if (docType === 'export') {
+        const srcVal = parseInt(document.getElementById('source-warehouse').value);
+        if (!srcVal) { showError('Please select a source warehouse'); return; }
+        documentData.source_warehouse_id = srcVal;
+        documentData.created_by = currentUser?.email || 'system';
+    } else if (docType === 'sale') {
         const srcVal = parseInt(document.getElementById('source-warehouse').value);
         if (!srcVal) { showError('Please select a source warehouse'); return; }
         documentData.source_warehouse_id = srcVal;
@@ -1609,12 +1586,17 @@ async function handleCreateDocument(event) {
         if (srcVal === destVal) { showError('Source and destination warehouse must be different'); return; }
         documentData.source_warehouse_id = srcVal;
         documentData.destination_warehouse_id = destVal;
+        documentData.created_by = currentUser?.email || 'system';
     }
 
     if (docType === 'sale') {
         const customerId = document.getElementById('sale-customer')?.value;
         if (!customerId) { showError('Please select a customer for sale documents'); return; }
         documentData.customer_id = parseInt(customerId);
+
+        const salesperson = document.getElementById('sale-salesperson')?.value;
+        if (!salesperson) { showError('Please select a salesperson for sale documents'); return; }
+        documentData.created_by = salesperson;
     }
 
     // Collect items
@@ -1706,7 +1688,7 @@ async function handleCreateUser(event) {
         
         // Load users in background
         console.log('Loading users in background...');
-        await loadUsersAndRender();
+        await loadUsers();
         console.log('Users loaded successfully');
         
     } catch (e) {
@@ -1853,7 +1835,7 @@ async function deleteUserConfirm(userId, userEmail) {
         showSuccess(`User "${userEmail}" deleted successfully`);
         
         // Reload users list
-        await loadUsersAndRender();
+        await loadUsers();
         
     } catch (e) {
         console.error('User deletion error:', e);
@@ -1902,8 +1884,38 @@ async function showCreateDocumentModal() {
     updateWarehouseDropdowns();
     updateProductDropdowns();
     populateCustomerSelect();
+    await populateSalespersonSelect();
     resetDocumentForm();
     openModal('document-modal');
+}
+
+async function populateSalespersonSelect() {
+    const select = document.getElementById('sale-salesperson');
+    if (!select) return;
+    select.innerHTML = '<option value="">Select Salesperson</option>';
+    try {
+        const users = await apiRequest('/api/users');
+        if (!users) return;
+        users.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.email;
+            opt.textContent = `${u.full_name || u.email} (${u.role})`;
+            select.appendChild(opt);
+        });
+        // Pre-select current user
+        if (currentUser && currentUser.email) {
+            select.value = currentUser.email;
+        }
+    } catch (e) {
+        // Non-admin users may not have access; use current user as fallback
+        if (currentUser && currentUser.email) {
+            const opt = document.createElement('option');
+            opt.value = currentUser.email;
+            opt.textContent = currentUser.full_name || currentUser.email;
+            select.appendChild(opt);
+            select.value = currentUser.email;
+        }
+    }
 }
 
 function openUserModal() {
@@ -2277,6 +2289,22 @@ function updateDocumentForm() {
             const custSelect = document.getElementById('sale-customer');
             if (custSelect) custSelect.required = true;
         }
+        const salespersonGroup = document.getElementById('salesperson-group');
+        if (salespersonGroup) {
+            salespersonGroup.style.display = 'block';
+            const spSelect = document.getElementById('sale-salesperson');
+            if (spSelect) spSelect.required = true;
+        }
+    }
+
+    // Hide salesperson group for non-sale types
+    if (docType !== 'sale') {
+        const salespersonGroup = document.getElementById('salesperson-group');
+        if (salespersonGroup) {
+            salespersonGroup.style.display = 'none';
+            const spSelect = document.getElementById('sale-salesperson');
+            if (spSelect) spSelect.required = false;
+        }
     }
 }
 
@@ -2611,9 +2639,9 @@ async function generateCustomerSalesReport() {
 
 function displayCustomerSalesReport(data) {
     const resultsDiv = document.getElementById('report-results');
-    
+
     if (!data || !data.summary) {
-        resultsDiv.innerHTML = '<p>No sales data found</p>';
+        resultsDiv.innerHTML = '<p style="color:#333">No sales data found</p>';
         return;
     }
 
@@ -2621,87 +2649,116 @@ function displayCustomerSalesReport(data) {
     const sales = data.sales || [];
 
     let html = `
-        <div class="report-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-            <h2 style="margin: 0;">💰 Customer Sales Report</h2>
-            <div style="display: flex; gap: 8px;">
-                <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding: 8px 16px;">📥 Export to Excel</button>
-                <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding: 8px 16px;">📄 Export to CSV</button>
+        <div class="report-container" style="color:#212529">
+            <div class="report-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:15px;background:#f8f9fa;border-radius:8px;">
+                <h2 style="margin:0;color:#212529">Customer Sales Report</h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding:8px 16px;">Export to Excel</button>
+                    <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding:8px 16px;">Export to CSV</button>
+                </div>
             </div>
-        </div>
-        <div class="report-summary">
-            <div class="summary-card">
-                <h3>$${summary.total_sales.toLocaleString('en-US', {minimumFractionDigits: 2})}</h3>
-                <p>Total Sales</p>
+            <div class="report-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+                <div class="summary-card" style="background:#e9ecef;border-radius:8px;padding:16px;text-align:center;">
+                    <h3 style="margin:0 0 4px;color:#212529;font-size:1.4em;">$${summary.total_sales.toLocaleString('en-US', {minimumFractionDigits:2})}</h3>
+                    <p style="margin:0;color:#495057;font-size:0.9em;">Total Sales</p>
+                </div>
+                <div class="summary-card" style="background:#e9ecef;border-radius:8px;padding:16px;text-align:center;">
+                    <h3 style="margin:0 0 4px;color:#212529;font-size:1.4em;">${summary.transaction_count}</h3>
+                    <p style="margin:0;color:#495057;font-size:0.9em;">Transactions</p>
+                </div>
+                <div class="summary-card" style="background:#e9ecef;border-radius:8px;padding:16px;text-align:center;">
+                    <h3 style="margin:0 0 4px;color:#212529;font-size:1.4em;">${summary.unique_customers}</h3>
+                    <p style="margin:0;color:#495057;font-size:0.9em;">Unique Customers</p>
+                </div>
             </div>
-            <div class="summary-card">
-                <h3>$${summary.total_debt.toLocaleString('en-US', {minimumFractionDigits: 2})}</h3>
-                <p>Total Outstanding Debt</p>
-            </div>
-            <div class="summary-card">
-                <h3>${summary.transaction_count}</h3>
-                <p>Transactions</p>
-            </div>
-            <div class="summary-card">
-                <h3>${summary.unique_customers}</h3>
-                <p>Customers</p>
-            </div>
-        </div>
     `;
 
     if (summary.period && (summary.period.start || summary.period.end)) {
-        html += '<div class="report-period">';
+        html += `<p style="color:#495057;margin-bottom:12px;">`;
         if (summary.period.start && summary.period.end) {
-            html += `<p>Period: ${summary.period.start} to ${summary.period.end}</p>`;
+            html += `Period: ${summary.period.start} to ${summary.period.end}`;
         } else if (summary.period.start) {
-            html += `<p>From: ${summary.period.start}</p>`;
-        } else if (summary.period.end) {
-            html += `<p>Until: ${summary.period.end}</p>`;
+            html += `From: ${summary.period.start}`;
+        } else {
+            html += `Until: ${summary.period.end}`;
         }
-        html += '</div>';
+        html += `</p>`;
     }
 
     if (sales.length === 0) {
-        html += '<p>No sales transactions found for the selected criteria.</p>';
+        html += '<p style="color:#495057">No sales transactions found for the selected criteria.</p>';
     } else {
+        // Group by customer for per-customer breakdown
+        const byCustomer = {};
+        sales.forEach(sale => {
+            const key = sale.customer_id || 'unknown';
+            if (!byCustomer[key]) {
+                byCustomer[key] = { name: sale.customer_name, sales: [], total: 0 };
+            }
+            byCustomer[key].sales.push(sale);
+            byCustomer[key].total += sale.total_sale;
+        });
+
         html += `
-            <div class="report-table-wrapper">
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th>Doc ID</th>
-                            <th>Date</th>
-                            <th>Customer</th>
-                            <th>Salesperson</th>
-                            <th>Sale Amount</th>
-                            <th>Customer Debt</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+                <thead>
+                    <tr style="background:#343a40;color:#fff;">
+                        <th style="padding:10px 12px;text-align:left;font-weight:600;">Doc ID</th>
+                        <th style="padding:10px 12px;text-align:left;font-weight:600;">Date</th>
+                        <th style="padding:10px 12px;text-align:left;font-weight:600;">Customer</th>
+                        <th style="padding:10px 12px;text-align:left;font-weight:600;">Salesperson</th>
+                        <th style="padding:10px 12px;text-align:right;font-weight:600;">Qty</th>
+                        <th style="padding:10px 12px;text-align:right;font-weight:600;">Sale Amount</th>
+                        <th style="padding:10px 12px;text-align:left;font-weight:600;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
         `;
 
-        sales.forEach(sale => {
-            const saleDate = sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : 'N/A';
+        // Render grouped by customer with subtotals
+        Object.values(byCustomer).forEach((group, gi) => {
+            group.sales.forEach((sale, si) => {
+                const rowBg = gi % 2 === 0 ? '#ffffff' : '#f8f9fa';
+                const saleDate = sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : 'N/A';
+                html += `
+                    <tr style="background:${rowBg};border-bottom:1px solid #dee2e6;">
+                        <td style="padding:9px 12px;color:#212529;">#${sale.document_id || '-'}</td>
+                        <td style="padding:9px 12px;color:#212529;">${saleDate}</td>
+                        <td style="padding:9px 12px;color:#212529;font-weight:${si === 0 ? '600' : '400'}">${sale.customer_name}</td>
+                        <td style="padding:9px 12px;color:#212529;">${sale.salesperson || '-'}</td>
+                        <td style="padding:9px 12px;color:#212529;text-align:right;">${sale.total_quantity || '-'}</td>
+                        <td style="padding:9px 12px;color:#212529;text-align:right;font-weight:500;">$${sale.total_sale.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                        <td style="padding:9px 12px;">
+                            <span style="padding:2px 8px;border-radius:4px;font-size:0.85em;background:${sale.status === 'POSTED' ? '#d1e7dd' : '#fff3cd'};color:${sale.status === 'POSTED' ? '#0f5132' : '#664d03'};">
+                                ${sale.status || 'DRAFT'}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+            // Customer subtotal row
             html += `
-                <tr>
-                    <td>${sale.document_id}</td>
-                    <td>${saleDate}</td>
-                    <td>${sale.customer_name}</td>
-                    <td>${sale.salesperson}</td>
-                    <td class="amount">$${sale.total_sale.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    <td class="amount ${sale.customer_debt > 0 ? 'text-warning' : ''}">
-                        $${sale.customer_debt.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                    </td>
+                <tr style="background:#e2e3e5;border-bottom:2px solid #adb5bd;">
+                    <td colspan="5" style="padding:7px 12px;color:#212529;font-weight:600;">Subtotal — ${group.name}</td>
+                    <td style="padding:7px 12px;color:#212529;text-align:right;font-weight:700;">$${group.total.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                    <td></td>
                 </tr>
             `;
         });
 
+        // Grand total
         html += `
-                    </tbody>
-                </table>
-            </div>
+                <tr style="background:#343a40;">
+                    <td colspan="5" style="padding:10px 12px;color:#fff;font-weight:700;">Grand Total</td>
+                    <td style="padding:10px 12px;color:#fff;text-align:right;font-weight:700;">$${summary.total_sales.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                    <td></td>
+                </tr>
+                </tbody>
+            </table>
         `;
     }
 
+    html += '</div>';
     resultsDiv.innerHTML = html;
     resultsDiv.scrollIntoView({ behavior: 'smooth' });
 }
@@ -3532,7 +3589,7 @@ async function viewDocument(documentId) {
             return;
         }
         loadDocumentDetails(documentId, true);
-    }, 15000);
+    }, 30000);
 }
 
 // Post Document
@@ -3595,8 +3652,8 @@ function toggleRealtime(enabled) {
             loadDocuments();
             loadCustomers();
             loadInventory();
-        }, 15000);
-        if (settingsStatus) settingsStatus.textContent = 'Realtime updates ON';
+        }, 30000);
+        if (settingsStatus) settingsStatus.textContent = 'Realtime updates ON (30s)';
     } else {
         if (settingsStatus) settingsStatus.textContent = 'Realtime updates OFF';
     }

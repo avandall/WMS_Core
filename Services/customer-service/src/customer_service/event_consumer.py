@@ -90,35 +90,3 @@ def start_customer_purchase_consumer_thread() -> threading.Thread | None:
     thread = threading.Thread(target=run, name="customer-purchase-consumer", daemon=True)
     thread.start()
     return thread
-
-
-
-def start_customer_purchase_consumer_thread() -> threading.Thread | None:
-    if os.getenv("CUSTOMER_PURCHASE_CONSUMER_ENABLED", "1") != "1":
-        return None
-    event_bus_url = os.getenv("EVENT_BUS_URL", "")
-    if not event_bus_url:
-        return None
-
-    consumer = DurableRedisStreamConsumer(
-        client=RedisStreamClient(event_bus_url),
-        stream=os.getenv("EVENT_STREAM", "wms.events"),
-        group="customer-service",
-        consumer="customer-service-1",
-        handler=CustomerPurchaseConsumer().handle,
-        dlq_stream="wms.events.customer.dlq",
-        max_attempts=3,
-        reclaim_idle_ms=60000,
-    )
-
-    def run() -> None:
-        while True:
-            try:
-                consumer.poll_once()
-            except Exception as exc:
-                logger.error("Customer purchase consumer error: %s", exc)
-                time.sleep(2)
-
-    thread = threading.Thread(target=run, name="customer-purchase-consumer", daemon=True)
-    thread.start()
-    return thread
