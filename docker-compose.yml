@@ -101,10 +101,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/identity-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-identity.db
     command: ["identity-grpc"]
     volumes:
       - ./Services/identity-service/src:/app/Services/identity-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - identity-data:/data
     depends_on:
       - otel-collector
 
@@ -119,10 +121,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/customer-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-customer.db
     command: ["customer-grpc"]
     volumes:
       - ./Services/customer-service/src:/app/Services/customer-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - customer-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -138,10 +142,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/product-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-product.db
     command: ["product-grpc"]
     volumes:
       - ./Services/product-service/src:/app/Services/product-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - product-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -157,10 +163,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/warehouse-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-warehouse.db
     command: ["warehouse-grpc"]
     volumes:
       - ./Services/warehouse-service/src:/app/Services/warehouse-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - warehouse-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -176,10 +184,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/inventory-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-inventory.db
     command: ["inventory-grpc"]
     volumes:
       - ./Services/inventory-service/src:/app/Services/inventory-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - inventory-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -196,10 +206,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/documents-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-documents.db
     command: ["documents-grpc"]
     volumes:
       - ./Services/documents-service/src:/app/Services/documents-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - documents-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -215,10 +227,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/audit-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-audit.db
     command: ["audit-grpc"]
     volumes:
       - ./Services/audit-service/src:/app/Services/audit-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - audit-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -234,10 +248,12 @@ services:
     environment:
       <<: *service-env
       PYTHONPATH: /app/Services/reporting-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-reporting.db
     command: ["reporting-grpc"]
     volumes:
       - ./Services/reporting-service/src:/app/Services/reporting-service/src:ro
       - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - reporting-data:/data
     depends_on:
       - event-bus
       - otel-collector
@@ -291,7 +307,7 @@ services:
       FINE_TUNED_MODEL_PATH: training/fine_tuning/wms_final_adapter
       FINE_TUNED_MODEL_DEVICE: cuda
       FINE_TUNED_MAX_NEW_TOKENS: "256"
-      AI_BACKEND_QUERY_URL: ""
+      AI_BACKEND_QUERY_URL: "http://api-gateway:8000/api/v1/ai/backend-query"
       AI_BACKEND_QUERY_TOKEN: ""
       AI_BACKEND_QUERY_TIMEOUT: "10"
       OTEL_TRACES_EXPORTER: otlp
@@ -308,3 +324,11 @@ services:
 
 volumes:
   ai-hf-cache:
+  identity-data:
+  customer-data:
+  product-data:
+  warehouse-data:
+  inventory-data:
+  documents-data:
+  audit-data:
+  reporting-data:

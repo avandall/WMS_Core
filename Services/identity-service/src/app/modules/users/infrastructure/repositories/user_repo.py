@@ -10,7 +10,7 @@ from app.modules.users.infrastructure.models.user import UserModel
 
 class UserRepo(TransactionalRepository, IUserRepo):
     def __init__(self, session: Session):
-        super().__init__(session)
+        super().__init__(session, auto_commit=True)
 
     def save(self, user: User) -> User:
         model = self.session.get(UserModel, user.user_id) if user.user_id else None
