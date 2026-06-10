@@ -86,7 +86,7 @@ docker compose up -d api-gateway event-bus otel-collector identity-service custo
 4. Start AI support when required:
 
 ```bash
-docker compose up -d --profile ai ai-service
+docker compose --profile ai up -d ai-service
 ```
 
 ### Local URLs

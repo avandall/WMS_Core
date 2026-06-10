@@ -18,6 +18,17 @@ from api_gateway.gen.wms.documents.v1 import documents_pb2_grpc
 from api_gateway.gen.wms.audit.v1 import audit_pb2_grpc
 from api_gateway.gen.wms.reporting.v1 import reporting_pb2_grpc
 from api_gateway.gen.wms.ai.v1 import ai_pb2_grpc
+from api_gateway.gen.wms.identity.v1 import identity_pb2_grpc
+
+# ... rest of file ...
+
+@contextmanager
+def identity_stub() -> Iterator[identity_pb2_grpc.IdentityServiceStub]:
+    channel = configured_grpc_channel(_addr("IDENTITY_GRPC_ADDR", "identity-service:50051"))
+    try:
+        yield identity_pb2_grpc.IdentityServiceStub(channel)
+    finally:
+        channel.close()
 from api_gateway.grpc_security import configured_grpc_channel
 
 T = TypeVar("T")

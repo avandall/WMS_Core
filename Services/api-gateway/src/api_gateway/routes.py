@@ -12,6 +12,7 @@ from api_gateway.grpc_clients import (
     call_idempotent,
     customer_stub,
     documents_stub,
+    identity_stub,
     inventory_stub,
     product_stub,
     reporting_stub,
@@ -45,6 +46,7 @@ from api_gateway.gen.wms.documents.v1 import documents_pb2
 from api_gateway.gen.wms.audit.v1 import audit_pb2
 from api_gateway.gen.wms.reporting.v1 import reporting_pb2
 from api_gateway.gen.wms.ai.v1 import ai_pb2
+from api_gateway.gen.wms.identity.v1 import identity_pb2
 
 
 router = APIRouter(prefix="/api/v1")
@@ -614,10 +616,11 @@ def list_documents(request: Request, doc_type: str | None = None, page: int = 1,
     return [
         {
             "document_id": int(d.document_id),
-            "doc_type": d.doc_type,
-            "status": d.status,
+            "doc_type": (d.doc_type.split(".")[-1].lower() if d.doc_type and "." in d.doc_type else (d.doc_type.lower() if d.doc_type else "unknown")),
+            "status": d.status.split(".")[-1].lower() if d.status and "." in d.status else (d.status.lower() if d.status else "draft"),
             "created_by": getattr(d, "created_by", None),
             "created_at": getattr(d, "created_at", None),
+            "customer_id": getattr(d, "customer_id", None),
         }
         for d in resp.documents
     ]
@@ -802,7 +805,31 @@ def report_sales(
             timeout=GRPC_TIMEOUT_SLOW,
             idempotent=True,
         )
-    return parse_json(resp.json)
+    raw = parse_json(resp.json)
+    items = raw.get("items", []) if isinstance(raw, dict) else []
+    total_sales = sum(float(i.get("total_value", 0)) for i in items)
+    unique_customers = len({i["customer_id"] for i in items if i.get("customer_id")})
+    sales = [
+        {
+            "document_id": i.get("document_id"),
+            "sale_date": i.get("created_at") or i.get("updated_at"),
+            "customer_name": f"Customer #{i.get('customer_id', '?')}",
+            "customer_debt": 0.0,
+            "salesperson": i.get("created_by", "-"),
+            "total_sale": float(i.get("total_value", 0)),
+        }
+        for i in items
+    ]
+    return {
+        "summary": {
+            "total_sales": total_sales,
+            "total_debt": 0.0,
+            "transaction_count": len(items),
+            "unique_customers": unique_customers,
+            "period": {"start": start_date, "end": end_date},
+        },
+        "sales": sales,
+    }
 
 
 # ---- AI ----
@@ -886,3 +913,67 @@ def product_quantity(product_id: int, request: Request):
             idempotent=True,
         )
     return {"product_id": int(resp.product_id), "quantity": int(resp.quantity)}
+
+
+@router.get(
+    "/users",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],
+)
+def list_users(request: Request):
+    with identity_stub() as stub:
+        resp = _grpc_call(
+            stub.ListUsers,
+            identity_pb2.ListUsersRequest(),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return [
+        {
+            "user_id": int(u.user_id),
+            "email": u.email,
+            "role": u.role,
+            "full_name": u.full_name,
+            "is_active": bool(u.is_active),
+        }
+        for u in resp.users
+    ]
+
+
+@router.post(
+    "/users",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],
+)
+def create_user(payload: dict, request: Request):
+    with identity_stub() as stub:
+        resp = _grpc_call(
+            stub.CreateUser,
+            identity_pb2.CreateUserRequest(
+                email=payload.get("email"),
+                password=payload.get("password"),
+                role=payload.get("role"),
+                full_name=payload.get("full_name"),
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    return {
+        "success": resp.success,
+        "message": resp.message,
+        "user_id": int(resp.user_id) if resp.user_id else None,
+    }
+
+
+@router.delete(
+    "/users/{user_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],
+)
+def delete_user(user_id: int, request: Request):
+    with identity_stub() as stub:
+        resp = _grpc_call(
+            stub.DeleteUser,
+            identity_pb2.DeleteUserRequest(user_id=user_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_FAST,
+        )
+    return {"success": resp.success, "message": resp.message}

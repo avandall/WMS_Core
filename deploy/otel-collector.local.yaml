@@ -8,17 +8,22 @@ receivers:
 processors:
   batch: {}
   memory_limiter:
+    check_interval: 1s
     limit_mib: 256
 exporters:
-  logging:
+  debug:
     verbosity: basic
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
+      exporters: [debug, otlp/jaeger]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
+      exporters: [debug]

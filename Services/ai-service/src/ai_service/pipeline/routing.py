@@ -32,5 +32,6 @@ class HeuristicQueryRouter:
         if mode in {"agent", "hybrid", "auto", ""}:
             if any(pattern.search(question) for pattern in self._data_patterns):
                 return RouteDecision(route="data_query", confidence=0.75, reason="data-query keywords detected")
-            return RouteDecision(route="rag", confidence=0.65, reason="knowledge question by default")
-        return RouteDecision(route="rag", confidence=0.5, reason="unknown mode fallback")
+            # Default to data_query for auto mode — RAG path is too slow without warm LLM
+            return RouteDecision(route="data_query", confidence=0.6, reason="default to data_query for WMS context")
+        return RouteDecision(route="data_query", confidence=0.5, reason="unknown mode fallback")

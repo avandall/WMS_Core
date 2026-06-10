@@ -38,10 +38,24 @@ def warehouse_to_dict(warehouse: Any) -> dict[str, Any]:
 
 
 def document_to_dict(document: Any) -> dict[str, Any]:
+    status = document.status
+    if status and "." in status:
+        status = status.split(".")[-1].lower()
+    elif status:
+        status = status.lower()
+    else:
+        status = "draft"
+    
+    doc_type = document.doc_type or ""
+    if "." in doc_type:
+        doc_type = doc_type.split(".")[-1].lower()
+    else:
+        doc_type = doc_type.lower()
+
     return {
         "document_id": int(document.document_id),
-        "doc_type": document.doc_type,
-        "status": document.status,
+        "doc_type": doc_type,
+        "status": status,
         "created_by": document.created_by,
         "approved_by": getattr(document, "approved_by", None),
         "note": getattr(document, "note", None),

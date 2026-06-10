@@ -268,8 +268,10 @@ async function apiRequest(endpoint, options = {}) {
     // Get abort controller for this endpoint
     const controller = RequestManager.getController(endpoint);
     
-    // Add request timeout (30 seconds)
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    // Add request timeout (70 seconds for AI, 30 seconds for others)
+    const isAiRequest = endpoint.includes('/ai/');
+    const timeoutMs = isAiRequest ? 70000 : 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
         const fetchOptions = {
@@ -1142,12 +1144,12 @@ async function loadDocuments() {
                 </thead>
                 <tbody>
                     ${documents.slice(0, 20).map(doc => {
-                        const status = (doc.status || '').toString().toLowerCase();
+                        const status = (doc.status || 'draft').toString().toLowerCase();
                         return `
                         <tr>
                             <td>${doc.document_id}</td>
                             <td>${doc.doc_type}</td>
-                            <td><span style="padding:4px 8px;border-radius:4px;background:#${status === 'draft' ? 'fff3cd' : status === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status || 'UNKNOWN'}</span></td>
+                            <td><span style="padding:4px 8px;border-radius:4px;background:#${status === 'draft' ? 'fff3cd' : status === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status || 'DRAFT'}</span></td>
                             <td>${doc.created_by || '-'}</td>
                             <td>${doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '-'}</td>
                             <td>
@@ -1592,17 +1594,27 @@ async function handleCreateDocument(event) {
 
     // Add warehouse info based on type
     if (docType === 'import') {
-        documentData.destination_warehouse_id = parseInt(document.getElementById('dest-warehouse').value);
+        const destVal = parseInt(document.getElementById('dest-warehouse').value);
+        if (!destVal) { showError('Please select a destination warehouse'); return; }
+        documentData.destination_warehouse_id = destVal;
     } else if (docType === 'export' || docType === 'sale') {
-        documentData.source_warehouse_id = parseInt(document.getElementById('source-warehouse').value);
+        const srcVal = parseInt(document.getElementById('source-warehouse').value);
+        if (!srcVal) { showError('Please select a source warehouse'); return; }
+        documentData.source_warehouse_id = srcVal;
     } else if (docType === 'transfer') {
-        documentData.source_warehouse_id = parseInt(document.getElementById('source-warehouse').value);
-        documentData.destination_warehouse_id = parseInt(document.getElementById('dest-warehouse').value);
+        const srcVal = parseInt(document.getElementById('source-warehouse').value);
+        const destVal = parseInt(document.getElementById('dest-warehouse').value);
+        if (!srcVal) { showError('Please select a source warehouse'); return; }
+        if (!destVal) { showError('Please select a destination warehouse'); return; }
+        if (srcVal === destVal) { showError('Source and destination warehouse must be different'); return; }
+        documentData.source_warehouse_id = srcVal;
+        documentData.destination_warehouse_id = destVal;
     }
 
     if (docType === 'sale') {
         const customerId = document.getElementById('sale-customer')?.value;
-        if (customerId) documentData.customer_id = parseInt(customerId);
+        if (!customerId) { showError('Please select a customer for sale documents'); return; }
+        documentData.customer_id = parseInt(customerId);
     }
 
     // Collect items
@@ -1886,10 +1898,10 @@ async function refreshWarehousesCache() {
 }
 
 async function showCreateDocumentModal() {
-    await Promise.all([refreshWarehousesCache(), refreshProductsCache()]);
+    await Promise.all([refreshWarehousesCache(), refreshProductsCache(), loadCustomers()]);
     updateWarehouseDropdowns();
     updateProductDropdowns();
-    loadCustomers();
+    populateCustomerSelect();
     resetDocumentForm();
     openModal('document-modal');
 }
@@ -2230,27 +2242,41 @@ function updateDocumentForm() {
     const destGroup = document.getElementById('dest-warehouse-group');
     const priceInputs = document.querySelectorAll('.price-input');
     const customerGroup = document.getElementById('customer-group');
+    const sourceSelect = document.getElementById('source-warehouse');
+    const destSelect = document.getElementById('dest-warehouse');
 
     if (docType === 'import') {
         sourceGroup.style.display = 'none';
+        if (sourceSelect) sourceSelect.required = false;
         destGroup.style.display = 'block';
+        if (destSelect) destSelect.required = true;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
         if (customerGroup) customerGroup.style.display = 'none';
     } else if (docType === 'export') {
         sourceGroup.style.display = 'block';
+        if (sourceSelect) sourceSelect.required = true;
         destGroup.style.display = 'none';
+        if (destSelect) destSelect.required = false;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
         if (customerGroup) customerGroup.style.display = 'none';
     } else if (docType === 'transfer') {
         sourceGroup.style.display = 'block';
+        if (sourceSelect) sourceSelect.required = true;
         destGroup.style.display = 'block';
+        if (destSelect) destSelect.required = true;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = 'none'; inp.value = ''; });
         if (customerGroup) customerGroup.style.display = 'none';
     } else if (docType === 'sale') {
         sourceGroup.style.display = 'block';
+        if (sourceSelect) sourceSelect.required = true;
         destGroup.style.display = 'none';
+        if (destSelect) destSelect.required = false;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
-        if (customerGroup) customerGroup.style.display = 'block';
+        if (customerGroup) {
+            customerGroup.style.display = 'block';
+            const custSelect = document.getElementById('sale-customer');
+            if (custSelect) custSelect.required = true;
+        }
     }
 }
 
@@ -3431,15 +3457,16 @@ async function loadDocumentDetails(documentId, silent = false) {
             `;
         }).join('');
 
-        const sourceWH = warehouses.find(w => w.warehouse_id === document_data.source_warehouse_id);
-        const destWH = warehouses.find(w => w.warehouse_id === document_data.destination_warehouse_id);
+        const sourceWH = warehouses.find(w => w.warehouse_id === document_data.from_warehouse_id);
+        const destWH = warehouses.find(w => w.warehouse_id === document_data.to_warehouse_id);
 
         let warehouseInfo = '';
-        if (document_data.doc_type === 'import') {
+        const docType = (document_data.doc_type || '').toString().toLowerCase();
+        if (docType === 'import') {
             warehouseInfo = `<p><strong>Destination Warehouse:</strong> ${destWH ? `${destWH.warehouse_id} - ${destWH.location}` : 'Unknown'}</p>`;
-        } else if (document_data.doc_type === 'export') {
+        } else if (docType === 'export') {
             warehouseInfo = `<p><strong>Source Warehouse:</strong> ${sourceWH ? `${sourceWH.warehouse_id} - ${sourceWH.location}` : 'Unknown'}</p>`;
-        } else if (document_data.doc_type === 'transfer') {
+        } else if (docType === 'transfer') {
             warehouseInfo = `
                 <p><strong>Source Warehouse:</strong> ${sourceWH ? `${sourceWH.warehouse_id} - ${sourceWH.location}` : 'Unknown'}</p>
                 <p><strong>Destination Warehouse:</strong> ${destWH ? `${destWH.warehouse_id} - ${destWH.location}` : 'Unknown'}</p>
@@ -3451,7 +3478,7 @@ async function loadDocumentDetails(documentId, silent = false) {
             <div class="document-header">
                 <div>
                     <h3>Document #${document_data.document_id}</h3>
-                    <p><strong>Type:</strong> ${document_data.doc_type.toUpperCase()}</p>
+                    <p><strong>Type:</strong> ${(document_data.doc_type || '').toUpperCase()}</p>
                     <p><strong>Status:</strong> <span class="status-badge" style="background: ${documentStatus === 'posted' ? '#28a745' : '#ffc107'};">${(document_data.status || 'UNKNOWN').toUpperCase()}</span></p>
                     <p><strong>Created:</strong> ${new Date(document_data.created_at).toLocaleString()}</p>
                     ${warehouseInfo}

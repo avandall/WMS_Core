@@ -62,6 +62,79 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             except Exception:
                 pass
 
+    def CreateUser(self, request: identity_pb2.CreateUserRequest, context: grpc.ServicerContext):
+        email = request.email
+        password = request.password
+        role = request.role or "user"
+        full_name = request.full_name or ""
+
+        if not email or not password:
+            return identity_pb2.CreateUserResponse(success=False, message="Email and password are required")
+
+        session_gen = get_session()
+        db = next(session_gen)
+        try:
+            service = UserService(UserRepo(db))
+            # Create user using the service
+            user = asyncio.run(service.create_user(email, password, role, full_name))
+            return identity_pb2.CreateUserResponse(
+                success=True,
+                message="User created successfully",
+                user_id=int(user.user_id),
+            )
+        except Exception as e:
+            return identity_pb2.CreateUserResponse(success=False, message=str(e))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    def DeleteUser(self, request: identity_pb2.DeleteUserRequest, context: grpc.ServicerContext):
+        user_id = request.user_id
+        if not user_id:
+            return identity_pb2.DeleteUserResponse(success=False, message="User ID is required")
+
+        session_gen = get_session()
+        db = next(session_gen)
+        try:
+            service = UserService(UserRepo(db))
+            asyncio.run(service.delete_user(user_id))
+            return identity_pb2.DeleteUserResponse(success=True, message="User deleted successfully")
+        except Exception as e:
+            return identity_pb2.DeleteUserResponse(success=False, message=str(e))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    def ListUsers(self, request: identity_pb2.ListUsersRequest, context: grpc.ServicerContext):
+        session_gen = get_session()
+        db = next(session_gen)
+        try:
+            service = UserService(UserRepo(db))
+            users = asyncio.run(service.list_users())
+            entries = []
+            for u in (users.values() if isinstance(users, dict) else users):
+                entries.append(identity_pb2.UserEntry(
+                    user_id=int(u.user_id),
+                    email=u.email or "",
+                    role=u.role or "",
+                    full_name=u.full_name or "",
+                    is_active=bool(u.is_active),
+                ))
+            return identity_pb2.ListUsersResponse(users=entries)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return identity_pb2.ListUsersResponse()
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 # Convenience re-export so grpc_server can import without depending on generated module naming.
 add_IdentityServiceServicer_to_server = identity_pb2_grpc.add_IdentityServiceServicer_to_server
