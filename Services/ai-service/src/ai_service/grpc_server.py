@@ -15,7 +15,10 @@ from ai_service.grpc_servicer import add_AIServiceServicer_to_server
 
 def _prewarm(servicer: AIServiceServicer) -> None:
     try:
-        servicer._get_pipeline()
+        pipeline = servicer._get_pipeline()
+        # Force the heavy engine init (downloads HF embedding model) so the
+        # first real query doesn't block waiting for it.
+        pipeline.provider._get_engine()
         print("AI pipeline pre-warm complete.", file=sys.stderr)
     except Exception as exc:
         print(f"AI pipeline pre-warm failed (non-fatal): {exc}", file=sys.stderr)
