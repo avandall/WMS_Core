@@ -1,0 +1,178 @@
+x-build-common: &build-common
+  context: .
+  dockerfile: Dockerfile
+
+x-api-gateway-env: &api-gateway-env
+  SECRET_KEY: replace-with-local-dev-secret
+  PYTHONUNBUFFERED: "1"
+  IDENTITY_GRPC_ADDR: identity-service:50051
+  CUSTOMER_GRPC_ADDR: customer-service:50052
+  PRODUCT_GRPC_ADDR: product-service:50053
+  WAREHOUSE_GRPC_ADDR: warehouse-service:50054
+  INVENTORY_GRPC_ADDR: inventory-service:50055
+  DOCUMENTS_GRPC_ADDR: documents-service:50056
+  AUDIT_GRPC_ADDR: audit-service:50057
+  REPORTING_GRPC_ADDR: reporting-service:50058
+  AI_GRPC_ADDR: ai-service:50059
+  GRPC_TIMEOUT_FAST: "5"
+  GRPC_TIMEOUT_DEFAULT: "10"
+  GRPC_TIMEOUT_SLOW: "30"
+  GRPC_TIMEOUT_AI: "60"
+  GRPC_RETRY_ATTEMPTS: "2"
+  GRPC_RETRY_BACKOFF_SECONDS: "0.05"
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  CIRCUIT_BREAKER_RECOVERY_SECONDS: "15"
+  GRPC_CLIENT_TLS_ENABLED: "0"
+  GRPC_CLIENT_ROOT_CERT_FILE: ""
+  GRPC_CLIENT_CERT_FILE: ""
+  GRPC_CLIENT_KEY_FILE: ""
+  CORS_ORIGINS: http://localhost:3000,http://localhost:8000,http://localhost:8080
+  CORS_ALLOW_CREDENTIALS: "0"
+  MAX_REQUEST_BODY_BYTES: "1048576"
+  RATE_LIMIT_RPS: "10"
+  EVENT_BUS_URL: redis://event-bus:6379/0
+  EVENT_STREAM: wms.events
+  EVENTS_ENABLED: "1"
+  LOG_FORMAT: json
+
+x-service-env: &service-env
+  PYTHONUNBUFFERED: "1"
+  LOG_FORMAT: json
+
+services:
+  api-gateway:
+    image: wms/api-gateway:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: api-gateway
+    env_file:
+      - Services/api-gateway/.env.example
+    environment:
+      <<: *api-gateway-env
+      PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
+    command: ["api-gateway"]
+    volumes:
+      - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - event-bus
+      - identity-service
+      - customer-service
+      - product-service
+      - warehouse-service
+      - inventory-service
+
+  identity-service:
+    image: wms/identity-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: identity-service
+    env_file:
+      - Services/identity-service/.env.example
+    environment:
+      <<: *service-env
+      PYTHONPATH: /app/Services/identity-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-identity.db
+    command: ["identity-grpc"]
+    volumes:
+      - ./Services/identity-service/src:/app/Services/identity-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - identity-data:/data
+
+  customer-service:
+    image: wms/customer-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: customer-service
+    env_file:
+      - Services/customer-service/.env.example
+    environment:
+      <<: *service-env
+      PYTHONPATH: /app/Services/customer-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-customer.db
+    command: ["customer-grpc"]
+    volumes:
+      - ./Services/customer-service/src:/app/Services/customer-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - customer-data:/data
+    depends_on:
+      - event-bus
+
+  product-service:
+    image: wms/product-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: product-service
+    env_file:
+      - Services/product-service/.env.example
+    environment:
+      <<: *service-env
+      PYTHONPATH: /app/Services/product-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-product.db
+    command: ["product-grpc"]
+    volumes:
+      - ./Services/product-service/src:/app/Services/product-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - product-data:/data
+    depends_on:
+      - event-bus
+
+  warehouse-service:
+    image: wms/warehouse-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: warehouse-service
+    env_file:
+      - Services/warehouse-service/.env.example
+    environment:
+      <<: *service-env
+      PYTHONPATH: /app/Services/warehouse-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-warehouse.db
+    command: ["warehouse-grpc"]
+    volumes:
+      - ./Services/warehouse-service/src:/app/Services/warehouse-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - warehouse-data:/data
+    depends_on:
+      - event-bus
+
+  inventory-service:
+    image: wms/inventory-service:dev
+    build:
+      <<: *build-common
+      args:
+        UV_PACKAGE: inventory-service
+    env_file:
+      - Services/inventory-service/.env.example
+    environment:
+      <<: *service-env
+      PYTHONPATH: /app/Services/inventory-service/src:/app/Libraries/shared-utils/src
+      DATABASE_URL: sqlite:////data/wms-inventory.db
+    command: ["inventory-grpc"]
+    volumes:
+      - ./Services/inventory-service/src:/app/Services/inventory-service/src:ro
+      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
+      - inventory-data:/data
+    depends_on:
+      - event-bus
+      - warehouse-service
+
+  event-bus:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+
+volumes:
+  identity-data:
+  customer-data:
+  product-data:
+  warehouse-data:
+  inventory-data:
