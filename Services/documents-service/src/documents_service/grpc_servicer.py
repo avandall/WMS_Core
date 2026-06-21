@@ -33,7 +33,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
 
     @staticmethod
     def _to_proto(doc) -> documents_pb2.Document:  # type: ignore[no-untyped-def]
-        return documents_pb2.Document(
+        proto_kwargs = dict(
             document_id=int(getattr(doc, "document_id", 0) or 0),
             doc_type=str(getattr(doc, "doc_type", "") or getattr(getattr(doc, "doc_type", None), "value", "")),
             status=str(getattr(doc, "status", "") or getattr(getattr(doc, "status", None), "value", "")),
@@ -54,6 +54,13 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             created_at=str(getattr(doc, "created_at", "") or ""),
             posted_at=str(getattr(doc, "posted_at", "") or ""),
         )
+        if hasattr(documents_pb2.Document, "DESCRIPTOR"):
+            field_names = {f.name for f in documents_pb2.Document.DESCRIPTOR.fields}
+            if "transaction_type" in field_names:
+                proto_kwargs["transaction_type"] = str(getattr(doc, "transaction_type", "") or "")
+            if "reason_code" in field_names:
+                proto_kwargs["reason_code"] = str(getattr(doc, "reason_code", "") or "")
+        return documents_pb2.Document(**proto_kwargs)
 
     def CreateImport(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
         service, db = self._service()
