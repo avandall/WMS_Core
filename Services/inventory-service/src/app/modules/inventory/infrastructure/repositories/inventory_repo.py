@@ -110,6 +110,12 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "warehouse_id": int(row.warehouse_id),
                 "warehouse_name": str(row.warehouse_id),
                 "quantity": int(row.quantity),
+                # Phase 3: Quantity matrix fields
+                "physical_qty": int(row.physical_qty),
+                "reserved_qty": int(row.reserved_qty),
+                "incoming_qty": int(row.incoming_qty),
+                "in_transit_qty": int(row.in_transit_qty),
+                "available_qty": int(row.physical_qty - row.reserved_qty),
             }
             for row in rows
         ]
@@ -125,6 +131,12 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "warehouse_id": int(row.warehouse_id),
                 "warehouse_name": str(row.warehouse_id),
                 "quantity": int(row.quantity),
+                # Phase 3: Quantity matrix fields
+                "physical_qty": int(row.physical_qty),
+                "reserved_qty": int(row.reserved_qty),
+                "incoming_qty": int(row.incoming_qty),
+                "in_transit_qty": int(row.in_transit_qty),
+                "available_qty": int(row.physical_qty - row.reserved_qty),
             }
             for row in rows
         ]

@@ -1155,6 +1155,12 @@ def inventory_by_warehouse(request: Request):
             "warehouse_id": int(r.warehouse_id),
             "warehouse_name": warehouse_name_map.get(int(r.warehouse_id), r.warehouse_name or str(r.warehouse_id)),
             "quantity": int(r.quantity),
+            # Phase 3: Quantity matrix fields
+            "physical_qty": int(r.physical_qty),
+            "reserved_qty": int(r.reserved_qty),
+            "incoming_qty": int(r.incoming_qty),
+            "in_transit_qty": int(r.in_transit_qty),
+            "available_qty": int(r.available_qty),
         }
         for r in resp.rows
     ]

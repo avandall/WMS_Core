@@ -18,6 +18,12 @@ message WarehouseInventoryRow {
   int64 warehouse_id = 2;
   string warehouse_name = 3;
   int64 quantity = 4;
+  // Phase 3: Quantity matrix fields
+  int64 physical_qty = 5;
+  int64 reserved_qty = 6;
+  int64 incoming_qty = 7;
+  int64 in_transit_qty = 8;
+  int64 available_qty = 9;
 }
 
 message ListInventoryItemsRequest {}

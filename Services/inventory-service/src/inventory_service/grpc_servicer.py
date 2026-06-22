@@ -75,6 +75,12 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                         warehouse_id=int(r["warehouse_id"]),
                         warehouse_name=str(r["warehouse_name"]),
                         quantity=int(r["quantity"]),
+                        # Phase 3: Quantity matrix fields
+                        physical_qty=int(r.get("physical_qty", r["quantity"])),
+                        reserved_qty=int(r.get("reserved_qty", 0)),
+                        incoming_qty=int(r.get("incoming_qty", 0)),
+                        in_transit_qty=int(r.get("in_transit_qty", 0)),
+                        available_qty=int(r.get("available_qty", r["quantity"])),
                     )
                     for r in rows
                 ]
