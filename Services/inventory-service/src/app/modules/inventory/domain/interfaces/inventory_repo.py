@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, List
 
 if TYPE_CHECKING:
@@ -65,6 +66,41 @@ class IInventoryRepo(ABC):
         document_id: int | None,
         payload: dict[str, Any],
     ) -> None:
+        pass
+
+    # Phase 4: Reservation methods
+    @abstractmethod
+    def create_reservation(
+        self,
+        *,
+        source_type: str,
+        source_id: int | None,
+        document_id: int | None,
+        product_id: int,
+        warehouse_id: int,
+        requested_qty: int,
+        created_by: str | None,
+        idempotency_key: str | None,
+        expires_at: datetime | None,
+    ) -> int:
+        pass
+
+    @abstractmethod
+    def release_reservation(self, reservation_id: int, released_qty: int | None = None) -> None:
+        pass
+
+    @abstractmethod
+    def consume_reservation(self, reservation_id: int, consumed_qty: int) -> None:
+        pass
+
+    @abstractmethod
+    def list_reservations(
+        self, product_id: int | None = None, warehouse_id: int | None = None, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def calculate_available_stock(self, product_id: int, warehouse_id: int) -> dict[str, Any]:
         pass
 
 

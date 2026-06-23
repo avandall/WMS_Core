@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Any, List
 
 from sqlalchemy import func, select
@@ -205,3 +206,192 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
     @staticmethod
     def _to_domain(row: InventoryModel) -> InventoryItem:
         return InventoryItem(product_id=row.product_id, quantity=row.quantity)
+
+    # Phase 4: Reservation methods
+    def create_reservation(
+        self,
+        *,
+        source_type: str,
+        source_id: int | None,
+        document_id: int | None,
+        product_id: int,
+        warehouse_id: int,
+        requested_qty: int,
+        created_by: str | None,
+        idempotency_key: str | None,
+        expires_at: datetime | None,
+    ) -> int:
+        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+
+        # Check for idempotency
+        if idempotency_key:
+            existing = self.session.execute(
+                select(StockReservationModel).where(StockReservationModel.idempotency_key == idempotency_key)
+            ).scalar_one_or_none()
+            if existing:
+                return existing.id
+
+        # Check ATP (available-to-promise)
+        warehouse_row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == product_id,
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+            )
+        ).scalar_one_or_none()
+
+        if not warehouse_row:
+            raise InsufficientStockError(f"No inventory found for product {product_id} in warehouse {warehouse_id}")
+
+        available_qty = warehouse_row.physical_qty - warehouse_row.reserved_qty
+        if requested_qty > available_qty:
+            raise InsufficientStockError(
+                f"Insufficient available stock. Available: {available_qty}, Requested: {requested_qty}"
+            )
+
+        # Create reservation
+        reservation = StockReservationModel(
+            source_type=source_type,
+            source_id=source_id,
+            document_id=document_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            requested_qty=requested_qty,
+            reserved_qty=requested_qty,
+            status="RESERVED",
+            created_by=created_by,
+            idempotency_key=idempotency_key,
+            expires_at=expires_at,
+        )
+        self.session.add(reservation)
+
+        # Update warehouse reserved_qty
+        warehouse_row.reserved_qty += requested_qty
+
+        self._commit_if_auto()
+        return reservation.id
+
+    def release_reservation(self, reservation_id: int, released_qty: int | None = None) -> None:
+        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+
+        reservation = self.session.get(StockReservationModel, reservation_id)
+        if not reservation:
+            raise KeyError(f"Reservation {reservation_id} not found")
+
+        if reservation.status in ("RELEASED", "CONSUMED"):
+            return  # Already released or consumed
+
+        qty_to_release = released_qty or reservation.reserved_qty - reservation.released_qty
+        if qty_to_release <= 0:
+            return
+
+        # Update reservation
+        reservation.released_qty += qty_to_release
+        reservation.reserved_qty -= qty_to_release
+        if reservation.reserved_qty <= 0:
+            reservation.status = "RELEASED"
+
+        # Update warehouse reserved_qty
+        warehouse_row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == reservation.product_id,
+                WarehouseInventoryModel.warehouse_id == reservation.warehouse_id,
+            )
+        ).scalar_one_or_none()
+
+        if warehouse_row:
+            warehouse_row.reserved_qty -= qty_to_release
+
+        self._commit_if_auto()
+
+    def consume_reservation(self, reservation_id: int, consumed_qty: int) -> None:
+        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+
+        reservation = self.session.get(StockReservationModel, reservation_id)
+        if not reservation:
+            raise KeyError(f"Reservation {reservation_id} not found")
+
+        if consumed_qty > reservation.reserved_qty:
+            raise InsufficientStockError(
+                f"Cannot consume more than reserved. Reserved: {reservation.reserved_qty}, Requested: {consumed_qty}"
+            )
+
+        # Update reservation
+        reservation.consumed_qty += consumed_qty
+        reservation.reserved_qty -= consumed_qty
+        reservation.released_qty += consumed_qty  # Consumed is also released from reservation
+
+        if reservation.reserved_qty <= 0:
+            reservation.status = "CONSUMED"
+
+        # Update warehouse reserved_qty and physical_qty
+        warehouse_row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == reservation.product_id,
+                WarehouseInventoryModel.warehouse_id == reservation.warehouse_id,
+            )
+        ).scalar_one_or_none()
+
+        if warehouse_row:
+            warehouse_row.reserved_qty -= consumed_qty
+            warehouse_row.physical_qty -= consumed_qty  # Physical stock decreases on consumption
+
+        self._commit_if_auto()
+
+    def list_reservations(
+        self, product_id: int | None = None, warehouse_id: int | None = None, status: str | None = None
+    ) -> list[dict]:
+        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+
+        query = select(StockReservationModel)
+        if product_id:
+            query = query.where(StockReservationModel.product_id == product_id)
+        if warehouse_id:
+            query = query.where(StockReservationModel.warehouse_id == warehouse_id)
+        if status:
+            query = query.where(StockReservationModel.status == status)
+
+        rows = self.session.execute(query.order_by(StockReservationModel.created_at.desc())).scalars().all()
+        return [
+            {
+                "id": int(r.id),
+                "source_type": r.source_type,
+                "source_id": int(r.source_id) if r.source_id else None,
+                "document_id": int(r.document_id) if r.document_id else None,
+                "product_id": int(r.product_id),
+                "warehouse_id": int(r.warehouse_id),
+                "requested_qty": int(r.requested_qty),
+                "reserved_qty": int(r.reserved_qty),
+                "released_qty": int(r.released_qty),
+                "consumed_qty": int(r.consumed_qty),
+                "status": r.status,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "created_by": r.created_by,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+
+    def calculate_available_stock(self, product_id: int, warehouse_id: int) -> dict:
+        warehouse_row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == product_id,
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+            )
+        ).scalar_one_or_none()
+
+        if not warehouse_row:
+            return {
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "physical_qty": 0,
+                "reserved_qty": 0,
+                "available_qty": 0,
+            }
+
+        return {
+            "product_id": product_id,
+            "warehouse_id": warehouse_id,
+            "physical_qty": int(warehouse_row.physical_qty),
+            "reserved_qty": int(warehouse_row.reserved_qty),
+            "available_qty": int(warehouse_row.physical_qty - warehouse_row.reserved_qty),
+        }

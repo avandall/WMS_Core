@@ -88,24 +88,48 @@ class InventoryService:
         quantity: int,
         warehouse_id: Optional[int] = None,
         event_id: Optional[str] = None,
+        source_type: str = "manual",
+        source_id: Optional[int] = None,
+        document_id: Optional[int] = None,
+        created_by: Optional[str] = None,
+        expires_at: Optional[str] = None,
     ) -> bool:
+        from datetime import datetime
+
         Sku(product_id)
         requested = Quantity(quantity)
-        if event_id and self.inventory_repo.has_movement_event(event_id):
-            return False
-        available = self.inventory_repo.get_quantity(product_id)
-        if available < requested.value:
-            raise InsufficientStockError(
-                f"Insufficient inventory: only {available} items available"
-            )
+        
+        if warehouse_id is None:
+            raise ValueError("warehouse_id is required for reservation")
+        
+        # Phase 4: Use persistent reservation with idempotency
+        try:
+            expires_dt = datetime.fromisoformat(expires_at) if expires_at else None
+        except (ValueError, TypeError):
+            expires_dt = None
+
+        reservation_id = self.inventory_repo.create_reservation(
+            source_type=source_type,
+            source_id=source_id,
+            document_id=document_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            requested_qty=requested.value,
+            created_by=created_by,
+            idempotency_key=event_id,  # Use event_id as idempotency key
+            expires_at=expires_dt,
+        )
+
+        # Record legacy movement event for backward compatibility
         self._record_movement(
             event_id=event_id,
             movement_type="StockReserved",
-            document_id=None,
+            document_id=document_id,
             payload={
                 "product_id": product_id,
                 "warehouse_id": warehouse_id,
                 "quantity": requested.value,
+                "reservation_id": reservation_id,
             },
         )
         self._commit_if_needed()
@@ -118,6 +142,7 @@ class InventoryService:
                 "product_id": product_id,
                 "warehouse_id": warehouse_id,
                 "quantity": requested.value,
+                "reservation_id": reservation_id,
             },
         )
         return True
@@ -125,23 +150,21 @@ class InventoryService:
     def release_reservation(
         self,
         *,
-        product_id: int,
-        quantity: int,
-        warehouse_id: Optional[int] = None,
+        reservation_id: int,
+        released_qty: Optional[int] = None,
         event_id: Optional[str] = None,
     ) -> bool:
-        Sku(product_id)
-        released = Quantity(quantity)
-        if event_id and self.inventory_repo.has_movement_event(event_id):
-            return False
+        # Phase 4: Use persistent reservation release
+        self.inventory_repo.release_reservation(reservation_id, released_qty)
+
+        # Record legacy movement event for backward compatibility
         self._record_movement(
             event_id=event_id,
             movement_type="ReservationReleased",
             document_id=None,
             payload={
-                "product_id": product_id,
-                "warehouse_id": warehouse_id,
-                "quantity": released.value,
+                "reservation_id": reservation_id,
+                "released_qty": released_qty,
             },
         )
         self._commit_if_needed()
@@ -150,10 +173,8 @@ class InventoryService:
             payload={
                 "event_id": event_id,
                 "entity_type": "inventory",
-                "entity_id": product_id,
-                "product_id": product_id,
-                "warehouse_id": warehouse_id,
-                "quantity": released.value,
+                "reservation_id": reservation_id,
+                "released_qty": released_qty,
             },
         )
         return True
