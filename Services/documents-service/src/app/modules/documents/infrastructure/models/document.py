@@ -29,6 +29,15 @@ class DocumentModel(Base):
     cancelled_at = Column(DateTime)
     cancellation_reason = Column(String(500))
 
+    # Phase 6: Document lifecycle fields
+    transaction_type = Column(String(50), nullable=True)
+    reason_code = Column(String(50), nullable=True)
+    requested_by = Column(String(100), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    execution_started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    assigned_to = Column(String(100), nullable=True)
+
     __table_args__ = (
         Index('ix_documents_status_created_at', 'status', 'created_at'),
         Index('ix_documents_type_status', 'doc_type', 'status'),
