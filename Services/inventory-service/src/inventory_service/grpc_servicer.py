@@ -118,5 +118,110 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             except Exception:
                 pass
 
+    # Phase 5: Availability and reservations
+    def GetAvailability(
+        self, request: inventory_pb2.GetAvailabilityRequest, context: grpc.ServicerContext
+    ):
+        service, db = self._service()
+        try:
+            availability = service.inventory_repo.calculate_available_stock(
+                product_id=int(request.product_id), warehouse_id=int(request.warehouse_id)
+            )
+            self._publisher.publish(
+                event_type="AvailabilityRequested",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "inventory",
+                    "product_id": int(request.product_id),
+                    "warehouse_id": int(request.warehouse_id),
+                },
+            )
+            return inventory_pb2.GetAvailabilityResponse(
+                product_id=int(request.product_id),
+                warehouse_id=int(request.warehouse_id),
+                physical_qty=availability["physical_qty"],
+                reserved_qty=availability["reserved_qty"],
+                available_qty=availability["available_qty"],
+            )
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    def ListReservations(
+        self, request: inventory_pb2.ListReservationsRequest, context: grpc.ServicerContext
+    ):
+        service, db = self._service()
+        try:
+            product_id = int(request.product_id) if request.HasField("product_id") else None
+            warehouse_id = int(request.warehouse_id) if request.HasField("warehouse_id") else None
+            status = request.status if request.status else None
+            
+            reservations = service.inventory_repo.list_reservations(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                status=status,
+            )
+            self._publisher.publish(
+                event_type="ReservationsListed",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "inventory",
+                    "count": len(reservations),
+                },
+            )
+            return inventory_pb2.ListReservationsResponse(
+                reservations=[
+                    inventory_pb2.ReservationRow(
+                        id=int(r["id"]),
+                        source_type=r["source_type"],
+                        source_id=int(r["source_id"]) if r["source_id"] else 0,
+                        document_id=int(r["document_id"]) if r["document_id"] else 0,
+                        product_id=int(r["product_id"]),
+                        warehouse_id=int(r["warehouse_id"]),
+                        requested_qty=int(r["requested_qty"]),
+                        reserved_qty=int(r["reserved_qty"]),
+                        released_qty=int(r["released_qty"]),
+                        consumed_qty=int(r["consumed_qty"]),
+                        status=r["status"],
+                        expires_at=r["expires_at"] or "",
+                        created_by=r["created_by"] or "",
+                        created_at=r["created_at"] or "",
+                    )
+                    for r in reservations
+                ]
+            )
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    def ReleaseReservation(
+        self, request: inventory_pb2.ReleaseReservationRequest, context: grpc.ServicerContext
+    ):
+        service, db = self._service()
+        try:
+            released_qty = int(request.released_qty) if request.HasField("released_qty") else None
+            service.release_reservation(reservation_id=int(request.reservation_id), released_qty=released_qty)
+            self._publisher.publish(
+                event_type="ReservationReleased",
+                payload={
+                    "request_id": self._request_id(context),
+                    "entity_type": "inventory",
+                    "reservation_id": int(request.reservation_id),
+                    "released_qty": released_qty,
+                },
+            )
+            return inventory_pb2.ReleaseReservationResponse(success=True)
+        except Exception:
+            return inventory_pb2.ReleaseReservationResponse(success=False)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server

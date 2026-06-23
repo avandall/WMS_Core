@@ -1182,6 +1182,94 @@ def product_quantity(product_id: int, request: Request):
     return {"product_id": int(resp.product_id), "quantity": int(resp.quantity)}
 
 
+# Phase 5: Availability and reservations
+@router.get(
+    "/inventory/availability",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def get_availability(product_id: int, warehouse_id: int, request: Request):
+    with inventory_stub() as stub:
+        resp = _grpc_call(
+            stub.GetAvailability,
+            inventory_pb2.GetAvailabilityRequest(product_id=product_id, warehouse_id=warehouse_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {
+        "product_id": int(resp.product_id),
+        "warehouse_id": int(resp.warehouse_id),
+        "physical_qty": int(resp.physical_qty),
+        "reserved_qty": int(resp.reserved_qty),
+        "available_qty": int(resp.available_qty),
+    }
+
+
+@router.get(
+    "/inventory/reservations",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def list_reservations(
+    product_id: int | None = None,
+    warehouse_id: int | None = None,
+    status: str | None = None,
+    request: Request = None,
+):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ListReservationsRequest()
+        if product_id is not None:
+            req.product_id = product_id
+        if warehouse_id is not None:
+            req.warehouse_id = warehouse_id
+        if status is not None:
+            req.status = status
+        resp = _grpc_call(
+            stub.ListReservations,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return [
+        {
+            "id": int(r.id),
+            "source_type": r.source_type,
+            "source_id": int(r.source_id) if r.source_id else None,
+            "document_id": int(r.document_id) if r.document_id else None,
+            "product_id": int(r.product_id),
+            "warehouse_id": int(r.warehouse_id),
+            "requested_qty": int(r.requested_qty),
+            "reserved_qty": int(r.reserved_qty),
+            "released_qty": int(r.released_qty),
+            "consumed_qty": int(r.consumed_qty),
+            "status": r.status,
+            "expires_at": r.expires_at if r.expires_at else None,
+            "created_by": r.created_by if r.created_by else None,
+            "created_at": r.created_at if r.created_at else None,
+        }
+        for r in resp.reservations
+    ]
+
+
+@router.post(
+    "/inventory/reservations/{reservation_id}/release",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def release_reservation(reservation_id: int, released_qty: int | None = None, request: Request = None):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ReleaseReservationRequest(reservation_id=reservation_id)
+        if released_qty is not None:
+            req.released_qty = released_qty
+        resp = _grpc_call(
+            stub.ReleaseReservation,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {"success": bool(resp.success)}
+
+
 @router.get(
     "/users",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],

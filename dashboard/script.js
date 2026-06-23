@@ -993,14 +993,18 @@ async function loadInventory() {
                         <tr>
                             <th>Product</th>
                             <th>Warehouse Name</th>
-                            <th>Quantity</th>
+                            <th>Physical</th>
+                            <th>Reserved</th>
+                            <th>Available</th>
                             <th>Unit Price</th>
                             <th>Total Value</th>
                         </tr>
                         <tr class="filter-row">
                             <th><input type="text" class="filter-input" data-column="product" placeholder="Filter Product" onkeyup="applyInventoryFilters()"></th>
                             <th><input type="text" class="filter-input" data-column="warehouse" placeholder="Filter Warehouse" onkeyup="applyInventoryFilters()"></th>
-                            <th><input type="text" class="filter-input" data-column="quantity" placeholder="Filter Qty" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="physical" placeholder="Filter Physical" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="reserved" placeholder="Filter Reserved" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="available" placeholder="Filter Available" onkeyup="applyInventoryFilters()"></th>
                             <th><input type="text" class="filter-input" data-column="price" placeholder="Filter Price" onkeyup="applyInventoryFilters()"></th>
                             <th><input type="text" class="filter-input" data-column="value" placeholder="Filter Value" onkeyup="applyInventoryFilters()"></th>
                         </tr>
@@ -1018,12 +1022,18 @@ async function loadInventory() {
                                     : (item.warehouse_name && item.warehouse_name !== String(item.warehouse_id))
                                         ? item.warehouse_name
                                         : `Warehouse ${item.warehouse_id}`;
-                            const totalValue = (product?.price || 0) * item.quantity;
+                            // Phase 5: Use quantity matrix fields with fallbacks for backward compatibility
+                            const physicalQty = item.physical_qty ?? item.quantity ?? 0;
+                            const reservedQty = item.reserved_qty ?? 0;
+                            const availableQty = item.available_qty ?? (physicalQty - reservedQty);
+                            const totalValue = (product?.price || 0) * physicalQty;
                             return `
                                 <tr>
                                     <td>${product ? product.name : `Product ${item.product_id}`}</td>
                                     <td>${warehouseName}</td>
-                                    <td>${item.quantity}</td>
+                                    <td>${physicalQty}</td>
+                                    <td>${reservedQty}</td>
+                                    <td>${availableQty}</td>
                                     <td>$${((product?.price || 0).toFixed(2))}</td>
                                     <td>$${totalValue.toFixed(2)}</td>
                                 </tr>
