@@ -635,6 +635,22 @@ def post_document(document_id: int, payload: PostDocumentPayload, request: Reque
     return {"message": resp.message}
 
 
+# Phase 7: Approve without stock movement
+@router.post(
+    "/documents/{document_id}/approve",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def approve_document(document_id: int, payload: PostDocumentPayload, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ApproveRequest,
+            documents_pb2.ApproveRequestRequest(document_id=document_id, approved_by=payload.approved_by),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
 @router.get(
     "/documents/{document_id}",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],

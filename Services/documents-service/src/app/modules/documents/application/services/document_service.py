@@ -143,6 +143,46 @@ class DocumentService:
         self._publish_document_posted(document, request_id)
         return document
 
+    # Phase 7: Approve without stock movement
+    def approve_request(
+        self,
+        document_id: int,
+        approved_by: str,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Approve a document without triggering stock movement.
+        
+        This is the new lifecycle method that only changes document status
+        and approval metadata. It does NOT emit InventoryMovementRequested.
+        """
+        from datetime import datetime
+
+        document = self.get_document(document_id)
+        if document.status == DocumentStatus.CANCELLED:
+            raise InvalidDocumentStatusError(f"Cannot approve cancelled document {document_id}")
+        if document.status == DocumentStatus.POSTED:
+            if approved_by and document.approved_by and approved_by != document.approved_by:
+                raise InvalidDocumentStatusError(
+                    f"Document {document_id} has already been approved by {document.approved_by}"
+                )
+            return document
+
+        # Only change status and approval metadata - no stock movement
+        document.status = DocumentStatus.POSTED
+        document.approved_by = approved_by
+        document.approved_at = datetime.now()
+        document.posted_at = datetime.now()  # For backward compatibility
+
+        self.document_repo.save(document)
+        self._commit_if_needed()
+        
+        # Only publish DocumentPosted, NOT InventoryMovementRequested
+        self.event_publisher.publish(
+            event_type="DocumentPosted",
+            payload=document.posted_event_payload(request_id),
+        )
+        return document
+
     def cancel_document(
         self,
         document_id: int,

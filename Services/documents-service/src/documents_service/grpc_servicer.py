@@ -165,6 +165,28 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             except Exception:
                 pass
 
+    # Phase 7: Approve without stock movement
+    def ApproveRequest(self, request: documents_pb2.ApproveRequestRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            service.approve_request(
+                int(request.document_id),
+                request.approved_by or "system",
+                request_id=self._request_id(context),
+            )
+            return documents_pb2.ApproveRequestResponse(
+                message=f"Document {int(request.document_id)} approved successfully"
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.ApproveRequestResponse(message=str(exc))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
     def GetDocument(self, request: documents_pb2.GetDocumentRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:

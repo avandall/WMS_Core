@@ -11,6 +11,8 @@ service DocumentsService {
   rpc GetDocument(GetDocumentRequest) returns (Document);
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
   rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+  // Phase 7: Approve without stock movement
+  rpc ApproveRequest(ApproveRequestRequest) returns (ApproveRequestResponse);
 }
 
 message DocumentItem {
@@ -74,6 +76,16 @@ message DeleteDocumentRequest {
 }
 
 message DeleteDocumentResponse {
+  string message = 1;
+}
+
+// Phase 7: Approve without stock movement
+message ApproveRequestRequest {
+  int64 document_id = 1;
+  string approved_by = 2;
+}
+
+message ApproveRequestResponse {
   string message = 1;
 }
 
