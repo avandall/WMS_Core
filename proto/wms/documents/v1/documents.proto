@@ -13,6 +13,9 @@ service DocumentsService {
   rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
   // Phase 7: Approve without stock movement
   rpc ApproveRequest(ApproveRequestRequest) returns (ApproveRequestResponse);
+  // Phase 8: Sales reservation workflow
+  rpc ReserveRequest(ReserveRequestRequest) returns (ReserveRequestResponse);
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
 }
 
 message DocumentItem {
@@ -86,6 +89,23 @@ message ApproveRequestRequest {
 }
 
 message ApproveRequestResponse {
+  string message = 1;
+}
+
+// Phase 8: Sales reservation workflow
+message ReserveRequestRequest {
+  int64 document_id = 1;
+}
+
+message ReserveRequestResponse {
+  string message = 1;
+}
+
+message ReleaseReservationRequest {
+  int64 document_id = 1;
+}
+
+message ReleaseReservationResponse {
   string message = 1;
 }
 

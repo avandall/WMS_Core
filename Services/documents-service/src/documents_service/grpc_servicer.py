@@ -187,6 +187,47 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             except Exception:
                 pass
 
+    # Phase 8: Sales reservation workflow
+    def ReserveRequest(self, request: documents_pb2.ReserveRequestRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            service.reserve_request_stock(
+                int(request.document_id),
+                request_id=self._request_id(context),
+            )
+            return documents_pb2.ReserveRequestResponse(
+                message=f"Document {int(request.document_id)} stock reserved successfully"
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.ReserveRequestResponse(message=str(exc))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    def ReleaseReservation(self, request: documents_pb2.ReleaseReservationRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            service.release_request_reservation(
+                int(request.document_id),
+                request_id=self._request_id(context),
+            )
+            return documents_pb2.ReleaseReservationResponse(
+                message=f"Document {int(request.document_id)} reservation released successfully"
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.ReleaseReservationResponse(message=str(exc))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
     def GetDocument(self, request: documents_pb2.GetDocumentRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:

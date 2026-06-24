@@ -651,6 +651,37 @@ def approve_document(document_id: int, payload: PostDocumentPayload, request: Re
     return {"message": resp.message}
 
 
+# Phase 8: Sales reservation workflow
+@router.post(
+    "/documents/{document_id}/reserve",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def reserve_document(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ReserveRequest,
+            documents_pb2.ReserveRequestRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
+@router.post(
+    "/documents/{document_id}/release-reservation",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def release_document_reservation(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ReleaseReservation,
+            documents_pb2.ReleaseReservationRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
 @router.get(
     "/documents/{document_id}",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],

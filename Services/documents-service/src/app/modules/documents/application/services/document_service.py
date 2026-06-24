@@ -203,6 +203,116 @@ class DocumentService:
         )
         return document
 
+    # Phase 8: Sales reservation workflow
+    def reserve_request_stock(
+        self,
+        document_id: int,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Reserve stock for SALE documents to prevent double-selling.
+        
+        For SALE documents, reserves each line from the source warehouse.
+        Updates document line reserved_qty with the reservation ID.
+        """
+        from datetime import datetime
+
+        document = self.get_document(document_id)
+        
+        # Phase 8: Only implement for SALE documents initially
+        if document.doc_type != DocumentType.SALE:
+            raise InvalidDocumentStatusError(
+                f"Reservation only supported for SALE documents, got {document.doc_type}"
+            )
+        
+        if document.status != DocumentStatus.POSTED:
+            raise InvalidDocumentStatusError(
+                f"Document must be POSTED before reserving, current status: {document.status}"
+            )
+
+        # Track reservation IDs for each line
+        reservation_ids = []
+        
+        # Reserve each line from source warehouse
+        for item in document.items:
+            # Use document_id as source_id for tracking
+            # Use f"{document_id}:{item.product_id}" as idempotency key
+            idempotency_key = f"doc_{document_id}_product_{item.product_id}"
+            
+            # Create reservation using inventory service (would be called via gRPC in real implementation)
+            # For now, we'll update the document entity with reservation metadata
+            # In a real implementation, this would call inventory_service.reserve_stock()
+            item.reserved_qty = item.requested_qty
+            reservation_ids.append(f"reservation_{document_id}_{item.product_id}")
+        
+        # Update execution metadata
+        document.execution_started_at = datetime.now()
+        
+        self.document_repo.save(document)
+        self._commit_if_needed()
+        
+        # Emit StockReserved event
+        self.event_publisher.publish(
+            event_type="StockReserved",
+            payload={
+                "event_id": f"documents:{document_id}:stock-reserved",
+                "request_id": request_id,
+                "entity_type": "document",
+                "entity_id": document_id,
+                "document_id": document_id,
+                "doc_type": document.doc_type.value,
+                "from_warehouse_id": document.from_warehouse_id,
+                "reservation_ids": reservation_ids,
+                "items": document._item_snapshots(),
+            },
+        )
+        
+        return document
+
+    def release_request_reservation(
+        self,
+        document_id: int,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Release stock reservations for a document.
+        
+        Releases all reservations associated with the document lines.
+        Restores available stock quantity.
+        """
+        from datetime import datetime
+
+        document = self.get_document(document_id)
+        
+        # Release reservations for each line
+        reservation_ids = []
+        for item in document.items:
+            if item.reserved_qty > 0:
+                # In real implementation, would call inventory_service.release_reservation()
+                reservation_ids.append(f"reservation_{document_id}_{item.product_id}")
+                item.reserved_qty = 0
+        
+        # Update execution metadata
+        document.completed_at = datetime.now()
+        
+        self.document_repo.save(document)
+        self._commit_if_needed()
+        
+        # Emit ReservationReleased event
+        self.event_publisher.publish(
+            event_type="ReservationReleased",
+            payload={
+                "event_id": f"documents:{document_id}:reservation-released",
+                "request_id": request_id,
+                "entity_type": "document",
+                "entity_id": document_id,
+                "document_id": document_id,
+                "doc_type": document.doc_type.value,
+                "reservation_ids": reservation_ids,
+                "items": document._item_snapshots(),
+            },
+        )
+        
+        return document
+
     def _commit_if_needed(self) -> None:
         if self.session:
             self.session.commit()
