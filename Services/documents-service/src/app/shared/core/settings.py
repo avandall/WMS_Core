@@ -1,10 +1,12 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict, field_validator
+import json
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
+    # Để trống hoặc mặc định, không ép buộc phải nhập qua validator nữa
     database_url: str = ""
     db_pool_size: int = 50
     db_max_overflow: int = 30
@@ -32,19 +34,13 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
 
-    @field_validator("database_url")
-    @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        if not v:
-            raise ValueError("DATABASE_URL environment variable is required")
-        return v
+    # --- ĐÃ SỬA: Bỏ hàm validate_database_url cũ để cho phép nhận SQLite của run_all.py ---
 
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
         if v == "your-secret-key-here":
             import warnings
-
             warnings.warn(
                 "Using default secret key! Set SECRET_KEY environment variable in production.",
                 UserWarning,
@@ -60,6 +56,25 @@ class Settings(BaseSettings):
                 return False
             if normalized in {"debug", "dev", "development"}:
                 return True
+        return v
+
+    # --- ĐÃ THÊM: Bộ tự động sửa lỗi parse danh sách CORS khi run_all.py truyền vào dạng chuỗi "*" ---
+    @field_validator("cors_origins", "cors_allow_methods", "cors_allow_headers", mode="before")
+    @classmethod
+    def parse_string_to_list(cls, v):
+        if isinstance(v, str):
+            v_str = v.strip()
+            # Nếu truyền dấu sao đơn lẻ "*" từ run_all.py, tự động biến đổi thành ["*"]
+            if v_str == "*":
+                return ["*"]
+            # Nếu truyền dạng mảng JSON hợp lệ như ["http://localhost:3000"]
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    return json.loads(v_str)
+                except json.JSONDecodeError:
+                    pass
+            # Nếu truyền chuỗi phân tách bằng dấu phẩy: "origin1, origin2"
+            return [item.strip() for item in v_str.split(",") if item.strip()]
         return v
 
     model_config = ConfigDict(
