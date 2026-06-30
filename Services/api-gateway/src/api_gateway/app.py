@@ -19,7 +19,17 @@ from api_gateway.observability import METRICS
 
 
 def _csv_env(name: str, default: str) -> list[str]:
-    value = os.getenv(name, default)
+    value = os.getenv(name, default).strip()
+    # Nếu chuỗi truyền vào bọc bởi dấu ngoặc vuông mảng kiểu ["*"] hoặc ["http..."]
+    if value.startswith("[") and value.endswith("]"):
+        import json
+        try:
+            res = json.loads(value)
+            if isinstance(res, list):
+                return [str(item).strip() for item in res]
+        except Exception:
+            pass
+    # Ngược lại xử lý cắt dấu phẩy truyền thống
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
