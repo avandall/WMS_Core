@@ -33,6 +33,10 @@ def _bool_env(name: str, default: bool = False) -> bool:
 def create_app() -> FastAPI:
     app = FastAPI(title="API Gateway", version="0.1.0")
 
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "healthy"}
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_csv_env("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000"),
@@ -46,9 +50,7 @@ def create_app() -> FastAPI:
     app.middleware("http")(rate_limit_middleware)
     app.middleware("http")(request_id_middleware)
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "healthy"}
+    
 
     @app.get("/metrics")
     async def metrics() -> str:
