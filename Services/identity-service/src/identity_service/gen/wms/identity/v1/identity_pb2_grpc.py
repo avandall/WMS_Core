@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from wms.identity.v1 import identity_pb2 as identity__pb2
+from . import identity_pb2 as wms_dot_identity_dot_v1_dot_identity__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in identity_pb2_grpc.py depends on'
+        + ' but the generated code in wms/identity/v1/identity_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,23 +36,23 @@ class IdentityServiceStub(object):
         """
         self.ValidateToken = channel.unary_unary(
                 '/wms.identity.v1.IdentityService/ValidateToken',
-                request_serializer=identity__pb2.ValidateTokenRequest.SerializeToString,
-                response_deserializer=identity__pb2.ValidateTokenResponse.FromString,
+                request_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.ValidateTokenRequest.SerializeToString,
+                response_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.ValidateTokenResponse.FromString,
                 _registered_method=True)
         self.CreateUser = channel.unary_unary(
                 '/wms.identity.v1.IdentityService/CreateUser',
-                request_serializer=identity__pb2.CreateUserRequest.SerializeToString,
-                response_deserializer=identity__pb2.CreateUserResponse.FromString,
+                request_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.CreateUserRequest.SerializeToString,
+                response_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.CreateUserResponse.FromString,
                 _registered_method=True)
         self.DeleteUser = channel.unary_unary(
                 '/wms.identity.v1.IdentityService/DeleteUser',
-                request_serializer=identity__pb2.DeleteUserRequest.SerializeToString,
-                response_deserializer=identity__pb2.DeleteUserResponse.FromString,
+                request_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.DeleteUserRequest.SerializeToString,
+                response_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.DeleteUserResponse.FromString,
                 _registered_method=True)
         self.ListUsers = channel.unary_unary(
                 '/wms.identity.v1.IdentityService/ListUsers',
-                request_serializer=identity__pb2.ListUsersRequest.SerializeToString,
-                response_deserializer=identity__pb2.ListUsersResponse.FromString,
+                request_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.ListUsersRequest.SerializeToString,
+                response_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.ListUsersResponse.FromString,
                 _registered_method=True)
 
 
@@ -88,23 +88,23 @@ def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'ValidateToken': grpc.unary_unary_rpc_method_handler(
                     servicer.ValidateToken,
-                    request_deserializer=identity__pb2.ValidateTokenRequest.FromString,
-                    response_serializer=identity__pb2.ValidateTokenResponse.SerializeToString,
+                    request_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.ValidateTokenRequest.FromString,
+                    response_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.ValidateTokenResponse.SerializeToString,
             ),
             'CreateUser': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateUser,
-                    request_deserializer=identity__pb2.CreateUserRequest.FromString,
-                    response_serializer=identity__pb2.CreateUserResponse.SerializeToString,
+                    request_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.CreateUserRequest.FromString,
+                    response_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.CreateUserResponse.SerializeToString,
             ),
             'DeleteUser': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteUser,
-                    request_deserializer=identity__pb2.DeleteUserRequest.FromString,
-                    response_serializer=identity__pb2.DeleteUserResponse.SerializeToString,
+                    request_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.DeleteUserRequest.FromString,
+                    response_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.DeleteUserResponse.SerializeToString,
             ),
             'ListUsers': grpc.unary_unary_rpc_method_handler(
                     servicer.ListUsers,
-                    request_deserializer=identity__pb2.ListUsersRequest.FromString,
-                    response_serializer=identity__pb2.ListUsersResponse.SerializeToString,
+                    request_deserializer=wms_dot_identity_dot_v1_dot_identity__pb2.ListUsersRequest.FromString,
+                    response_serializer=wms_dot_identity_dot_v1_dot_identity__pb2.ListUsersResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -132,8 +132,8 @@ class IdentityService(object):
             request,
             target,
             '/wms.identity.v1.IdentityService/ValidateToken',
-            identity__pb2.ValidateTokenRequest.SerializeToString,
-            identity__pb2.ValidateTokenResponse.FromString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.ValidateTokenRequest.SerializeToString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.ValidateTokenResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -159,8 +159,8 @@ class IdentityService(object):
             request,
             target,
             '/wms.identity.v1.IdentityService/CreateUser',
-            identity__pb2.CreateUserRequest.SerializeToString,
-            identity__pb2.CreateUserResponse.FromString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.CreateUserRequest.SerializeToString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.CreateUserResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -186,8 +186,8 @@ class IdentityService(object):
             request,
             target,
             '/wms.identity.v1.IdentityService/DeleteUser',
-            identity__pb2.DeleteUserRequest.SerializeToString,
-            identity__pb2.DeleteUserResponse.FromString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.DeleteUserRequest.SerializeToString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.DeleteUserResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -213,8 +213,8 @@ class IdentityService(object):
             request,
             target,
             '/wms.identity.v1.IdentityService/ListUsers',
-            identity__pb2.ListUsersRequest.SerializeToString,
-            identity__pb2.ListUsersResponse.FromString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.ListUsersRequest.SerializeToString,
+            wms_dot_identity_dot_v1_dot_identity__pb2.ListUsersResponse.FromString,
             options,
             channel_credentials,
             insecure,

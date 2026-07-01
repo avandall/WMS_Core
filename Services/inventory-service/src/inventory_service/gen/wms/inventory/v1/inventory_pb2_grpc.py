@@ -49,6 +49,26 @@ class InventoryServiceStub(object):
                 request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetProductQuantityRequest.SerializeToString,
                 response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetProductQuantityResponse.FromString,
                 _registered_method=True)
+        self.GetAvailability = channel.unary_unary(
+                '/wms.inventory.v1.InventoryService/GetAvailability',
+                request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetAvailabilityRequest.SerializeToString,
+                response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetAvailabilityResponse.FromString,
+                _registered_method=True)
+        self.ListReservations = channel.unary_unary(
+                '/wms.inventory.v1.InventoryService/ListReservations',
+                request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListReservationsRequest.SerializeToString,
+                response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListReservationsResponse.FromString,
+                _registered_method=True)
+        self.ReleaseReservation = channel.unary_unary(
+                '/wms.inventory.v1.InventoryService/ReleaseReservation',
+                request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ReleaseReservationRequest.SerializeToString,
+                response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ReleaseReservationResponse.FromString,
+                _registered_method=True)
+        self.ListTransactions = channel.unary_unary(
+                '/wms.inventory.v1.InventoryService/ListTransactions',
+                request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsRequest.SerializeToString,
+                response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsResponse.FromString,
+                _registered_method=True)
 
 
 class InventoryServiceServicer(object):
@@ -72,6 +92,32 @@ class InventoryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAvailability(self, request, context):
+        """Phase 5: Availability and reservations
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListReservations(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReleaseReservation(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTransactions(self, request, context):
+        """Phase 9: Inventory transaction ledger
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InventoryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -89,6 +135,26 @@ def add_InventoryServiceServicer_to_server(servicer, server):
                     servicer.GetProductQuantity,
                     request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetProductQuantityRequest.FromString,
                     response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetProductQuantityResponse.SerializeToString,
+            ),
+            'GetAvailability': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAvailability,
+                    request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetAvailabilityRequest.FromString,
+                    response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.GetAvailabilityResponse.SerializeToString,
+            ),
+            'ListReservations': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListReservations,
+                    request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListReservationsRequest.FromString,
+                    response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListReservationsResponse.SerializeToString,
+            ),
+            'ReleaseReservation': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReleaseReservation,
+                    request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ReleaseReservationRequest.FromString,
+                    response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ReleaseReservationResponse.SerializeToString,
+            ),
+            'ListTransactions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTransactions,
+                    request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsRequest.FromString,
+                    response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -172,6 +238,114 @@ class InventoryService(object):
             '/wms.inventory.v1.InventoryService/GetProductQuantity',
             wms_dot_inventory_dot_v1_dot_inventory__pb2.GetProductQuantityRequest.SerializeToString,
             wms_dot_inventory_dot_v1_dot_inventory__pb2.GetProductQuantityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAvailability(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.inventory.v1.InventoryService/GetAvailability',
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.GetAvailabilityRequest.SerializeToString,
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.GetAvailabilityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListReservations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.inventory.v1.InventoryService/ListReservations',
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ListReservationsRequest.SerializeToString,
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ListReservationsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReleaseReservation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.inventory.v1.InventoryService/ReleaseReservation',
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ReleaseReservationRequest.SerializeToString,
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ReleaseReservationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTransactions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.inventory.v1.InventoryService/ListTransactions',
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsRequest.SerializeToString,
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsResponse.FromString,
             options,
             channel_credentials,
             insecure,

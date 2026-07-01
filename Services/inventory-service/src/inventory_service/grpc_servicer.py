@@ -223,5 +223,55 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             except Exception:
                 pass
 
+    # Phase 9: Inventory transaction ledger
+    def ListTransactions(
+        self, request: inventory_pb2.ListTransactionsRequest, context: grpc.ServicerContext
+    ):
+        service, db = self._service()
+        try:
+            transactions = service.inventory_repo.list_transactions(
+                document_id=int(request.document_id) if request.HasField("document_id") else None,
+                product_id=int(request.product_id) if request.HasField("product_id") else None,
+                warehouse_id=int(request.warehouse_id) if request.HasField("warehouse_id") else None,
+                transaction_type=request.transaction_type if request.HasField("transaction_type") else None,
+                limit=int(request.limit) if request.HasField("limit") else 100,
+                offset=int(request.offset) if request.HasField("offset") else 0,
+            )
+            
+            transaction_rows = []
+            for tx in transactions:
+                transaction_rows.append(
+                    inventory_pb2.TransactionRow(
+                        id=tx.get("id"),
+                        transaction_type=tx.get("transaction_type"),
+                        document_id=tx.get("document_id"),
+                        document_line_id=tx.get("document_line_id"),
+                        product_id=tx.get("product_id"),
+                        warehouse_id=tx.get("warehouse_id"),
+                        quantity=tx.get("quantity"),
+                        physical_qty_before=tx.get("physical_qty_before"),
+                        physical_qty_after=tx.get("physical_qty_after"),
+                        reserved_qty_before=tx.get("reserved_qty_before"),
+                        reserved_qty_after=tx.get("reserved_qty_after"),
+                        available_qty_before=tx.get("available_qty_before"),
+                        available_qty_after=tx.get("available_qty_after"),
+                        user_id=tx.get("user_id"),
+                        created_at=tx.get("created_at"),
+                        payload=str(tx.get("payload")) if tx.get("payload") else "",
+                        idempotency_key=tx.get("idempotency_key"),
+                    )
+                )
+            
+            return inventory_pb2.ListTransactionsResponse(transactions=transaction_rows)
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(exc))
+            return inventory_pb2.ListTransactionsResponse(transactions=[])
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server

@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.inventory.infrastructure.models.inventory import InventoryModel
+from app.modules.inventory.infrastructure.models.inventory_transaction import InventoryTransactionModel
 from app.modules.inventory.infrastructure.models.movement_ledger import InventoryMovementLedgerModel
 from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
 
@@ -395,3 +396,126 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "reserved_qty": int(warehouse_row.reserved_qty),
             "available_qty": int(warehouse_row.physical_qty - warehouse_row.reserved_qty),
         }
+
+    # Phase 9: Inventory transaction ledger methods
+    def write_transaction(
+        self,
+        transaction_type: str,
+        product_id: int,
+        warehouse_id: int,
+        quantity: int,
+        physical_qty_before: Optional[int] = None,
+        physical_qty_after: Optional[int] = None,
+        reserved_qty_before: Optional[int] = None,
+        reserved_qty_after: Optional[int] = None,
+        available_qty_before: Optional[int] = None,
+        available_qty_after: Optional[int] = None,
+        document_id: Optional[int] = None,
+        document_line_id: Optional[int] = None,
+        user_id: Optional[str] = None,
+        payload: Optional[dict] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> dict:
+        """Write an inventory transaction to the ledger with idempotency."""
+        # Check for existing transaction with same idempotency key
+        if idempotency_key:
+            existing = self.session.execute(
+                select(InventoryTransactionModel).where(
+                    InventoryTransactionModel.idempotency_key == idempotency_key
+                )
+            ).scalar_one_or_none()
+            if existing:
+                # Return existing transaction (idempotent)
+                return {
+                    "id": int(existing.id),
+                    "transaction_type": existing.transaction_type,
+                    "document_id": int(existing.document_id) if existing.document_id else None,
+                    "document_line_id": existing.document_line_id,
+                    "product_id": int(existing.product_id),
+                    "warehouse_id": int(existing.warehouse_id),
+                    "quantity": int(existing.quantity),
+                    "created_at": existing.created_at.isoformat() if existing.created_at else None,
+                    "idempotency_key": existing.idempotency_key,
+                }
+
+        # Create new transaction
+        transaction = InventoryTransactionModel(
+            transaction_type=transaction_type,
+            document_id=document_id,
+            document_line_id=document_line_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            quantity=quantity,
+            physical_qty_before=physical_qty_before,
+            physical_qty_after=physical_qty_after,
+            reserved_qty_before=reserved_qty_before,
+            reserved_qty_after=reserved_qty_after,
+            available_qty_before=available_qty_before,
+            available_qty_after=available_qty_after,
+            user_id=user_id,
+            payload=json.dumps(payload) if payload else None,
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(transaction)
+        self._commit_if_auto()
+
+        return {
+            "id": int(transaction.id),
+            "transaction_type": transaction.transaction_type,
+            "document_id": int(transaction.document_id) if transaction.document_id else None,
+            "document_line_id": transaction.document_line_id,
+            "product_id": int(transaction.product_id),
+            "warehouse_id": int(transaction.warehouse_id),
+            "quantity": int(transaction.quantity),
+            "created_at": transaction.created_at.isoformat() if transaction.created_at else None,
+            "idempotency_key": transaction.idempotency_key,
+        }
+
+    def list_transactions(
+        self,
+        document_id: Optional[int] = None,
+        product_id: Optional[int] = None,
+        warehouse_id: Optional[int] = None,
+        transaction_type: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[dict]:
+        """List inventory transactions with optional filtering."""
+        query = select(InventoryTransactionModel)
+        
+        if document_id:
+            query = query.where(InventoryTransactionModel.document_id == document_id)
+        if product_id:
+            query = query.where(InventoryTransactionModel.product_id == product_id)
+        if warehouse_id:
+            query = query.where(InventoryTransactionModel.warehouse_id == warehouse_id)
+        if transaction_type:
+            query = query.where(InventoryTransactionModel.transaction_type == transaction_type)
+
+        query = query.order_by(InventoryTransactionModel.created_at.desc())
+        query = query.limit(limit).offset(offset)
+
+        rows = self.session.execute(query).scalars().all()
+        
+        return [
+            {
+                "id": int(r.id),
+                "transaction_type": r.transaction_type,
+                "document_id": int(r.document_id) if r.document_id else None,
+                "document_line_id": r.document_line_id,
+                "product_id": int(r.product_id),
+                "warehouse_id": int(r.warehouse_id),
+                "quantity": int(r.quantity),
+                "physical_qty_before": int(r.physical_qty_before) if r.physical_qty_before is not None else None,
+                "physical_qty_after": int(r.physical_qty_after) if r.physical_qty_after is not None else None,
+                "reserved_qty_before": int(r.reserved_qty_before) if r.reserved_qty_before is not None else None,
+                "reserved_qty_after": int(r.reserved_qty_after) if r.reserved_qty_after is not None else None,
+                "available_qty_before": int(r.available_qty_before) if r.available_qty_before is not None else None,
+                "available_qty_after": int(r.available_qty_after) if r.available_qty_after is not None else None,
+                "user_id": r.user_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "payload": json.loads(r.payload) if r.payload else None,
+                "idempotency_key": r.idempotency_key,
+            }
+            for r in rows
+        ]

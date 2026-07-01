@@ -1317,6 +1317,63 @@ def release_reservation(reservation_id: int, released_qty: int | None = None, re
     return {"success": bool(resp.success)}
 
 
+# Phase 9: Inventory transaction ledger
+@router.get(
+    "/inventory/transactions",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def list_transactions(
+    document_id: int | None = None,
+    product_id: int | None = None,
+    warehouse_id: int | None = None,
+    transaction_type: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    request: Request = None,
+):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ListTransactionsRequest(limit=limit, offset=offset)
+        if document_id is not None:
+            req.document_id = document_id
+        if product_id is not None:
+            req.product_id = product_id
+        if warehouse_id is not None:
+            req.warehouse_id = warehouse_id
+        if transaction_type is not None:
+            req.transaction_type = transaction_type
+        resp = _grpc_call(
+            stub.ListTransactions,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {
+        "transactions": [
+            {
+                "id": tx.id,
+                "transaction_type": tx.transaction_type,
+                "document_id": tx.document_id,
+                "document_line_id": tx.document_line_id,
+                "product_id": tx.product_id,
+                "warehouse_id": tx.warehouse_id,
+                "quantity": tx.quantity,
+                "physical_qty_before": tx.physical_qty_before,
+                "physical_qty_after": tx.physical_qty_after,
+                "reserved_qty_before": tx.reserved_qty_before,
+                "reserved_qty_after": tx.reserved_qty_after,
+                "available_qty_before": tx.available_qty_before,
+                "available_qty_after": tx.available_qty_after,
+                "user_id": tx.user_id,
+                "created_at": tx.created_at,
+                "payload": tx.payload,
+                "idempotency_key": tx.idempotency_key,
+            }
+            for tx in resp.transactions
+        ]
+    }
+
+
 @router.get(
     "/users",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_USERS))],

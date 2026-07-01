@@ -10,6 +10,8 @@ service InventoryService {
   rpc GetAvailability(GetAvailabilityRequest) returns (GetAvailabilityResponse);
   rpc ListReservations(ListReservationsRequest) returns (ListReservationsResponse);
   rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+  // Phase 9: Inventory transaction ledger
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse);
 }
 
 message InventoryItem {
@@ -99,5 +101,39 @@ message ReleaseReservationRequest {
 
 message ReleaseReservationResponse {
   bool success = 1;
+}
+
+// Phase 9: Inventory transaction ledger
+message TransactionRow {
+  int64 id = 1;
+  string transaction_type = 2;
+  int64 document_id = 3;
+  int64 document_line_id = 4;
+  int64 product_id = 5;
+  int64 warehouse_id = 6;
+  int64 quantity = 7;
+  int64 physical_qty_before = 8;
+  int64 physical_qty_after = 9;
+  int64 reserved_qty_before = 10;
+  int64 reserved_qty_after = 11;
+  int64 available_qty_before = 12;
+  int64 available_qty_after = 13;
+  string user_id = 14;
+  string created_at = 15;
+  string payload = 16;
+  string idempotency_key = 17;
+}
+
+message ListTransactionsRequest {
+  int64 document_id = 1;
+  int64 product_id = 2;
+  int64 warehouse_id = 3;
+  string transaction_type = 4;
+  int64 limit = 5;
+  int64 offset = 6;
+}
+
+message ListTransactionsResponse {
+  repeated TransactionRow transactions = 1;
 }
 

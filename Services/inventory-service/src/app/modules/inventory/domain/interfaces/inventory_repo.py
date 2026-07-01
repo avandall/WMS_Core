@@ -103,6 +103,40 @@ class IInventoryRepo(ABC):
     def calculate_available_stock(self, product_id: int, warehouse_id: int) -> dict[str, Any]:
         pass
 
+    # Phase 9: Inventory transaction ledger methods
+    @abstractmethod
+    def write_transaction(
+        self,
+        transaction_type: str,
+        product_id: int,
+        warehouse_id: int,
+        quantity: int,
+        physical_qty_before: int | None = None,
+        physical_qty_after: int | None = None,
+        reserved_qty_before: int | None = None,
+        reserved_qty_after: int | None = None,
+        available_qty_before: int | None = None,
+        available_qty_after: int | None = None,
+        document_id: int | None = None,
+        document_line_id: int | None = None,
+        user_id: str | None = None,
+        payload: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def list_transactions(
+        self,
+        document_id: int | None = None,
+        product_id: int | None = None,
+        warehouse_id: int | None = None,
+        transaction_type: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        pass
+
 
 # Alias for backward compatibility
 InventoryRepo = IInventoryRepo
