@@ -190,10 +190,7 @@ class DocumentService:
         reason: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
-        document = self.document_repo.get(document_id)
-        if not document:
-            raise DocumentNotFoundError(f"Document {document_id} not found")
-
+        document = self.get_document(document_id)  # raises DocumentNotFoundError if missing
         document.cancel(cancelled_by, reason)
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -234,13 +231,12 @@ class DocumentService:
         
         # Reserve each line from source warehouse
         for item in document.items:
-            # Use document_id as source_id for tracking
-            # Use f"{document_id}:{item.product_id}" as idempotency key
-            idempotency_key = f"doc_{document_id}_product_{item.product_id}"
-            
-            # Create reservation using inventory service (would be called via gRPC in real implementation)
-            # For now, we'll update the document entity with reservation metadata
-            # In a real implementation, this would call inventory_service.reserve_stock()
+            # TODO(Phase 8 → future): wire this to a real inventory service call via gRPC or
+            # an application-layer port so that InventoryRepo.create_reservation() is called,
+            # the ATP check is enforced, and a real stock_reservations row is written.
+            # Currently this only updates the document entity in-memory (and persists via
+            # document_repo.save below). The StockReserved event carries placeholder IDs.
+            idempotency_key = f"doc_{document_id}_product_{item.product_id}"  # noqa: F841
             item.reserved_qty = item.requested_qty
             reservation_ids.append(f"reservation_{document_id}_{item.product_id}")
         

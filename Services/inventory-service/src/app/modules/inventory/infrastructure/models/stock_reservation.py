@@ -25,7 +25,10 @@ class StockReservationModel(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Phase 4: Idempotency key to prevent duplicate reservations
-    idempotency_key = Column(String(255), nullable=True, unique=True)
+    # NOTE: unique=True is intentionally NOT set here; the named constraint in
+    # __table_args__ (uq_stock_reservation_idempotency) handles uniqueness so that
+    # PostgreSQL does not create two separate UNIQUE indexes on the same column.
+    idempotency_key = Column(String(255), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_stock_reservation_idempotency"),

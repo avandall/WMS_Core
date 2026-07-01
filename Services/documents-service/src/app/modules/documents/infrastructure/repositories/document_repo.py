@@ -52,6 +52,14 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
                 posted_at=document.posted_at,
                 cancelled_at=document.cancelled_at,
                 cancellation_reason=document.cancellation_reason,
+                # Phase 6: lifecycle fields (set on creation too)
+                transaction_type=getattr(document, "transaction_type", None),
+                reason_code=getattr(document, "reason_code", None),
+                requested_by=getattr(document, "requested_by", None),
+                approved_at=getattr(document, "approved_at", None),
+                execution_started_at=getattr(document, "execution_started_at", None),
+                completed_at=getattr(document, "completed_at", None),
+                assigned_to=getattr(document, "assigned_to", None),
             )
             self.session.add(model)
         else:
@@ -67,17 +75,32 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
             model.posted_at = document.posted_at
             model.cancelled_at = document.cancelled_at
             model.cancellation_reason = document.cancellation_reason
+            # Phase 6: Persist all lifecycle fields on update
+            model.transaction_type = getattr(document, "transaction_type", None)
+            model.reason_code = getattr(document, "reason_code", None)
+            model.requested_by = getattr(document, "requested_by", None)
+            model.approved_at = getattr(document, "approved_at", None)
+            model.execution_started_at = getattr(document, "execution_started_at", None)
+            model.completed_at = getattr(document, "completed_at", None)
+            model.assigned_to = getattr(document, "assigned_to", None)
 
             # Clear existing items before re-adding
             model.items.clear()
 
-        # Replace items with current state
+        # Replace items with current state (Phase 6 line fields included)
         for item in document.items:
             model.items.append(
                 DocumentItemModel(
                     product_id=item.product_id,
                     quantity=item.quantity,
                     unit_price=item.unit_price,
+                    # Phase 6: Persist line lifecycle fields
+                    requested_qty=getattr(item, "requested_qty", item.quantity),
+                    reserved_qty=getattr(item, "reserved_qty", 0),
+                    executed_qty=getattr(item, "executed_qty", None),
+                    rejected_qty=getattr(item, "rejected_qty", 0),
+                    difference_qty=getattr(item, "difference_qty", 0),
+                    execution_status=getattr(item, "execution_status", None),
                 )
             )
 
@@ -107,14 +130,22 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
 
     @staticmethod
     def _to_domain(model: DocumentModel) -> Document:
-        items = [
-            DocumentProduct(
+        items = []
+        for item in model.items:
+            dp = DocumentProduct(
                 product_id=item.product_id,
                 quantity=item.quantity,
                 unit_price=item.unit_price,
             )
-            for item in model.items
-        ]
+            # Phase 6: Restore line lifecycle fields from DB
+            dp.requested_qty = item.requested_qty if item.requested_qty is not None else item.quantity
+            dp.reserved_qty = item.reserved_qty if item.reserved_qty is not None else 0
+            dp.executed_qty = item.executed_qty
+            dp.rejected_qty = item.rejected_qty if item.rejected_qty is not None else 0
+            dp.difference_qty = item.difference_qty if item.difference_qty is not None else 0
+            dp.execution_status = item.execution_status
+            items.append(dp)
+
         document = Document(
             document_id=model.document_id,
             doc_type=DocumentType(model.doc_type),
@@ -132,4 +163,13 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
         document.cancelled_by = getattr(model, "cancelled_by", None)
         document.cancellation_reason = model.cancellation_reason
         document.approved_by = model.approved_by
+        # Phase 6: Restore header lifecycle fields from DB
+        document.transaction_type = getattr(model, "transaction_type", None)
+        document.reason_code = getattr(model, "reason_code", None)
+        document.requested_by = getattr(model, "requested_by", None)
+        document.approved_at = getattr(model, "approved_at", None)
+        document.execution_started_at = getattr(model, "execution_started_at", None)
+        document.completed_at = getattr(model, "completed_at", None)
+        document.assigned_to = getattr(model, "assigned_to", None)
         return document
+

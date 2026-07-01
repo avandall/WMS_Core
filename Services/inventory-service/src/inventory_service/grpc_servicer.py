@@ -154,10 +154,12 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
     ):
         service, db = self._service()
         try:
-            product_id = int(request.product_id) if request.HasField("product_id") else None
-            warehouse_id = int(request.warehouse_id) if request.HasField("warehouse_id") else None
+            # In proto3, HasField() only works on message/oneof fields, not scalars.
+            # Use the default zero-value as the sentinel for "not set".
+            product_id = int(request.product_id) if request.product_id != 0 else None
+            warehouse_id = int(request.warehouse_id) if request.warehouse_id != 0 else None
             status = request.status if request.status else None
-            
+
             reservations = service.inventory_repo.list_reservations(
                 product_id=product_id,
                 warehouse_id=warehouse_id,
@@ -203,7 +205,8 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
     ):
         service, db = self._service()
         try:
-            released_qty = int(request.released_qty) if request.HasField("released_qty") else None
+            # In proto3, 0 is the default for int64; treat 0 as "release all".
+            released_qty = int(request.released_qty) if request.released_qty != 0 else None
             service.release_reservation(reservation_id=int(request.reservation_id), released_qty=released_qty)
             self._publisher.publish(
                 event_type="ReservationReleased",
@@ -229,15 +232,17 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
     ):
         service, db = self._service()
         try:
+            # In proto3, HasField() raises ValueError on scalar fields.
+            # Use zero-value convention: 0 means "no filter", "" means "no filter".
             transactions = service.inventory_repo.list_transactions(
-                document_id=int(request.document_id) if request.HasField("document_id") else None,
-                product_id=int(request.product_id) if request.HasField("product_id") else None,
-                warehouse_id=int(request.warehouse_id) if request.HasField("warehouse_id") else None,
-                transaction_type=request.transaction_type if request.HasField("transaction_type") else None,
-                limit=int(request.limit) if request.HasField("limit") else 100,
-                offset=int(request.offset) if request.HasField("offset") else 0,
+                document_id=int(request.document_id) if request.document_id != 0 else None,
+                product_id=int(request.product_id) if request.product_id != 0 else None,
+                warehouse_id=int(request.warehouse_id) if request.warehouse_id != 0 else None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                limit=int(request.limit) if request.limit != 0 else 100,
+                offset=int(request.offset) if request.offset != 0 else 0,
             )
-            
+
             transaction_rows = []
             for tx in transactions:
                 transaction_rows.append(

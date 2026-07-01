@@ -80,6 +80,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 product_id=product_id,
                 warehouse_id=warehouse_id,
                 quantity=quantity_delta,
+                # Phase 2: keep physical_qty in sync with quantity for new rows
+                physical_qty=quantity_delta,
             )
             self.session.add(row)
         else:
@@ -89,7 +91,10 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                     f"Insufficient warehouse stock. Available: {row.quantity}, Requested: {abs(quantity_delta)}"
                 )
             row.quantity = next_quantity
+            # Phase 2: keep physical_qty in sync with quantity on every update
+            row.physical_qty = next_quantity
         self._commit_if_auto()
+
 
     def get_quantity(self, product_id: int) -> int:
         row = self.session.get(InventoryModel, product_id)
