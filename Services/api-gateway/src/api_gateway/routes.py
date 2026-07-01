@@ -743,7 +743,33 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
     doc_type = (doc.doc_type or "").upper()
     tx_type = (doc.transaction_type or "").upper()
 
-    if doc_type in ("SALE", "SALES_SHIPMENT"):
+    REQUIRES_RESERVATION = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "TRANSFER_ISSUE"}
+    REQUIRES_REASON_CODE = {"ADJUSTMENT_IN", "ADJUSTMENT_OUT", "SCRAP", "INTERNAL_CONSUMPTION"}
+    OUTBOUND_TYPES = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "PURCHASE_RETURN_SHIPMENT", "TRANSFER_ISSUE", "INTERNAL_CONSUMPTION", "SCRAP", "ADJUSTMENT_OUT"}
+
+    # Resolve target transaction type
+    if tx_type:
+        target_tx_type = tx_type
+    else:
+        if doc_type in ("SALE", "SALES_SHIPMENT"):
+            target_tx_type = "SALES_SHIPMENT"
+        elif doc_type in ("IMPORT", "PURCHASE_RECEIPT"):
+            target_tx_type = "PURCHASE_RECEIPT"
+        elif doc_type in ("EXPORT", "SCRAP"):
+            target_tx_type = "SCRAP"
+        else:
+            target_tx_type = doc_type
+
+    # Validate reason code
+    if target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Reason code is required for {target_tx_type}")
+
+    # Determine warehouse and confirmation path
+    is_outbound = target_tx_type in OUTBOUND_TYPES
+    wh_id = doc.from_warehouse_id if is_outbound else (doc.to_warehouse_id or doc.from_warehouse_id)
+
+    if target_tx_type in REQUIRES_RESERVATION:
         with inventory_stub() as inv_stub:
             # Query reservations to find the matching ones for this document
             reservations_resp = _grpc_call(
@@ -762,14 +788,14 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
             for item in payload.items:
                 res = reservations_by_product.get(item.product_id)
                 res_id = res.id if res else 0
-                wh_id = res.warehouse_id if res else doc.from_warehouse_id
+                item_wh_id = res.warehouse_id if res else wh_id
 
                 _grpc_call(
                     inv_stub.ConfirmInventoryTransaction,
                     inventory_pb2.ConfirmInventoryTransactionRequest(
-                        transaction_type="SALES_SHIPMENT",
+                        transaction_type=target_tx_type,
                         product_id=item.product_id,
-                        warehouse_id=wh_id,
+                        warehouse_id=item_wh_id,
                         quantity=item.quantity,
                         reservation_id=res_id,
                         user_id="system",
@@ -778,18 +804,9 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
                     request=request,
                     timeout=GRPC_TIMEOUT_SLOW,
                 )
-
-    elif doc_type in ("IMPORT", "PURCHASE_RECEIPT", "PRODUCTION_RECEIPT", "SALES_RETURN_RECEIPT", "ADJUSTMENT_IN") or tx_type in ("PURCHASE_RECEIPT", "PRODUCTION_RECEIPT", "SALES_RETURN_RECEIPT", "ADJUSTMENT_IN"):
-        # Resolve target transaction type: fallback to PURCHASE_RECEIPT for IMPORT doc type if no transaction sub-type set
-        target_tx_type = tx_type if tx_type else "PURCHASE_RECEIPT"
-
-        if target_tx_type == "ADJUSTMENT_IN" and not doc.reason_code:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=400, detail="Reason code is required for ADJUSTMENT_IN")
-
+    else:
         with inventory_stub() as inv_stub:
             for item in payload.items:
-                wh_id = doc.to_warehouse_id if doc.to_warehouse_id else doc.from_warehouse_id
                 _grpc_call(
                     inv_stub.ConfirmInventoryTransaction,
                     inventory_pb2.ConfirmInventoryTransactionRequest(
@@ -797,7 +814,7 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
                         product_id=item.product_id,
                         warehouse_id=wh_id,
                         quantity=item.quantity,
-                        reservation_id=0,  # Direct physical quantity confirmation
+                        reservation_id=0,  # Direct stock confirmation
                         user_id="system",
                         idempotency_key=f"confirm_{document_id}_{item.product_id}",
                     ),

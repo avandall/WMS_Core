@@ -2319,17 +2319,36 @@ function updateDocumentForm() {
     const transactionTypeSelect = document.getElementById('transaction-type');
     const reasonCodeSelect = document.getElementById('reason-code');
 
-    if (docType === 'import') {
-        sourceGroup.style.display = 'none';
-        if (sourceSelect) sourceSelect.required = false;
-        destGroup.style.display = 'block';
-        if (destSelect) destSelect.required = true;
-        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
-        if (customerGroup) customerGroup.style.display = 'none';
-        
-        // Phase 12: show sub-type option
+    // Dynamically manage transaction sub-types and reason codes
+    if (docType === 'import' || docType === 'export') {
         if (transactionTypeGroup) transactionTypeGroup.style.display = 'block';
-        if (transactionTypeSelect && transactionTypeSelect.value === 'ADJUSTMENT_IN') {
+        
+        const isImportOptions = transactionTypeSelect && transactionTypeSelect.querySelector('option[value="PURCHASE_RECEIPT"]');
+        const isExportOptions = transactionTypeSelect && transactionTypeSelect.querySelector('option[value="PRODUCTION_ISSUE"]');
+        
+        if (docType === 'import' && !isImportOptions) {
+            transactionTypeSelect.innerHTML = `
+                <option value="">Select Sub-type</option>
+                <option value="PURCHASE_RECEIPT">Purchase Receipt</option>
+                <option value="PRODUCTION_RECEIPT">Production Receipt</option>
+                <option value="SALES_RETURN_RECEIPT">Sales Return Receipt</option>
+                <option value="ADJUSTMENT_IN">Adjustment In</option>
+            `;
+        } else if (docType === 'export' && !isExportOptions) {
+            transactionTypeSelect.innerHTML = `
+                <option value="">Select Sub-type</option>
+                <option value="PRODUCTION_ISSUE">Production Issue</option>
+                <option value="PURCHASE_RETURN_SHIPMENT">Purchase Return Shipment</option>
+                <option value="INTERNAL_CONSUMPTION">Internal Consumption</option>
+                <option value="SCRAP">Scrap</option>
+                <option value="ADJUSTMENT_OUT">Adjustment Out</option>
+            `;
+        }
+
+        const subVal = transactionTypeSelect ? transactionTypeSelect.value : '';
+        const requiresReason = ['ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'SCRAP', 'INTERNAL_CONSUMPTION'].includes(subVal);
+        
+        if (requiresReason) {
             if (reasonCodeGroup) reasonCodeGroup.style.display = 'block';
             if (reasonCodeSelect) reasonCodeSelect.required = true;
         } else {
@@ -2338,40 +2357,50 @@ function updateDocumentForm() {
         }
     } else {
         if (transactionTypeGroup) transactionTypeGroup.style.display = 'none';
-        if (transactionTypeSelect) transactionTypeSelect.value = '';
+        if (transactionTypeSelect) transactionTypeSelect.innerHTML = '<option value="">Select Sub-type</option>';
         if (reasonCodeGroup) reasonCodeGroup.style.display = 'none';
         if (reasonCodeSelect) { reasonCodeSelect.required = false; reasonCodeSelect.value = ''; }
-        
-        if (docType === 'export') {
-        sourceGroup.style.display = 'block';
-        if (sourceSelect) sourceSelect.required = true;
-        destGroup.style.display = 'none';
-        if (destSelect) destSelect.required = false;
-        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
-        if (customerGroup) customerGroup.style.display = 'none';
-    } else if (docType === 'transfer') {
-        sourceGroup.style.display = 'block';
-        if (sourceSelect) sourceSelect.required = true;
+    }
+
+    if (docType === 'import') {
+        sourceGroup.style.display = 'none';
+        if (sourceSelect) sourceSelect.required = false;
         destGroup.style.display = 'block';
         if (destSelect) destSelect.required = true;
-        priceInputs.forEach(inp => { inp.required = false; inp.style.display = 'none'; inp.value = ''; });
-        if (customerGroup) customerGroup.style.display = 'none';
-    } else if (docType === 'sale') {
-        sourceGroup.style.display = 'block';
-        if (sourceSelect) sourceSelect.required = true;
-        destGroup.style.display = 'none';
-        if (destSelect) destSelect.required = false;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
-        if (customerGroup) {
-            customerGroup.style.display = 'block';
-            const custSelect = document.getElementById('sale-customer');
-            if (custSelect) custSelect.required = true;
-        }
-        const salespersonGroup = document.getElementById('salesperson-group');
-        if (salespersonGroup) {
-            salespersonGroup.style.display = 'block';
-            const spSelect = document.getElementById('sale-salesperson');
-            if (spSelect) spSelect.required = true;
+        if (customerGroup) customerGroup.style.display = 'none';
+    } else {
+        if (docType === 'export') {
+            sourceGroup.style.display = 'block';
+            if (sourceSelect) sourceSelect.required = true;
+            destGroup.style.display = 'none';
+            if (destSelect) destSelect.required = false;
+            priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
+            if (customerGroup) customerGroup.style.display = 'none';
+        } else if (docType === 'transfer') {
+            sourceGroup.style.display = 'block';
+            if (sourceSelect) sourceSelect.required = true;
+            destGroup.style.display = 'block';
+            if (destSelect) destSelect.required = true;
+            priceInputs.forEach(inp => { inp.required = false; inp.style.display = 'none'; inp.value = ''; });
+            if (customerGroup) customerGroup.style.display = 'none';
+        } else if (docType === 'sale') {
+            sourceGroup.style.display = 'block';
+            if (sourceSelect) sourceSelect.required = true;
+            destGroup.style.display = 'none';
+            if (destSelect) destSelect.required = false;
+            priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
+            if (customerGroup) {
+                customerGroup.style.display = 'block';
+                const custSelect = document.getElementById('sale-customer');
+                if (custSelect) custSelect.required = true;
+            }
+            const salespersonGroup = document.getElementById('salesperson-group');
+            if (salespersonGroup) {
+                salespersonGroup.style.display = 'block';
+                const spSelect = document.getElementById('sale-salesperson');
+                if (spSelect) spSelect.required = true;
+            }
         }
     }
 

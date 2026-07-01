@@ -69,71 +69,67 @@ class RecordingPublisher:
 
 
 # ===========================================================================
-# Phase 12 – Inbound Execution Verification
+# Phase 13 – Outbound Non-Sales Execution Verification
 # ===========================================================================
-class TestProtoDefinitionsPhase12:
-    def test_proto_has_transaction_type_and_reason_code(self) -> None:
-        proto_file = ROOT_DIR / "proto/wms/documents/v1/documents.proto"
-        content = proto_file.read_text()
-        assert "string transaction_type = " in content
-        assert "string reason_code = " in content
-
-
-class TestDocumentServiceLogicPhase12:
-    def test_create_import_document_stores_transaction_type_and_reason_code(self) -> None:
+class TestDocumentServiceLogicPhase13:
+    def test_outbound_non_sales_reason_code_validations(self) -> None:
         repo = InMemoryDocumentRepo()
         publisher = RecordingPublisher()
         service = DocumentService(repo, event_publisher=publisher)
 
-        # Create IMPORT document with sub-type PURCHASE_RECEIPT
-        doc = service.create_import_document(
-            to_warehouse_id=2,
+        # ADJUSTMENT_OUT
+        doc1 = service.create_export_document(
+            from_warehouse_id=1,
             items=[{"product_id": 202, "quantity": 10, "unit_price": 5.0}],
             created_by="tester",
-            transaction_type="PURCHASE_RECEIPT",
-            reason_code="EXPIRY_REPLACEMENT"
-        )
-        assert doc.transaction_type == "PURCHASE_RECEIPT"
-        assert doc.reason_code == "EXPIRY_REPLACEMENT"
-
-        saved_doc = repo.get(doc.document_id)
-        assert saved_doc is not None
-        assert saved_doc.transaction_type == "PURCHASE_RECEIPT"
-        assert saved_doc.reason_code == "EXPIRY_REPLACEMENT"
-
-    def test_adjustment_in_requires_reason_code(self) -> None:
-        repo = InMemoryDocumentRepo()
-        publisher = RecordingPublisher()
-        service = DocumentService(repo, event_publisher=publisher)
-
-        # Create ADJUSTMENT_IN without reason code
-        doc = service.create_import_document(
-            to_warehouse_id=2,
-            items=[{"product_id": 202, "quantity": 10, "unit_price": 0.0}],
-            created_by="tester",
-            transaction_type="ADJUSTMENT_IN",
+            transaction_type="ADJUSTMENT_OUT",
             reason_code=None
         )
-        assert doc.transaction_type == "ADJUSTMENT_IN"
-        assert doc.reason_code is None
+        service.start_execution(doc1.document_id)
+        with pytest.raises(ValidationError, match="Reason code is required for ADJUSTMENT_OUT"):
+            service.confirm_execution(doc1.document_id, [{"product_id": 202, "quantity": 10}])
 
-        # Verify validation error is raised during confirm_execution
-        service.start_execution(doc.document_id)
-        with pytest.raises(ValidationError, match="Reason code is required for ADJUSTMENT_IN"):
-            service.confirm_execution(doc.document_id, [{"product_id": 202, "quantity": 10}])
+        # SCRAP
+        doc2 = service.create_export_document(
+            from_warehouse_id=1,
+            items=[{"product_id": 202, "quantity": 10, "unit_price": 5.0}],
+            created_by="tester",
+            transaction_type="SCRAP",
+            reason_code=None
+        )
+        service.start_execution(doc2.document_id)
+        with pytest.raises(ValidationError, match="Reason code is required for SCRAP"):
+            service.confirm_execution(doc2.document_id, [{"product_id": 202, "quantity": 10}])
 
-        # Setting reason code should allow confirming
-        doc.reason_code = "DAMAGE"
-        repo.save(doc)
-        service.confirm_execution(doc.document_id, [{"product_id": 202, "quantity": 10}])
-        assert repo.get(doc.document_id).status == DocumentStatus.EXECUTED
+        # INTERNAL_CONSUMPTION
+        doc3 = service.create_export_document(
+            from_warehouse_id=1,
+            items=[{"product_id": 202, "quantity": 10, "unit_price": 5.0}],
+            created_by="tester",
+            transaction_type="INTERNAL_CONSUMPTION",
+            reason_code=None
+        )
+        service.start_execution(doc3.document_id)
+        with pytest.raises(ValidationError, match="Reason code is required for INTERNAL_CONSUMPTION"):
+            service.confirm_execution(doc3.document_id, [{"product_id": 202, "quantity": 10}])
+
+        # PURCHASE_RETURN_SHIPMENT (does not require reason code)
+        doc4 = service.create_export_document(
+            from_warehouse_id=1,
+            items=[{"product_id": 202, "quantity": 10, "unit_price": 5.0}],
+            created_by="tester",
+            transaction_type="PURCHASE_RETURN_SHIPMENT",
+            reason_code=None
+        )
+        service.start_execution(doc4.document_id)
+        service.confirm_execution(doc4.document_id, [{"product_id": 202, "quantity": 10}])
+        assert repo.get(doc4.document_id).status == DocumentStatus.EXECUTED
 
 
-class TestApiGatewayRoutesPhase12:
-    def test_routes_pass_new_fields(self) -> None:
+class TestApiGatewayRoutesPhase13:
+    def test_routes_generalize_stock_coordination(self) -> None:
         routes_file = ROOT_DIR / "Services/api-gateway/src/api_gateway/routes.py"
         content = routes_file.read_text()
-        assert "transaction_type=payload.transaction_type or" in content
-        assert "reason_code=payload.reason_code or" in content
-        assert 'target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code' in content
-        assert "ConfirmInventoryTransactionRequest" in content
+        assert "target_tx_type in REQUIRES_RESERVATION" in content
+        assert "target_tx_type in REQUIRES_REASON_CODE" in content
+        assert "is_outbound = target_tx_type in OUTBOUND_TYPES" in content

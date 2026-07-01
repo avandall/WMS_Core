@@ -14,6 +14,7 @@ from app.modules.documents.domain.entities.document import (
 )
 from app.modules.documents.domain.exceptions import InvalidDocumentStatusError, DocumentNotFoundError
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
+from app.modules.documents.domain.transaction_types import REQUIRES_REASON_CODE, REQUIRES_RESERVATION
 from app.shared.domain.business_exceptions import InvalidQuantityError, ValidationError
 from app.shared.utils.infrastructure import document_id_generator
 
@@ -371,9 +372,9 @@ class DocumentService:
                 f"Document must be IN_PROGRESS or POSTED/RESERVED before confirming execution, current status: {document.status}"
             )
 
-        # Phase 12: Validate reason code for ADJUSTMENT_IN
-        if document.transaction_type == "ADJUSTMENT_IN" and not document.reason_code:
-            raise ValidationError("Reason code is required for ADJUSTMENT_IN")
+        # Phase 12 & 13: Validate reason code for transaction types that require it
+        if document.transaction_type in REQUIRES_REASON_CODE and not document.reason_code:
+            raise ValidationError(f"Reason code is required for {document.transaction_type}")
 
         # Update items with actual executed quantities
         item_map = {item.product_id: item for item in document.items}

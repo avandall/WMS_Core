@@ -488,7 +488,15 @@ class InventoryService:
             return txs[0]["id"] if txs else 0
         else:
             # Direct physical quantity adjustment
-            from app.modules.documents.domain.transaction_types import OUTBOUND_TYPES
+            OUTBOUND_TYPES = {
+                "SALES_SHIPMENT",
+                "PRODUCTION_ISSUE",
+                "PURCHASE_RETURN_SHIPMENT",
+                "TRANSFER_ISSUE",
+                "INTERNAL_CONSUMPTION",
+                "SCRAP",
+                "ADJUSTMENT_OUT"
+            }
             is_outbound = transaction_type in OUTBOUND_TYPES
             delta = -quantity if is_outbound else quantity
 
