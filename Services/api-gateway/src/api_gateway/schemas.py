@@ -43,6 +43,8 @@ class DocumentPayload(BaseModel):
     items: list[DocumentItemPayload] = Field(default_factory=list)
     created_by: str = "system"
     note: str = ""
+    transaction_type: str = ""
+    reason_code: str = ""
 
 
 class PostDocumentPayload(BaseModel):

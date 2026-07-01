@@ -416,6 +416,30 @@
                         <label for="dest-warehouse">Destination Warehouse:</label>
                         <select id="dest-warehouse"></select>
                     </div>
+                    <div class="form-group" id="transaction-type-group" style="display: none;">
+                        <label for="transaction-type">Transaction Sub-type:</label>
+                        <select id="transaction-type" onchange="updateDocumentForm()">
+                            <option value="">Select Sub-type</option>
+                            <option value="PURCHASE_RECEIPT">Purchase Receipt</option>
+                            <option value="PRODUCTION_RECEIPT">Production Receipt</option>
+                            <option value="SALES_RETURN_RECEIPT">Sales Return Receipt</option>
+                            <option value="ADJUSTMENT_IN">Adjustment In</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="reason-code-group" style="display: none;">
+                        <label for="reason-code">Reason Code <span style="color:red">*</span></label>
+                        <select id="reason-code">
+                            <option value="">Select Reason Code</option>
+                            <option value="CYCLE_COUNT">Cycle Count</option>
+                            <option value="PHYSICAL_COUNT">Physical Count</option>
+                            <option value="DAMAGE">Damage</option>
+                            <option value="EXPIRY">Expiry</option>
+                            <option value="QUALITY_REJECT">Quality Reject</option>
+                            <option value="INTERNAL_USE">Internal Use</option>
+                            <option value="SAMPLE">Sample</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="document-items">
                     <h3>Items</h3>

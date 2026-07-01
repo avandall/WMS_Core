@@ -1178,12 +1178,18 @@ async function loadDocuments() {
                         
                         // Action buttons generator
                         let actions = `<button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>`;
-                        if (type === 'SALE' || type === 'SALES_SHIPMENT') {
+                        const isInbound = (type === 'IMPORT' || type === 'PURCHASE_RECEIPT' || type === 'PRODUCTION_RECEIPT' || type === 'SALES_RETURN_RECEIPT' || type === 'ADJUSTMENT_IN');
+                        if (type === 'SALE' || type === 'SALES_SHIPMENT' || isInbound) {
                             if (status === 'draft') {
                                 actions += ` <button class="btn-primary" onclick="approveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#0d6efd;">Approve</button>`;
                                 actions += ` <button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>`;
                             } else if (status === 'approved' || status === 'posted') {
-                                actions += ` <button class="btn-primary" onclick="reserveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#fd7e14;">Reserve Stock</button>`;
+                                if (type === 'SALE' || type === 'SALES_SHIPMENT') {
+                                    actions += ` <button class="btn-primary" onclick="reserveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#fd7e14;">Reserve Stock</button>`;
+                                } else {
+                                    // Inbound goes straight to Start Execution
+                                    actions += ` <button class="btn-primary" onclick="startExecution(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#6f42c1;">Start Execution</button>`;
+                                }
                             } else if (status === 'reserved') {
                                 actions += ` <button class="btn-primary" onclick="startExecution(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#6f42c1;">Start Execution</button>`;
                             } else if (status === 'in_progress') {
@@ -1604,9 +1610,14 @@ async function handleCreateDocument(event) {
     event.preventDefault();
 
     const docType = document.getElementById('doc-type').value;
+    const transactionTypeSelect = document.getElementById('transaction-type');
+    const reasonCodeSelect = document.getElementById('reason-code');
+
     const documentData = {
         doc_type: docType,
-        items: []
+        items: [],
+        transaction_type: (transactionTypeSelect && transactionTypeSelect.value) ? transactionTypeSelect.value : '',
+        reason_code: (reasonCodeSelect && reasonCodeSelect.value) ? reasonCodeSelect.value : ''
     };
 
     // Add warehouse info based on type
@@ -2303,6 +2314,11 @@ function updateDocumentForm() {
     const sourceSelect = document.getElementById('source-warehouse');
     const destSelect = document.getElementById('dest-warehouse');
 
+    const transactionTypeGroup = document.getElementById('transaction-type-group');
+    const reasonCodeGroup = document.getElementById('reason-code-group');
+    const transactionTypeSelect = document.getElementById('transaction-type');
+    const reasonCodeSelect = document.getElementById('reason-code');
+
     if (docType === 'import') {
         sourceGroup.style.display = 'none';
         if (sourceSelect) sourceSelect.required = false;
@@ -2310,7 +2326,23 @@ function updateDocumentForm() {
         if (destSelect) destSelect.required = true;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
         if (customerGroup) customerGroup.style.display = 'none';
-    } else if (docType === 'export') {
+        
+        // Phase 12: show sub-type option
+        if (transactionTypeGroup) transactionTypeGroup.style.display = 'block';
+        if (transactionTypeSelect && transactionTypeSelect.value === 'ADJUSTMENT_IN') {
+            if (reasonCodeGroup) reasonCodeGroup.style.display = 'block';
+            if (reasonCodeSelect) reasonCodeSelect.required = true;
+        } else {
+            if (reasonCodeGroup) reasonCodeGroup.style.display = 'none';
+            if (reasonCodeSelect) { reasonCodeSelect.required = false; reasonCodeSelect.value = ''; }
+        }
+    } else {
+        if (transactionTypeGroup) transactionTypeGroup.style.display = 'none';
+        if (transactionTypeSelect) transactionTypeSelect.value = '';
+        if (reasonCodeGroup) reasonCodeGroup.style.display = 'none';
+        if (reasonCodeSelect) { reasonCodeSelect.required = false; reasonCodeSelect.value = ''; }
+        
+        if (docType === 'export') {
         sourceGroup.style.display = 'block';
         if (sourceSelect) sourceSelect.required = true;
         destGroup.style.display = 'none';
@@ -3608,14 +3640,15 @@ async function loadDocumentDetails(documentId, silent = false) {
                 <p><strong>Total Value:</strong> $${totalValue.toFixed(2)}</p>
             </div>
             <div style="margin-top: 20px; display: flex; gap: 10px;">
-                ${docType === 'sale' || docType === 'sales_shipment' ? `
+                ${docType === 'sale' || docType === 'sales_shipment' || docType === 'import' || docType === 'purchase_receipt' || docType === 'production_receipt' || docType === 'sales_return_receipt' || docType === 'adjustment_in' ? `
                     ${documentStatus === 'draft' ? `<button class="btn-primary" onclick="approveDocument(${document_data.document_id}); hideModals();" style="background:#0d6efd;">Approve</button>` : ''}
-                    ${documentStatus === 'approved' || documentStatus === 'posted' ? `<button class="btn-primary" onclick="reserveDocument(${document_data.document_id}); hideModals();" style="background:#fd7e14;">Reserve Stock</button>` : ''}
+                    ${(documentStatus === 'approved' || documentStatus === 'posted') && (docType === 'sale' || docType === 'sales_shipment') ? `<button class="btn-primary" onclick="reserveDocument(${document_data.document_id}); hideModals();" style="background:#fd7e14;">Reserve Stock</button>` : ''}
+                    ${(documentStatus === 'approved' || documentStatus === 'posted') && !(docType === 'sale' || docType === 'sales_shipment') ? `<button class="btn-primary" onclick="startExecution(${document_data.document_id}); hideModals();" style="background:#6f42c1;">Start Execution</button>` : ''}
                     ${documentStatus === 'reserved' ? `<button class="btn-primary" onclick="startExecution(${document_data.document_id}); hideModals();" style="background:#6f42c1;">Start Execution</button>` : ''}
                     ${documentStatus === 'in_progress' ? `<button class="btn-primary" onclick="openConfirmExecutionModal(${document_data.document_id}); hideModals();" style="background:#198754;">Confirm Qty</button>` : ''}
                     ${documentStatus === 'executed' ? `<button class="btn-primary" onclick="completeDocument(${document_data.document_id}); hideModals();" style="background:#20c997;">Complete</button>` : ''}
                 ` : `
-                    ${documentStatus === 'draft' ? `<button class="btn-primary" onclick="postDocument(${document_data.document_id})">Approve & Post</button>` : ''}
+                    ${documentStatus === 'draft' ? `<button class="btn-primary" onclick="postDocument(${document_data.document_id}); hideModals();">Approve & Post</button>` : ''}
                 `}
             </div>
         `;

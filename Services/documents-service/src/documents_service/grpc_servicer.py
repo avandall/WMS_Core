@@ -73,6 +73,8 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 ],
                 created_by=request.created_by or "system",
                 note=request.note or None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                reason_code=request.reason_code if request.reason_code else None,
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
@@ -93,6 +95,8 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 ],
                 created_by=request.created_by or "system",
                 note=request.note or None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                reason_code=request.reason_code if request.reason_code else None,
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
@@ -114,6 +118,8 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 created_by=request.created_by or "system",
                 note=request.note or None,
                 customer_id=int(request.customer_id) if request.customer_id else None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                reason_code=request.reason_code if request.reason_code else None,
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
@@ -135,6 +141,8 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 ],
                 created_by=request.created_by or "system",
                 note=request.note or None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                reason_code=request.reason_code if request.reason_code else None,
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)

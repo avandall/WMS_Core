@@ -41,6 +41,8 @@ message Document {
   string note = 10;
   string created_at = 11;
   string posted_at = 12;
+  string transaction_type = 13;
+  string reason_code = 14;
 }
 
 message CreateDocumentRequest {
@@ -53,6 +55,8 @@ message CreateDocumentRequest {
   repeated DocumentItem items = 4;
   string created_by = 5;
   string note = 6;
+  string transaction_type = 7;
+  string reason_code = 8;
 }
 
 message PostDocumentRequest {

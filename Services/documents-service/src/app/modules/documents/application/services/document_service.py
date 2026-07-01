@@ -38,6 +38,8 @@ class DocumentService:
         items: List[Dict[str, Any]],
         created_by: str,
         note: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
@@ -48,6 +50,8 @@ class DocumentService:
             created_by=created_by,
             note=note,
         )
+        document.transaction_type = transaction_type
+        document.reason_code = reason_code
         self.document_repo.save(document)
         self._commit_if_needed()
         self._publish_document_uploaded(document, request_id)
@@ -59,6 +63,8 @@ class DocumentService:
         items: List[Dict[str, Any]],
         created_by: str,
         note: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
@@ -69,6 +75,8 @@ class DocumentService:
             created_by=created_by,
             note=note,
         )
+        document.transaction_type = transaction_type
+        document.reason_code = reason_code
         self.document_repo.save(document)
         self._commit_if_needed()
         self._publish_document_uploaded(document, request_id)
@@ -81,6 +89,8 @@ class DocumentService:
         created_by: str,
         note: Optional[str] = None,
         customer_id: Optional[int] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
@@ -92,6 +102,8 @@ class DocumentService:
             note=note,
             customer_id=customer_id,
         )
+        document.transaction_type = transaction_type
+        document.reason_code = reason_code
         self.document_repo.save(document)
         self._commit_if_needed()
         self._publish_document_uploaded(document, request_id)
@@ -104,6 +116,8 @@ class DocumentService:
         items: List[Dict[str, Any]],
         created_by: str,
         note: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
         document = Document(
@@ -115,6 +129,8 @@ class DocumentService:
             created_by=created_by,
             note=note,
         )
+        document.transaction_type = transaction_type
+        document.reason_code = reason_code
         self.document_repo.save(document)
         self._commit_if_needed()
         self._publish_document_uploaded(document, request_id)
@@ -354,6 +370,10 @@ class DocumentService:
             raise InvalidDocumentStatusError(
                 f"Document must be IN_PROGRESS or POSTED/RESERVED before confirming execution, current status: {document.status}"
             )
+
+        # Phase 12: Validate reason code for ADJUSTMENT_IN
+        if document.transaction_type == "ADJUSTMENT_IN" and not document.reason_code:
+            raise ValidationError("Reason code is required for ADJUSTMENT_IN")
 
         # Update items with actual executed quantities
         item_map = {item.product_id: item for item in document.items}

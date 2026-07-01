@@ -531,6 +531,8 @@ def create_import_document(
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -558,6 +560,8 @@ def create_export_document(payload: DocumentPayload, request: Request):
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -586,6 +590,8 @@ def create_sale_document(payload: DocumentPayload, request: Request):
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -614,6 +620,8 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -731,8 +739,10 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
             timeout=GRPC_TIMEOUT_DEFAULT,
         )
 
-    # Coordinate inventory confirmation only for SALE/sales_shipment documents in Phase 10
+    # Coordinate inventory confirmation based on document/transaction type
     doc_type = (doc.doc_type or "").upper()
+    tx_type = (doc.transaction_type or "").upper()
+
     if doc_type in ("SALE", "SALES_SHIPMENT"):
         with inventory_stub() as inv_stub:
             # Query reservations to find the matching ones for this document
@@ -762,6 +772,32 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
                         warehouse_id=wh_id,
                         quantity=item.quantity,
                         reservation_id=res_id,
+                        user_id="system",
+                        idempotency_key=f"confirm_{document_id}_{item.product_id}",
+                    ),
+                    request=request,
+                    timeout=GRPC_TIMEOUT_SLOW,
+                )
+
+    elif doc_type in ("IMPORT", "PURCHASE_RECEIPT", "PRODUCTION_RECEIPT", "SALES_RETURN_RECEIPT", "ADJUSTMENT_IN") or tx_type in ("PURCHASE_RECEIPT", "PRODUCTION_RECEIPT", "SALES_RETURN_RECEIPT", "ADJUSTMENT_IN"):
+        # Resolve target transaction type: fallback to PURCHASE_RECEIPT for IMPORT doc type if no transaction sub-type set
+        target_tx_type = tx_type if tx_type else "PURCHASE_RECEIPT"
+
+        if target_tx_type == "ADJUSTMENT_IN" and not doc.reason_code:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Reason code is required for ADJUSTMENT_IN")
+
+        with inventory_stub() as inv_stub:
+            for item in payload.items:
+                wh_id = doc.to_warehouse_id if doc.to_warehouse_id else doc.from_warehouse_id
+                _grpc_call(
+                    inv_stub.ConfirmInventoryTransaction,
+                    inventory_pb2.ConfirmInventoryTransactionRequest(
+                        transaction_type=target_tx_type,
+                        product_id=item.product_id,
+                        warehouse_id=wh_id,
+                        quantity=item.quantity,
+                        reservation_id=0,  # Direct physical quantity confirmation
                         user_id="system",
                         idempotency_key=f"confirm_{document_id}_{item.product_id}",
                     ),
