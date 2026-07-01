@@ -12,6 +12,8 @@ service InventoryService {
   rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
   // Phase 9: Inventory transaction ledger
   rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse);
+  // Phase 10: Confirm inventory transaction (consume reservation or direct physical qty change)
+  rpc ConfirmInventoryTransaction(ConfirmInventoryTransactionRequest) returns (ConfirmInventoryTransactionResponse);
 }
 
 message InventoryItem {
@@ -136,4 +138,21 @@ message ListTransactionsRequest {
 message ListTransactionsResponse {
   repeated TransactionRow transactions = 1;
 }
+
+// Phase 10: Confirm inventory transaction
+message ConfirmInventoryTransactionRequest {
+  string transaction_type = 1;
+  int64 product_id = 2;
+  int64 warehouse_id = 3;
+  int64 quantity = 4;
+  int64 reservation_id = 5; // optional, 0 if none
+  string user_id = 6;
+  string idempotency_key = 7;
+}
+
+message ConfirmInventoryTransactionResponse {
+  bool success = 1;
+  int64 transaction_id = 2;
+}
+
 

@@ -275,5 +275,73 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             except Exception:
                 pass
 
+    # Phase 10: Start execution
+    def StartExecution(self, request: documents_pb2.StartExecutionRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            service.start_execution(
+                int(request.document_id),
+                request_id=self._request_id(context),
+            )
+            return documents_pb2.StartExecutionResponse(
+                message=f"Document {int(request.document_id)} execution started successfully"
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.StartExecutionResponse(message=str(exc))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    # Phase 10: Confirm execution
+    def ConfirmExecution(self, request: documents_pb2.ConfirmExecutionRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            service.confirm_execution(
+                int(request.document_id),
+                items=[
+                    {"product_id": int(i.product_id), "quantity": int(i.quantity)}
+                    for i in request.items
+                ],
+                request_id=self._request_id(context),
+            )
+            return documents_pb2.ConfirmExecutionResponse(
+                message=f"Document {int(request.document_id)} execution confirmed successfully"
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.ConfirmExecutionResponse(message=str(exc))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    # Phase 10: Complete request
+    def CompleteRequest(self, request: documents_pb2.CompleteRequestRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            service.complete_request(
+                int(request.document_id),
+                request_id=self._request_id(context),
+            )
+            return documents_pb2.CompleteRequestResponse(
+                message=f"Document {int(request.document_id)} completed successfully"
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.CompleteRequestResponse(message=str(exc))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 add_DocumentsServiceServicer_to_server = documents_pb2_grpc.add_DocumentsServiceServicer_to_server
+

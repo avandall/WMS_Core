@@ -1163,18 +1163,54 @@ async function loadDocuments() {
                 <tbody>
                     ${documents.slice(0, 20).map(doc => {
                         const status = (doc.status || 'draft').toString().toLowerCase();
+                        const type = (doc.doc_type || '').toString().toUpperCase();
+                        const statusColors = {
+                            draft: 'fff3cd',
+                            posted: 'cfe2ff',
+                            approved: 'e0cffc',
+                            reserved: 'ffe8cc',
+                            in_progress: 'cff4fc',
+                            executed: 'd1e7dd',
+                            completed: 'd1e7dd',
+                            cancelled: 'f8d7da'
+                        };
+                        const bgColor = statusColors[status] || 'ffffff';
+                        
+                        // Action buttons generator
+                        let actions = `<button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>`;
+                        if (type === 'SALE' || type === 'SALES_SHIPMENT') {
+                            if (status === 'draft') {
+                                actions += ` <button class="btn-primary" onclick="approveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#0d6efd;">Approve</button>`;
+                                actions += ` <button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>`;
+                            } else if (status === 'approved' || status === 'posted') {
+                                actions += ` <button class="btn-primary" onclick="reserveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#fd7e14;">Reserve Stock</button>`;
+                            } else if (status === 'reserved') {
+                                actions += ` <button class="btn-primary" onclick="startExecution(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#6f42c1;">Start Execution</button>`;
+                            } else if (status === 'in_progress') {
+                                actions += ` <button class="btn-primary" onclick="openConfirmExecutionModal(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#198754;">Confirm Qty</button>`;
+                            } else if (status === 'executed') {
+                                actions += ` <button class="btn-primary" onclick="completeDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#20c997;">Complete</button>`;
+                            } else {
+                                actions += ` <span style="color:#6c757d;font-size:0.9em">${doc.status}</span>`;
+                            }
+                        } else {
+                            if (status === 'draft') {
+                                actions += ` <button class="btn-primary" onclick="postDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">Approve & Post</button>`;
+                                actions += ` <button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>`;
+                            } else {
+                                actions += ` <span style="color:#6c757d;font-size:0.9em">${doc.status}</span>`;
+                            }
+                        }
+
                         return `
                         <tr>
                             <td>${doc.document_id}</td>
                             <td>${doc.doc_type}</td>
-                            <td><span style="padding:4px 8px;border-radius:4px;background:#${status === 'draft' ? 'fff3cd' : status === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status || 'DRAFT'}</span></td>
+                            <td><span style="padding:4px 8px;border-radius:4px;background:#${bgColor}">${doc.status || 'DRAFT'}</span></td>
                             <td>${doc.created_by || '-'}</td>
                             <td>${doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '-'}</td>
                             <td>
-                                <button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>
-                                ${status === 'draft' ? `<button class="btn-primary" onclick="postDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">Approve & Post</button>` : ''}
-                                ${status === 'draft' ? `<button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>` : ''}
-                                ${status === 'posted' ? `<span style="color:#6c757d;font-size:0.9em">Posted</span>` : ''}
+                                ${actions}
                             </td>
                         </tr>
                     `}).join('')}
@@ -3571,13 +3607,144 @@ async function loadDocumentDetails(documentId, silent = false) {
                 <p><strong>Total Items:</strong> ${items.reduce((sum, item) => sum + item.quantity, 0)}</p>
                 <p><strong>Total Value:</strong> $${totalValue.toFixed(2)}</p>
             </div>
-            ${documentStatus === 'draft' ? `<div style="margin-top: 20px;"><button class="btn-primary" onclick="postDocument(${document_data.document_id})">Approve & Post</button></div>` : ''}
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                ${docType === 'sale' || docType === 'sales_shipment' ? `
+                    ${documentStatus === 'draft' ? `<button class="btn-primary" onclick="approveDocument(${document_data.document_id}); hideModals();" style="background:#0d6efd;">Approve</button>` : ''}
+                    ${documentStatus === 'approved' || documentStatus === 'posted' ? `<button class="btn-primary" onclick="reserveDocument(${document_data.document_id}); hideModals();" style="background:#fd7e14;">Reserve Stock</button>` : ''}
+                    ${documentStatus === 'reserved' ? `<button class="btn-primary" onclick="startExecution(${document_data.document_id}); hideModals();" style="background:#6f42c1;">Start Execution</button>` : ''}
+                    ${documentStatus === 'in_progress' ? `<button class="btn-primary" onclick="openConfirmExecutionModal(${document_data.document_id}); hideModals();" style="background:#198754;">Confirm Qty</button>` : ''}
+                    ${documentStatus === 'executed' ? `<button class="btn-primary" onclick="completeDocument(${document_data.document_id}); hideModals();" style="background:#20c997;">Complete</button>` : ''}
+                ` : `
+                    ${documentStatus === 'draft' ? `<button class="btn-primary" onclick="postDocument(${document_data.document_id})">Approve & Post</button>` : ''}
+                `}
+            </div>
         `;
 
         if (detailsDiv) detailsDiv.innerHTML = detailsHTML;
     } catch (error) {
         if (!silent) showError('Failed to load document details');
     }
+
+// Phase 10/11: Document workflow helpers
+async function approveDocument(id) {
+    try {
+        if (!currentUser || !currentUser.email) {
+            showError('Unable to approve: user not logged in');
+            return;
+        }
+        await apiRequest(`/api/documents/${id}/approve`, { 
+            method: 'POST',
+            body: JSON.stringify({ approved_by: currentUser.email })
+        });
+        showSuccess('Document approved successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Approve error:', error);
+        showError(error.detail || 'Failed to approve document');
+    }
+}
+
+async function reserveDocument(id) {
+    try {
+        await apiRequest(`/api/documents/${id}/reserve`, { 
+            method: 'POST'
+        });
+        showSuccess('Stock reservation completed successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Reservation error:', error);
+        showError(error.detail || 'Failed to reserve stock');
+    }
+}
+
+async function startExecution(id) {
+    try {
+        await apiRequest(`/api/documents/${id}/start-execution`, { 
+            method: 'POST'
+        });
+        showSuccess('Execution started successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Start execution error:', error);
+        showError(error.detail || 'Failed to start execution');
+    }
+}
+
+async function openConfirmExecutionModal(id) {
+    try {
+        const doc = await apiRequest(`/api/documents/${id}`);
+        if (!doc) {
+            showError('Document not found');
+            return;
+        }
+        document.getElementById('confirm-exec-doc-id').value = id;
+        
+        const container = document.getElementById('confirm-execution-items-container');
+        if (container) {
+            container.innerHTML = (doc.items || []).map(item => {
+                const prod = products.find(p => p.product_id === item.product_id);
+                return `
+                    <div style="margin-bottom:15px; display:flex; flex-direction:column; gap:5px;">
+                        <label style="font-weight:bold;">Product: ${prod ? prod.name : `ID ${item.product_id}`} (Requested: ${item.quantity})</label>
+                        <input type="number" class="confirm-qty-input" data-product-id="${item.product_id}" value="${item.quantity}" min="0" style="padding:6px; border:1px solid #ccc; border-radius:4px;" required />
+                    </div>
+                `;
+            }).join('');
+        }
+        openModal('confirm-execution-modal');
+    } catch (error) {
+        showError('Failed to load document details for execution');
+    }
+}
+
+async function submitConfirmExecution(event) {
+    event.preventDefault();
+    const id = document.getElementById('confirm-exec-doc-id').value;
+    const inputs = document.querySelectorAll('.confirm-qty-input');
+    const items = [];
+    inputs.forEach(input => {
+        items.push({
+            product_id: parseInt(input.getAttribute('data-product-id')),
+            quantity: parseInt(input.value)
+        });
+    });
+
+    try {
+        await apiRequest(`/api/documents/${id}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ items: items })
+        });
+        showSuccess('Execution confirmed successfully!');
+        closeModal('confirm-execution-modal');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Confirm execution error:', error);
+        showError(error.detail || 'Failed to confirm execution');
+    }
+}
+
+async function completeDocument(id) {
+    try {
+        await apiRequest(`/api/documents/${id}/complete`, { 
+            method: 'POST'
+        });
+        showSuccess('Document completed successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Complete error:', error);
+        showError(error.detail || 'Failed to complete document');
+    }
+}
 }
 
 async function viewDocument(documentId) {

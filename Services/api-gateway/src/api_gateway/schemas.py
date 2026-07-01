@@ -52,3 +52,13 @@ class PostDocumentPayload(BaseModel):
 class AIQueryPayload(BaseModel):
     question: str = ""
     mode: str = "auto"
+
+
+class ConfirmItemPayload(BaseModel):
+    product_id: int = 0
+    quantity: int = 0
+
+
+class ConfirmExecutionPayload(BaseModel):
+    items: list[ConfirmItemPayload] = Field(default_factory=list)
+

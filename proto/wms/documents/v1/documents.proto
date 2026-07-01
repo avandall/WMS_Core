@@ -16,6 +16,10 @@ service DocumentsService {
   // Phase 8: Sales reservation workflow
   rpc ReserveRequest(ReserveRequestRequest) returns (ReserveRequestResponse);
   rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+  // Phase 10: Execution confirmation
+  rpc StartExecution(StartExecutionRequest) returns (StartExecutionResponse);
+  rpc ConfirmExecution(ConfirmExecutionRequest) returns (ConfirmExecutionResponse);
+  rpc CompleteRequest(CompleteRequestRequest) returns (CompleteRequestResponse);
 }
 
 message DocumentItem {
@@ -108,4 +112,31 @@ message ReleaseReservationRequest {
 message ReleaseReservationResponse {
   string message = 1;
 }
+
+// Phase 10: Execution confirmation
+message StartExecutionRequest {
+  int64 document_id = 1;
+}
+
+message StartExecutionResponse {
+  string message = 1;
+}
+
+message ConfirmExecutionRequest {
+  int64 document_id = 1;
+  repeated DocumentItem items = 2;
+}
+
+message ConfirmExecutionResponse {
+  string message = 1;
+}
+
+message CompleteRequestRequest {
+  int64 document_id = 1;
+}
+
+message CompleteRequestResponse {
+  string message = 1;
+}
+
 

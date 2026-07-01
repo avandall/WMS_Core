@@ -278,5 +278,31 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             except Exception:
                 pass
 
+    def ConfirmInventoryTransaction(
+        self, request: inventory_pb2.ConfirmInventoryTransactionRequest, context: grpc.ServicerContext
+    ):
+        service, db = self._service()
+        try:
+            tx_id = service.confirm_inventory_transaction(
+                transaction_type=request.transaction_type,
+                product_id=int(request.product_id),
+                warehouse_id=int(request.warehouse_id),
+                quantity=int(request.quantity),
+                reservation_id=int(request.reservation_id),
+                user_id=request.user_id or None,
+                idempotency_key=request.idempotency_key or None,
+            )
+            return inventory_pb2.ConfirmInventoryTransactionResponse(success=True, transaction_id=tx_id)
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return inventory_pb2.ConfirmInventoryTransactionResponse(success=False, transaction_id=0)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server
+

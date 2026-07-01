@@ -69,6 +69,11 @@ class InventoryServiceStub(object):
                 request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsRequest.SerializeToString,
                 response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsResponse.FromString,
                 _registered_method=True)
+        self.ConfirmInventoryTransaction = channel.unary_unary(
+                '/wms.inventory.v1.InventoryService/ConfirmInventoryTransaction',
+                request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ConfirmInventoryTransactionRequest.SerializeToString,
+                response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ConfirmInventoryTransactionResponse.FromString,
+                _registered_method=True)
 
 
 class InventoryServiceServicer(object):
@@ -118,6 +123,13 @@ class InventoryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ConfirmInventoryTransaction(self, request, context):
+        """Phase 10: Confirm inventory transaction (consume reservation or direct physical qty change)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InventoryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -155,6 +167,11 @@ def add_InventoryServiceServicer_to_server(servicer, server):
                     servicer.ListTransactions,
                     request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsRequest.FromString,
                     response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsResponse.SerializeToString,
+            ),
+            'ConfirmInventoryTransaction': grpc.unary_unary_rpc_method_handler(
+                    servicer.ConfirmInventoryTransaction,
+                    request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ConfirmInventoryTransactionRequest.FromString,
+                    response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ConfirmInventoryTransactionResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -346,6 +363,33 @@ class InventoryService(object):
             '/wms.inventory.v1.InventoryService/ListTransactions',
             wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsRequest.SerializeToString,
             wms_dot_inventory_dot_v1_dot_inventory__pb2.ListTransactionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ConfirmInventoryTransaction(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.inventory.v1.InventoryService/ConfirmInventoryTransaction',
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ConfirmInventoryTransactionRequest.SerializeToString,
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.ConfirmInventoryTransactionResponse.FromString,
             options,
             channel_credentials,
             insecure,

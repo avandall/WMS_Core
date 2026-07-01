@@ -309,7 +309,113 @@ class DocumentService:
         
         return document
 
+    # Phase 10: Start execution
+    def start_execution(
+        self,
+        document_id: int,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Transitions document to IN_PROGRESS and sets execution_started_at."""
+        from datetime import datetime
+
+        document = self.get_document(document_id)
+        if document.status == DocumentStatus.CANCELLED:
+            raise InvalidDocumentStatusError(f"Cannot start execution on cancelled document {document_id}")
+        if document.status == DocumentStatus.COMPLETED:
+            raise InvalidDocumentStatusError(f"Cannot start execution on completed document {document_id}")
+
+        document.status = DocumentStatus.IN_PROGRESS
+        document.execution_started_at = datetime.now()
+
+        self.document_repo.save(document)
+        self._commit_if_needed()
+
+        self.event_publisher.publish(
+            event_type="WarehouseExecutionStarted",
+            payload={
+                "event_id": f"documents:{document_id}:execution-started",
+                "request_id": request_id,
+                "document_id": document_id,
+                "status": document.status.value,
+            },
+        )
+        return document
+
+    # Phase 10: Confirm execution
+    def confirm_execution(
+        self,
+        document_id: int,
+        items: List[Dict[str, Any]],
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Confirms execution of actual picked/shipped quantity per item."""
+        document = self.get_document(document_id)
+        if document.status not in (DocumentStatus.IN_PROGRESS, DocumentStatus.POSTED, DocumentStatus.RESERVED):
+            raise InvalidDocumentStatusError(
+                f"Document must be IN_PROGRESS or POSTED/RESERVED before confirming execution, current status: {document.status}"
+            )
+
+        # Update items with actual executed quantities
+        item_map = {item.product_id: item for item in document.items}
+        for item_data in items:
+            prod_id = int(item_data["product_id"])
+            exec_qty = int(item_data["quantity"])
+            if prod_id in item_map:
+                item = item_map[prod_id]
+                item.executed_qty = exec_qty
+                item.difference_qty = item.requested_qty - exec_qty
+                item.execution_status = "EXECUTED"
+
+        document.status = DocumentStatus.EXECUTED
+
+        self.document_repo.save(document)
+        self._commit_if_needed()
+
+        self.event_publisher.publish(
+            event_type="WarehouseExecutionConfirmed",
+            payload={
+                "event_id": f"documents:{document_id}:execution-confirmed",
+                "request_id": request_id,
+                "document_id": document_id,
+                "items": [{"product_id": k, "quantity": v.executed_qty} for k, v in item_map.items() if v.executed_qty is not None],
+            },
+        )
+        return document
+
+    # Phase 10: Complete request
+    def complete_request(
+        self,
+        document_id: int,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Transitions document to COMPLETED status and sets completed_at."""
+        from datetime import datetime
+
+        document = self.get_document(document_id)
+        if document.status != DocumentStatus.EXECUTED:
+            raise InvalidDocumentStatusError(
+                f"Document must be EXECUTED before completing, current status: {document.status}"
+            )
+
+        document.status = DocumentStatus.COMPLETED
+        document.completed_at = datetime.now()
+
+        self.document_repo.save(document)
+        self._commit_if_needed()
+
+        self.event_publisher.publish(
+            event_type="DocumentCompleted",
+            payload={
+                "event_id": f"documents:{document_id}:completed",
+                "request_id": request_id,
+                "document_id": document_id,
+                "status": document.status.value,
+            },
+        )
+        return document
+
     def _commit_if_needed(self) -> None:
+
         if self.session:
             self.session.commit()
 

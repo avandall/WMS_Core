@@ -406,7 +406,108 @@ class InventoryService:
                 payload=payload,
             )
 
+    # Phase 10: Consume reservation
+    def consume_reservation(
+        self,
+        *,
+        reservation_id: int,
+        consumed_qty: int,
+        event_id: Optional[str] = None,
+    ) -> bool:
+        """Consumes a persistent reservation and updates physical stock."""
+        self.inventory_repo.consume_reservation(reservation_id, consumed_qty)
+
+        # Record legacy movement event for backward compatibility
+        self._record_movement(
+            event_id=event_id,
+            movement_type="ReservationConsumed",
+            document_id=None,
+            payload={
+                "reservation_id": reservation_id,
+                "consumed_qty": consumed_qty,
+            },
+        )
+
+        # Phase 9: Write immutable ledger entry for reservation consumption
+        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+        reservation = self.inventory_repo.session.get(StockReservationModel, reservation_id)
+        prod_id = reservation.product_id if reservation else 0
+        wh_id = reservation.warehouse_id if reservation else 0
+        doc_id = reservation.document_id if reservation else None
+
+        self.inventory_repo.write_transaction(
+            transaction_type="RESERVATION_CONSUME",
+            product_id=prod_id,
+            warehouse_id=wh_id,
+            quantity=consumed_qty,
+            document_id=doc_id,
+            idempotency_key=f"{event_id}:consume" if event_id else None,
+            payload={"reservation_id": reservation_id, "consumed_qty": consumed_qty},
+        )
+        self._commit_if_needed()
+        self.event_publisher.publish(
+            event_type="ReservationConsumed",
+            payload={
+                "event_id": event_id,
+                "entity_type": "inventory",
+                "reservation_id": reservation_id,
+                "consumed_qty": consumed_qty,
+            },
+        )
+        return True
+
+    # Phase 10: Confirm inventory transaction
+    def confirm_inventory_transaction(
+        self,
+        *,
+        transaction_type: str,
+        product_id: int,
+        warehouse_id: int,
+        quantity: int,
+        reservation_id: int = 0,
+        user_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> int:
+        """Confirms an inventory transaction (either consuming a reservation or directly updating stock)."""
+        if quantity <= 0:
+            raise InvalidQuantityError("Quantity must be positive")
+
+        if reservation_id > 0:
+            self.consume_reservation(
+                reservation_id=reservation_id,
+                consumed_qty=quantity,
+                event_id=idempotency_key,
+            )
+            # Fetch last transaction to return its ID
+            txs = self.inventory_repo.list_transactions(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                transaction_type="RESERVATION_CONSUME",
+                limit=1,
+            )
+            return txs[0]["id"] if txs else 0
+        else:
+            # Direct physical quantity adjustment
+            from app.modules.documents.domain.transaction_types import OUTBOUND_TYPES
+            is_outbound = transaction_type in OUTBOUND_TYPES
+            delta = -quantity if is_outbound else quantity
+
+            self.adjust_inventory(
+                product_id=product_id,
+                quantity_delta=delta,
+                warehouse_id=warehouse_id,
+                event_id=idempotency_key,
+                reason=f"direct_transaction_{transaction_type}",
+            )
+            txs = self.inventory_repo.list_transactions(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                limit=1,
+            )
+            return txs[0]["id"] if txs else 0
+
     def _commit_if_needed(self) -> None:
         session = getattr(self.inventory_repo, "session", None)
         if session is not None:
             session.commit()
+

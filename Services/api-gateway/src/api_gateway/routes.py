@@ -37,6 +37,7 @@ from api_gateway.schemas import (
     ProductPayload,
     WarehousePayload,
     WarehouseTransferPayload,
+    ConfirmExecutionPayload,
 )
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
@@ -682,7 +683,112 @@ def release_document_reservation(document_id: int, request: Request):
     return {"message": resp.message}
 
 
+# Phase 10: Execution Confirmation
+@router.post(
+    "/documents/{document_id}/start-execution",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def start_execution(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.StartExecution,
+            documents_pb2.StartExecutionRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
+@router.post(
+    "/documents/{document_id}/confirm",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayload, request: Request):
+    # 1. Update the document side: executed_qty and difference_qty
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ConfirmExecution,
+            documents_pb2.ConfirmExecutionRequest(
+                document_id=document_id,
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=item.product_id,
+                        quantity=item.quantity,
+                    )
+                    for item in payload.items
+                ],
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+
+    # 2. Get the document type/details to coordinate inventory changes
+    with documents_stub() as doc_stub:
+        doc = _grpc_call(
+            doc_stub.GetDocument,
+            documents_pb2.GetDocumentRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+
+    # Coordinate inventory confirmation only for SALE/sales_shipment documents in Phase 10
+    doc_type = (doc.doc_type or "").upper()
+    if doc_type in ("SALE", "SALES_SHIPMENT"):
+        with inventory_stub() as inv_stub:
+            # Query reservations to find the matching ones for this document
+            reservations_resp = _grpc_call(
+                inv_stub.ListReservations,
+                inventory_pb2.ListReservationsRequest(status="RESERVED"),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+            )
+            # Match by document_id and product_id
+            reservations_by_product = {
+                r.product_id: r
+                for r in reservations_resp.reservations
+                if r.document_id == document_id
+            }
+
+            for item in payload.items:
+                res = reservations_by_product.get(item.product_id)
+                res_id = res.id if res else 0
+                wh_id = res.warehouse_id if res else doc.from_warehouse_id
+
+                _grpc_call(
+                    inv_stub.ConfirmInventoryTransaction,
+                    inventory_pb2.ConfirmInventoryTransactionRequest(
+                        transaction_type="SALES_SHIPMENT",
+                        product_id=item.product_id,
+                        warehouse_id=wh_id,
+                        quantity=item.quantity,
+                        reservation_id=res_id,
+                        user_id="system",
+                        idempotency_key=f"confirm_{document_id}_{item.product_id}",
+                    ),
+                    request=request,
+                    timeout=GRPC_TIMEOUT_SLOW,
+                )
+
+    return {"message": resp.message}
+
+
+@router.post(
+    "/documents/{document_id}/complete",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def complete_document(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.CompleteRequest,
+            documents_pb2.CompleteRequestRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
 @router.get(
+
     "/documents/{document_id}",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],
 )
