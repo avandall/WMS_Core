@@ -367,9 +367,9 @@ class DocumentService:
     ) -> Document:
         """Confirms execution of actual picked/shipped quantity per item."""
         document = self.get_document(document_id)
-        if document.status not in (DocumentStatus.IN_PROGRESS, DocumentStatus.POSTED, DocumentStatus.RESERVED):
+        if document.status not in (DocumentStatus.IN_PROGRESS, DocumentStatus.POSTED, DocumentStatus.RESERVED, DocumentStatus.EXECUTED):
             raise InvalidDocumentStatusError(
-                f"Document must be IN_PROGRESS or POSTED/RESERVED before confirming execution, current status: {document.status}"
+                f"Document must be IN_PROGRESS, POSTED/RESERVED, or EXECUTED before confirming execution, current status: {document.status}"
             )
 
         # Phase 12 & 13: Validate reason code for transaction types that require it

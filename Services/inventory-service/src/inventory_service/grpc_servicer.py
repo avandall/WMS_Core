@@ -289,10 +289,14 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 warehouse_id=int(request.warehouse_id),
                 quantity=int(request.quantity),
                 reservation_id=int(request.reservation_id),
-                user_id=request.user_id or None,
+                user_id=request.user_id or "system",
                 idempotency_key=request.idempotency_key or None,
+                source_warehouse_id=int(request.source_warehouse_id) if request.source_warehouse_id else 0,
             )
-            return inventory_pb2.ConfirmInventoryTransactionResponse(success=True, transaction_id=tx_id)
+            return inventory_pb2.ConfirmInventoryTransactionResponse(
+                success=True,
+                transaction_id=tx_id,
+            )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))

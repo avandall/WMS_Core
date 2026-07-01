@@ -44,6 +44,7 @@ class InventoryService:
         warehouse_id: Optional[int] = None,
         event_id: Optional[str] = None,
         reason: str = "manual_adjustment",
+        transaction_type: Optional[str] = None,
     ) -> bool:
         Sku(product_id)
         if quantity_delta == 0:
@@ -68,9 +69,9 @@ class InventoryService:
         )
         # Phase 9: Write immutable ledger entry for every adjustment
         if warehouse_id is not None:
-            transaction_type = "ADJUSTMENT_IN" if quantity_delta > 0 else "ADJUSTMENT_OUT"
+            tx_type = transaction_type or ("ADJUSTMENT_IN" if quantity_delta > 0 else "ADJUSTMENT_OUT")
             self.inventory_repo.write_transaction(
-                transaction_type=transaction_type,
+                transaction_type=tx_type,
                 product_id=product_id,
                 warehouse_id=warehouse_id,
                 quantity=abs(quantity_delta),
@@ -90,6 +91,37 @@ class InventoryService:
                 "reason": reason,
             },
         )
+        return True
+
+    def adjust_in_transit(
+        self,
+        *,
+        product_id: int,
+        quantity_delta: int,
+        warehouse_id: int,
+        event_id: Optional[str] = None,
+        reason: str = "transfer_in_transit",
+    ) -> bool:
+        Sku(product_id)
+        WarehouseLocation(warehouse_id)
+        if quantity_delta == 0:
+            raise InvalidQuantityError("quantity_delta must not be zero")
+        if event_id and self.inventory_repo.has_movement_event(event_id):
+            return False
+
+        self.inventory_repo.adjust_warehouse_in_transit(product_id, warehouse_id, quantity_delta)
+        self._record_movement(
+            event_id=event_id,
+            movement_type="InventoryInTransitAdjusted",
+            document_id=None,
+            payload={
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "quantity_delta": quantity_delta,
+                "reason": reason,
+            },
+        )
+        self._commit_if_needed()
         return True
 
     def reserve_stock(
@@ -465,8 +497,9 @@ class InventoryService:
         warehouse_id: int,
         quantity: int,
         reservation_id: int = 0,
-        user_id: Optional[str] = None,
+        user_id: str = "system",
         idempotency_key: Optional[str] = None,
+        source_warehouse_id: int = 0,
     ) -> int:
         """Confirms an inventory transaction (either consuming a reservation or directly updating stock)."""
         if quantity <= 0:
@@ -487,26 +520,66 @@ class InventoryService:
             )
             return txs[0]["id"] if txs else 0
         else:
-            # Direct physical quantity adjustment
-            OUTBOUND_TYPES = {
-                "SALES_SHIPMENT",
-                "PRODUCTION_ISSUE",
-                "PURCHASE_RETURN_SHIPMENT",
-                "TRANSFER_ISSUE",
-                "INTERNAL_CONSUMPTION",
-                "SCRAP",
-                "ADJUSTMENT_OUT"
-            }
-            is_outbound = transaction_type in OUTBOUND_TYPES
-            delta = -quantity if is_outbound else quantity
+            # Handle Transfer lifecycle stock movements
+            if transaction_type == "TRANSFER_ISSUE":
+                # TRANSFER_ISSUE reduces physical stock at source, increases in_transit stock at source
+                self.adjust_inventory(
+                    product_id=product_id,
+                    quantity_delta=-quantity,
+                    warehouse_id=warehouse_id,
+                    event_id=idempotency_key,
+                    reason=f"confirm_issue_{document_id if 'document_id' in locals() else 'transfer'}",
+                    transaction_type="TRANSFER_ISSUE",
+                )
+                self.adjust_in_transit(
+                    product_id=product_id,
+                    quantity_delta=quantity,
+                    warehouse_id=warehouse_id,
+                    event_id=f"{idempotency_key}:in_transit" if idempotency_key else None,
+                    reason="transfer_issue_in_transit",
+                )
+            elif transaction_type == "TRANSFER_RECEIPT":
+                # TRANSFER_RECEIPT increases physical stock at destination, reduces in_transit stock at source
+                self.adjust_inventory(
+                    product_id=product_id,
+                    quantity_delta=quantity,
+                    warehouse_id=warehouse_id,
+                    event_id=idempotency_key,
+                    reason=f"confirm_receipt_{document_id if 'document_id' in locals() else 'transfer'}",
+                    transaction_type="TRANSFER_RECEIPT",
+                )
+                # Decrement in-transit stock at the source warehouse
+                src_wh = source_warehouse_id if source_warehouse_id > 0 else warehouse_id
+                self.adjust_in_transit(
+                    product_id=product_id,
+                    quantity_delta=-quantity,
+                    warehouse_id=src_wh,
+                    event_id=f"{idempotency_key}:in_transit" if idempotency_key else None,
+                    reason="transfer_receipt_in_transit",
+                )
+            else:
+                # Direct physical quantity adjustment
+                OUTBOUND_TYPES = {
+                    "SALES_SHIPMENT",
+                    "PRODUCTION_ISSUE",
+                    "PURCHASE_RETURN_SHIPMENT",
+                    "TRANSFER_ISSUE",
+                    "INTERNAL_CONSUMPTION",
+                    "SCRAP",
+                    "ADJUSTMENT_OUT"
+                }
+                is_outbound = transaction_type in OUTBOUND_TYPES
+                delta = -quantity if is_outbound else quantity
 
-            self.adjust_inventory(
-                product_id=product_id,
-                quantity_delta=delta,
-                warehouse_id=warehouse_id,
-                event_id=idempotency_key,
-                reason=f"direct_transaction_{transaction_type}",
-            )
+                self.adjust_inventory(
+                    product_id=product_id,
+                    quantity_delta=delta,
+                    warehouse_id=warehouse_id,
+                    event_id=idempotency_key,
+                    reason=f"direct_transaction_{transaction_type}",
+                    transaction_type=transaction_type,
+                )
+
             txs = self.inventory_repo.list_transactions(
                 product_id=product_id,
                 warehouse_id=warehouse_id,

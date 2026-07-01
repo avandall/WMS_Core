@@ -145,9 +145,10 @@ message ConfirmInventoryTransactionRequest {
   int64 product_id = 2;
   int64 warehouse_id = 3;
   int64 quantity = 4;
-  int64 reservation_id = 5; // optional, 0 if none
+  int64 reservation_id = 5;
   string user_id = 6;
   string idempotency_key = 7;
+  int64 source_warehouse_id = 8;
 }
 
 message ConfirmInventoryTransactionResponse {

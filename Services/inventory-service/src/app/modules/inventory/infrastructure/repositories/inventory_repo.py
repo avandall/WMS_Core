@@ -95,6 +95,37 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             row.physical_qty = next_quantity
         self._commit_if_auto()
 
+    def adjust_warehouse_in_transit(
+        self, product_id: int, warehouse_id: int, quantity_delta: int
+    ) -> None:
+        row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == product_id,
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+            )
+        ).scalar_one_or_none()
+
+        if row is None:
+            if quantity_delta < 0:
+                raise InsufficientStockError(
+                    f"Insufficient in-transit stock for product {product_id} in warehouse {warehouse_id}"
+                )
+            row = WarehouseInventoryModel(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                quantity=0,
+                physical_qty=0,
+                in_transit_qty=quantity_delta,
+            )
+            self.session.add(row)
+        else:
+            next_in_transit = row.in_transit_qty + quantity_delta
+            if next_in_transit < 0:
+                raise InsufficientStockError(
+                    f"Insufficient in-transit stock. In-transit: {row.in_transit_qty}, Requested: {abs(quantity_delta)}"
+                )
+            row.in_transit_qty = next_in_transit
+        self._commit_if_auto()
 
     def get_quantity(self, product_id: int) -> int:
         row = self.session.get(InventoryModel, product_id)

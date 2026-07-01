@@ -712,7 +712,26 @@ def start_execution(document_id: int, request: Request):
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
 )
 def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayload, request: Request):
-    # 1. Update the document side: executed_qty and difference_qty
+    # 1. Get the document details to know the status BEFORE confirming
+    with documents_stub() as doc_stub:
+        try:
+            doc = _grpc_call(
+                doc_stub.GetDocument,
+                documents_pb2.GetDocumentRequest(document_id=document_id),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+    doc_type = (doc.doc_type or "").upper()
+    tx_type = (doc.transaction_type or "").upper()
+    current_status = (doc.status or "").upper()
+
+    # Determine if it's a Transfer Issue or Receipt
+    is_transfer_receipt = (doc_type == "TRANSFER" and current_status == "EXECUTED")
+
+    # 2. Update the document side: executed_qty and difference_qty
     with documents_stub() as stub:
         resp = _grpc_call(
             stub.ConfirmExecution,
@@ -730,97 +749,134 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
             timeout=GRPC_TIMEOUT_SLOW,
         )
 
-    # 2. Get the document type/details to coordinate inventory changes
-    with documents_stub() as doc_stub:
-        doc = _grpc_call(
-            doc_stub.GetDocument,
-            documents_pb2.GetDocumentRequest(document_id=document_id),
-            request=request,
-            timeout=GRPC_TIMEOUT_DEFAULT,
-        )
-
     # Coordinate inventory confirmation based on document/transaction type
-    doc_type = (doc.doc_type or "").upper()
-    tx_type = (doc.transaction_type or "").upper()
-
     REQUIRES_RESERVATION = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "TRANSFER_ISSUE"}
     REQUIRES_REASON_CODE = {"ADJUSTMENT_IN", "ADJUSTMENT_OUT", "SCRAP", "INTERNAL_CONSUMPTION"}
     OUTBOUND_TYPES = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "PURCHASE_RETURN_SHIPMENT", "TRANSFER_ISSUE", "INTERNAL_CONSUMPTION", "SCRAP", "ADJUSTMENT_OUT"}
 
-    # Resolve target transaction type
-    if tx_type:
-        target_tx_type = tx_type
-    else:
-        if doc_type in ("SALE", "SALES_SHIPMENT"):
-            target_tx_type = "SALES_SHIPMENT"
-        elif doc_type in ("IMPORT", "PURCHASE_RECEIPT"):
-            target_tx_type = "PURCHASE_RECEIPT"
-        elif doc_type in ("EXPORT", "SCRAP"):
-            target_tx_type = "SCRAP"
+    if doc_type == "TRANSFER":
+        if is_transfer_receipt:
+            target_tx_type = "TRANSFER_RECEIPT"
+            # TRANSFER_RECEIPT: warehouse_id = to_warehouse_id, source_warehouse_id = from_warehouse_id
+            with inventory_stub() as inv_stub:
+                for item in payload.items:
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type="TRANSFER_RECEIPT",
+                            product_id=item.product_id,
+                            warehouse_id=doc.to_warehouse_id,
+                            quantity=item.quantity,
+                            reservation_id=0,
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}_receipt",
+                            source_warehouse_id=doc.from_warehouse_id,
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
+            # Transition document to COMPLETED
+            with documents_stub() as doc_stub:
+                _grpc_call(
+                    doc_stub.CompleteRequest,
+                    documents_pb2.CompleteRequestRequest(document_id=document_id),
+                    request=request,
+                    timeout=GRPC_TIMEOUT_SLOW,
+                )
         else:
-            target_tx_type = doc_type
-
-    # Validate reason code
-    if target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail=f"Reason code is required for {target_tx_type}")
-
-    # Determine warehouse and confirmation path
-    is_outbound = target_tx_type in OUTBOUND_TYPES
-    wh_id = doc.from_warehouse_id if is_outbound else (doc.to_warehouse_id or doc.from_warehouse_id)
-
-    if target_tx_type in REQUIRES_RESERVATION:
-        with inventory_stub() as inv_stub:
-            # Query reservations to find the matching ones for this document
-            reservations_resp = _grpc_call(
-                inv_stub.ListReservations,
-                inventory_pb2.ListReservationsRequest(status="RESERVED"),
-                request=request,
-                timeout=GRPC_TIMEOUT_DEFAULT,
-            )
-            # Match by document_id and product_id
-            reservations_by_product = {
-                r.product_id: r
-                for r in reservations_resp.reservations
-                if r.document_id == document_id
-            }
-
-            for item in payload.items:
-                res = reservations_by_product.get(item.product_id)
-                res_id = res.id if res else 0
-                item_wh_id = res.warehouse_id if res else wh_id
-
-                _grpc_call(
-                    inv_stub.ConfirmInventoryTransaction,
-                    inventory_pb2.ConfirmInventoryTransactionRequest(
-                        transaction_type=target_tx_type,
-                        product_id=item.product_id,
-                        warehouse_id=item_wh_id,
-                        quantity=item.quantity,
-                        reservation_id=res_id,
-                        user_id="system",
-                        idempotency_key=f"confirm_{document_id}_{item.product_id}",
-                    ),
-                    request=request,
-                    timeout=GRPC_TIMEOUT_SLOW,
-                )
+            target_tx_type = "TRANSFER_ISSUE"
+            # TRANSFER_ISSUE: warehouse_id = from_warehouse_id
+            with inventory_stub() as inv_stub:
+                for item in payload.items:
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type="TRANSFER_ISSUE",
+                            product_id=item.product_id,
+                            warehouse_id=doc.from_warehouse_id,
+                            quantity=item.quantity,
+                            reservation_id=0,
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}_issue",
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
     else:
-        with inventory_stub() as inv_stub:
-            for item in payload.items:
-                _grpc_call(
-                    inv_stub.ConfirmInventoryTransaction,
-                    inventory_pb2.ConfirmInventoryTransactionRequest(
-                        transaction_type=target_tx_type,
-                        product_id=item.product_id,
-                        warehouse_id=wh_id,
-                        quantity=item.quantity,
-                        reservation_id=0,  # Direct stock confirmation
-                        user_id="system",
-                        idempotency_key=f"confirm_{document_id}_{item.product_id}",
-                    ),
+        # Resolve target transaction type for other documents
+        if tx_type:
+            target_tx_type = tx_type
+        else:
+            if doc_type in ("SALE", "SALES_SHIPMENT"):
+                target_tx_type = "SALES_SHIPMENT"
+            elif doc_type in ("IMPORT", "PURCHASE_RECEIPT"):
+                target_tx_type = "PURCHASE_RECEIPT"
+            elif doc_type in ("EXPORT", "SCRAP"):
+                target_tx_type = "SCRAP"
+            else:
+                target_tx_type = doc_type
+
+        # Validate reason code
+        if target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code:
+            raise HTTPException(status_code=400, detail=f"Reason code is required for {target_tx_type}")
+
+        # Determine warehouse and confirmation path
+        is_outbound = target_tx_type in OUTBOUND_TYPES
+        wh_id = doc.from_warehouse_id if is_outbound else (doc.to_warehouse_id or doc.from_warehouse_id)
+
+        if target_tx_type in REQUIRES_RESERVATION:
+            with inventory_stub() as inv_stub:
+                # Query reservations to find the matching ones for this document
+                reservations_resp = _grpc_call(
+                    inv_stub.ListReservations,
+                    inventory_pb2.ListReservationsRequest(status="RESERVED"),
                     request=request,
-                    timeout=GRPC_TIMEOUT_SLOW,
+                    timeout=GRPC_TIMEOUT_DEFAULT,
                 )
+
+                # Match by document_id and product_id
+                reservations_by_product = {
+                    r.product_id: r
+                    for r in reservations_resp.reservations
+                    if r.document_id == document_id
+                }
+
+                for item in payload.items:
+                    res = reservations_by_product.get(item.product_id)
+                    res_id = res.id if res else 0
+                    item_wh_id = res.warehouse_id if res else wh_id
+
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type=target_tx_type,
+                            product_id=item.product_id,
+                            warehouse_id=item_wh_id,
+                            quantity=item.quantity,
+                            reservation_id=res_id,
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}",
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
+        else:
+            with inventory_stub() as inv_stub:
+                for item in payload.items:
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type=target_tx_type,
+                            product_id=item.product_id,
+                            warehouse_id=wh_id,
+                            quantity=item.quantity,
+                            reservation_id=0,  # Direct stock confirmation
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}",
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
 
     return {"message": resp.message}
 
