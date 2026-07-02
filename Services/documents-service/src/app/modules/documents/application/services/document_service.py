@@ -198,6 +198,23 @@ class DocumentService:
             event_type="DocumentPosted",
             payload=document.posted_event_payload(request_id),
         )
+        # Phase 15: Publish DocumentApproved
+        self.event_publisher.publish(
+            event_type="DocumentApproved",
+            payload={
+                "event_id": f"documents:{document_id}:approved",
+                "request_id": request_id,
+                "entity_type": "document",
+                "entity_id": document_id,
+                "document_id": document_id,
+                "doc_type": document.doc_type.value,
+                "status": document.status.value,
+                "approved_by": document.approved_by,
+                "approved_at": document.approved_at.isoformat() if document.approved_at else None,
+                "warehouse_id": document.from_warehouse_id or document.to_warehouse_id,
+                "items": document._item_snapshots(),
+            },
+        )
         return document
 
     def cancel_document(
@@ -354,6 +371,10 @@ class DocumentService:
                 "request_id": request_id,
                 "document_id": document_id,
                 "status": document.status.value,
+                "entity_type": "document",
+                "entity_id": document_id,
+                "warehouse_id": document.from_warehouse_id or document.to_warehouse_id,
+                "user_id": document.assigned_to or "system",
             },
         )
         return document
@@ -431,6 +452,10 @@ class DocumentService:
                 "request_id": request_id,
                 "document_id": document_id,
                 "status": document.status.value,
+                "entity_type": "document",
+                "entity_id": document_id,
+                "warehouse_id": document.from_warehouse_id or document.to_warehouse_id,
+                "user_id": "system",
             },
         )
         return document

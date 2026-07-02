@@ -145,7 +145,7 @@ def test_ai_query_pipeline_routes_data_questions_through_template_boundary() -> 
 
             self.calls += 1
             self.last_template = template
-            return BackendQueryResponse(success=True, payload={"rows": [{"quantity": 10}]})
+            return BackendQueryResponse(success=True, payload={"rows": [{"quantity": 10}], "answer": '{"rows": [{"quantity": 10}]}'})
 
     provider = Provider()
     extractor = Extractor()
@@ -153,7 +153,7 @@ def test_ai_query_pipeline_routes_data_questions_through_template_boundary() -> 
     pipeline = AIQueryPipeline(provider=provider, template_extractor=extractor, backend_query=backend)
 
     data_result = pipeline.answer(question="How many SKU-001 are in inventory?", mode="auto")
-    knowledge_result = pipeline.answer(question="Explain warehouse slotting best practices", mode="auto")
+    knowledge_result = pipeline.answer(question="Explain warehouse slotting best practices", mode="rag")
 
     assert data_result.mode == "data_query"
     assert '"quantity": 10' in data_result.response

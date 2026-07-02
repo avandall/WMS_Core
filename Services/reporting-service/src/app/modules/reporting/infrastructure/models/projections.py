@@ -18,6 +18,7 @@ class InventorySummary(Base):
     product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     total_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     warehouse_quantities: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    warehouse_matrix: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
@@ -31,6 +32,7 @@ class DocumentSummary(Base):
     from_warehouse_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     to_warehouse_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     total_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    executed_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_value: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     created_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     posted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
