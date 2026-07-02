@@ -143,6 +143,12 @@ class DocumentService:
         approved_by: str,
         request_id: Optional[str] = None,
     ) -> Document:
+        import warnings
+        warnings.warn(
+            "post_document is deprecated, use the approve/reserve/execute/complete lifecycle instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         document = self.get_document(document_id)
         if document.status == DocumentStatus.CANCELLED:
             raise InvalidDocumentStatusError(f"Cannot post cancelled document {document_id}")
@@ -536,6 +542,12 @@ class DocumentService:
         document: Document,
         request_id: Optional[str] = None,
     ) -> None:
+        import warnings
+        warnings.warn(
+            "InventoryMovementRequested event type is deprecated. Use the new granular lifecycle events instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.event_publisher.publish(
             event_type="DocumentPosted",
             payload=document.posted_event_payload(request_id),

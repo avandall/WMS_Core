@@ -632,8 +632,15 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
 @router.post(
     "/documents/{document_id}/post",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+    deprecated=True,
 )
 def post_document(document_id: int, payload: PostDocumentPayload, request: Request):
+    import warnings
+    warnings.warn(
+        "POST /api/v1/documents/{document_id}/post is deprecated. Use POST /api/v1/documents/{document_id}/approve instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     with documents_stub() as stub:
         resp = _grpc_call(
             stub.PostDocument,
