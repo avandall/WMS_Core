@@ -64,3 +64,9 @@ class ConfirmItemPayload(BaseModel):
 class ConfirmExecutionPayload(BaseModel):
     items: list[ConfirmItemPayload] = Field(default_factory=list)
 
+
+class LoginPayload(BaseModel):
+    email: str = ""
+    password: str = ""
+
+

@@ -38,6 +38,7 @@ from api_gateway.schemas import (
     WarehousePayload,
     WarehouseTransferPayload,
     ConfirmExecutionPayload,
+    LoginPayload,
 )
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
@@ -51,6 +52,44 @@ from api_gateway.gen.wms.identity.v1 import identity_pb2
 
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.post("/auth/login")
+def login_auth(payload: LoginPayload):
+    email = payload.email.strip().lower()
+    password = payload.password
+
+    dev_users = {
+        "admin@wms.vn": {"password": "admin123", "user_id": 1, "role": "admin"},
+        "warehouse@wms.vn": {"password": "warehouse123", "user_id": 2, "role": "warehouse"},
+        "sales@wms.vn": {"password": "sales123", "user_id": 3, "role": "sales"},
+        "accountant@wms.vn": {"password": "account123", "user_id": 4, "role": "accountant"},
+    }
+
+    user = dev_users.get(email)
+    if not user or user["password"] != password:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    import jwt
+    import os
+    from datetime import datetime, timezone, timedelta
+
+    secret_key = os.getenv("SECRET_KEY", "replace-with-render-secret")
+    algorithm = os.getenv("JWT_ALGORITHM", "HS256")
+    expires = datetime.now(timezone.utc) + timedelta(hours=8)
+
+    token = jwt.encode(
+        {"sub": str(user["user_id"]), "role": user["role"], "exp": expires},
+        secret_key,
+        algorithm=algorithm
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user["user_id"],
+        "role": user["role"]
+    }
 
 
 def _md(request: Request):
