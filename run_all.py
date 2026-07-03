@@ -191,6 +191,14 @@ def _base_env() -> dict[str, str]:
         "GRPC_RETRY_BACKOFF_SECONDS": "0.05",
         "CIRCUIT_BREAKER_FAILURE_THRESHOLD": "5",
         "CIRCUIT_BREAKER_RECOVERY_SECONDS": "15",
+        # ── Render free-plan memory tunables ──────────────────────────────────
+        # Ask glibc to return freed memory to the OS more aggressively
+        "MALLOC_TRIM_THRESHOLD_": "65536",
+        # Use the system allocator instead of CPython's pymalloc; makes trim
+        # effective and reduces steady-state RSS by 5-15 MB per process
+        "PYTHONMALLOC": "malloc",
+        # Cap gRPC thread-pool concurrency per server (default: unlimited)
+        "GRPC_MAX_CONCURRENT_RPCS": "4",
     }
     for key, value in defaults.items():
         env.setdefault(key, value)
@@ -323,6 +331,10 @@ def main() -> int:
             "0.0.0.0",
             "--port",
             str(port),
+            # Render free plan: a single worker avoids forking a second Python
+            # process (~75 MB) while still serving the demo workload fine.
+            "--workers",
+            "1",
         ]
         processes.append(
             (
