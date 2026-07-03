@@ -55,31 +55,37 @@ router = APIRouter(prefix="/api/v1")
 
 
 @router.post("/auth/login")
-def login_auth(payload: LoginPayload):
+def login_auth(payload: LoginPayload, request: Request):
     email = payload.email.strip().lower()
     password = payload.password
 
-    dev_users = {
-        "admin@wms.vn": {"password": "admin123", "user_id": 1, "role": "admin"},
-        "warehouse@wms.vn": {"password": "warehouse123", "user_id": 2, "role": "warehouse"},
-        "sales@wms.vn": {"password": "sales123", "user_id": 3, "role": "sales"},
-        "accountant@wms.vn": {"password": "account123", "user_id": 4, "role": "accountant"},
-    }
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key or secret_key == "replace-with-render-secret":
+        raise HTTPException(status_code=500, detail="JWT secret key is not configured")
 
-    user = dev_users.get(email)
-    if not user or user["password"] != password:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    with identity_stub() as stub:
+        try:
+            resp = _grpc_call(
+                stub.Login,
+                identity_pb2.LoginRequest(email=email, password=password),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not resp.success:
+        raise HTTPException(status_code=401, detail=resp.message or "Invalid credentials")
 
     import jwt
     import os
     from datetime import datetime, timezone, timedelta
 
-    secret_key = os.getenv("SECRET_KEY", "replace-with-render-secret")
     algorithm = os.getenv("JWT_ALGORITHM", "HS256")
     expires = datetime.now(timezone.utc) + timedelta(hours=8)
 
     token = jwt.encode(
-        {"sub": str(user["user_id"]), "role": user["role"], "exp": expires},
+        {"sub": str(resp.user_id), "role": resp.role, "exp": expires},
         secret_key,
         algorithm=algorithm
     )
@@ -87,8 +93,8 @@ def login_auth(payload: LoginPayload):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user_id": user["user_id"],
-        "role": user["role"]
+        "user_id": resp.user_id,
+        "role": resp.role
     }
 
 
@@ -774,6 +780,28 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
     tx_type = (doc.transaction_type or "").upper()
     current_status = (doc.status or "").upper()
 
+    REQUIRES_REASON_CODE = {"ADJUSTMENT_IN", "ADJUSTMENT_OUT", "SCRAP", "INTERNAL_CONSUMPTION"}
+
+    # Early validation of reason code
+    if doc_type == "TRANSFER":
+        is_transfer_receipt = (current_status == "EXECUTED")
+        target_tx_type = "TRANSFER_RECEIPT" if is_transfer_receipt else "TRANSFER_ISSUE"
+    else:
+        if tx_type:
+            target_tx_type = tx_type
+        else:
+            if doc_type in ("SALE", "SALES_SHIPMENT"):
+                target_tx_type = "SALES_SHIPMENT"
+            elif doc_type in ("IMPORT", "PURCHASE_RECEIPT"):
+                target_tx_type = "PURCHASE_RECEIPT"
+            elif doc_type in ("EXPORT", "SCRAP"):
+                target_tx_type = "SCRAP"
+            else:
+                target_tx_type = doc_type
+
+        if target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code:
+            raise HTTPException(status_code=400, detail=f"Reason code is required for {target_tx_type}")
+
     # Determine if it's a Transfer Issue or Receipt
     is_transfer_receipt = (doc_type == "TRANSFER" and current_status == "EXECUTED")
 
@@ -797,7 +825,6 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
 
     # Coordinate inventory confirmation based on document/transaction type
     REQUIRES_RESERVATION = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "TRANSFER_ISSUE"}
-    REQUIRES_REASON_CODE = {"ADJUSTMENT_IN", "ADJUSTMENT_OUT", "SCRAP", "INTERNAL_CONSUMPTION"}
     OUTBOUND_TYPES = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "PURCHASE_RETURN_SHIPMENT", "TRANSFER_ISSUE", "INTERNAL_CONSUMPTION", "SCRAP", "ADJUSTMENT_OUT"}
 
     if doc_type == "TRANSFER":
@@ -849,22 +876,8 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
                         timeout=GRPC_TIMEOUT_SLOW,
                     )
     else:
-        # Resolve target transaction type for other documents
-        if tx_type:
-            target_tx_type = tx_type
-        else:
-            if doc_type in ("SALE", "SALES_SHIPMENT"):
-                target_tx_type = "SALES_SHIPMENT"
-            elif doc_type in ("IMPORT", "PURCHASE_RECEIPT"):
-                target_tx_type = "PURCHASE_RECEIPT"
-            elif doc_type in ("EXPORT", "SCRAP"):
-                target_tx_type = "SCRAP"
-            else:
-                target_tx_type = doc_type
-
-        # Validate reason code
-        if target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code:
-            raise HTTPException(status_code=400, detail=f"Reason code is required for {target_tx_type}")
+        # Validate reason code (already validated early)
+        pass
 
         # Determine warehouse and confirmation path
         is_outbound = target_tx_type in OUTBOUND_TYPES

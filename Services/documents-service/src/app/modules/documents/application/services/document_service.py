@@ -269,16 +269,40 @@ class DocumentService:
         # Track reservation IDs for each line
         reservation_ids = []
         
+        import os
+        import grpc
+        from shared_utils.security.grpc import configured_grpc_channel
+        from documents_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_grpc
+        
+        inventory_addr = os.getenv("INVENTORY_GRPC_ADDR", "inventory-service:50055")
+        
         # Reserve each line from source warehouse
-        for item in document.items:
-            # TODO(Phase 8 → future): wire this to a real inventory service call via gRPC or
-            # an application-layer port so that InventoryRepo.create_reservation() is called,
-            # the ATP check is enforced, and a real stock_reservations row is written.
-            # Currently this only updates the document entity in-memory (and persists via
-            # document_repo.save below). The StockReserved event carries placeholder IDs.
-            idempotency_key = f"doc_{document_id}_product_{item.product_id}"  # noqa: F841
-            item.reserved_qty = item.requested_qty
-            reservation_ids.append(f"reservation_{document_id}_{item.product_id}")
+        with configured_grpc_channel(inventory_addr) as channel:
+            stub = inventory_pb2_grpc.InventoryServiceStub(channel)
+            for item in document.items:
+                event_id = f"doc_{document_id}_product_{item.product_id}"
+                try:
+                    resp = stub.ReserveStock(
+                        inventory_pb2.ReserveStockRequest(
+                            product_id=int(item.product_id),
+                            quantity=int(item.requested_qty),
+                            warehouse_id=int(document.from_warehouse_id),
+                            event_id=event_id,
+                            source_type="sale_document",
+                            source_id=int(document_id),
+                            document_id=int(document_id),
+                            created_by=document.created_by or "system",
+                        ),
+                        timeout=10,
+                    )
+                except grpc.RpcError as exc:
+                    raise ValidationError(f"Inventory reservation failed for product {item.product_id}: {exc.details()}")
+                
+                if not resp.success:
+                    raise ValidationError(f"Inventory reservation failed for product {item.product_id}: {resp.message}")
+                
+                item.reserved_qty = item.requested_qty
+                reservation_ids.append(str(resp.reservation_id))
         
         # Update execution metadata
         document.execution_started_at = datetime.now()
@@ -403,16 +427,48 @@ class DocumentService:
         if document.transaction_type in REQUIRES_REASON_CODE and not document.reason_code:
             raise ValidationError(f"Reason code is required for {document.transaction_type}")
 
-        # Update items with actual executed quantities
+        # Payload validation
+        if not items:
+            raise ValidationError("Items list cannot be empty")
+
         item_map = {item.product_id: item for item in document.items}
+        seen_products = set()
+
+        for item_data in items:
+            if "product_id" not in item_data or "quantity" not in item_data:
+                raise ValidationError("Invalid item data: product_id and quantity are required")
+            
+            prod_id = int(item_data["product_id"])
+            exec_qty = int(item_data["quantity"])
+
+            if prod_id in seen_products:
+                raise ValidationError(f"Duplicate product_id: {prod_id} in confirmation payload")
+            seen_products.add(prod_id)
+
+            if prod_id not in item_map:
+                raise ValidationError(f"Product {prod_id} is not present in the document lines")
+
+            if exec_qty < 0:
+                raise ValidationError(f"Executed quantity cannot be negative for product {prod_id}")
+
+            item = item_map[prod_id]
+            max_allowed = max(item.requested_qty, item.reserved_qty)
+            if exec_qty > max_allowed:
+                raise ValidationError(f"Executed quantity {exec_qty} exceeds requested/reserved limit {max_allowed} for product {prod_id}")
+
+        # Reject missing expected lines
+        for expected_prod_id in item_map:
+            if expected_prod_id not in seen_products:
+                raise ValidationError(f"Missing confirmation for expected product: {expected_prod_id}")
+
+        # Update items with actual executed quantities
         for item_data in items:
             prod_id = int(item_data["product_id"])
             exec_qty = int(item_data["quantity"])
-            if prod_id in item_map:
-                item = item_map[prod_id]
-                item.executed_qty = exec_qty
-                item.difference_qty = item.requested_qty - exec_qty
-                item.execution_status = "EXECUTED"
+            item = item_map[prod_id]
+            item.executed_qty = exec_qty
+            item.difference_qty = item.requested_qty - exec_qty
+            item.execution_status = "EXECUTED"
 
         document.status = DocumentStatus.EXECUTED
 

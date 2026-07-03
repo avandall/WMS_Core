@@ -10,6 +10,7 @@ service IdentityService {
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
   rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
 }
 
 message ValidateTokenRequest {
@@ -61,3 +62,19 @@ message ListUsersResponse {
   repeated UserEntry users = 1;
 }
 
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  string token_type = 4;
+  int64 user_id = 5;
+  string email = 6;
+  string role = 7;
+  string full_name = 8;
+  string message = 9;
+}

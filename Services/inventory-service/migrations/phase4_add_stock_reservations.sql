@@ -17,7 +17,7 @@ CREATE TABLE stock_reservations (
     created_by VARCHAR(255),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    idempotency_key VARCHAR(255) UNIQUE
+    idempotency_key VARCHAR(255)
 );
 
 -- Add indexes for performance
@@ -26,9 +26,9 @@ CREATE INDEX ix_stock_reservations_document_id ON stock_reservations (document_i
 CREATE INDEX ix_stock_reservations_status ON stock_reservations (status);
 CREATE INDEX ix_stock_reservations_expires_at ON stock_reservations (expires_at);
 
--- Add unique constraints for idempotency and source tracking
-CREATE UNIQUE CONSTRAINT uq_stock_reservation_idempotency ON stock_reservations (idempotency_key) WHERE idempotency_key IS NOT NULL;
-CREATE UNIQUE CONSTRAINT uq_stock_reservation_source ON stock_reservations (source_type, source_id) WHERE source_id IS NOT NULL;
+-- Add unique constraints/indexes for idempotency and source tracking
+CREATE UNIQUE INDEX uq_stock_reservation_idempotency ON stock_reservations (idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE UNIQUE INDEX uq_stock_reservation_source ON stock_reservations (source_type, source_id) WHERE source_id IS NOT NULL;
 
 -- Add trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_stock_reservations_updated_at()

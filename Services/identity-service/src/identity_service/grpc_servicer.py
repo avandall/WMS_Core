@@ -135,6 +135,38 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             except Exception:
                 pass
 
+    def Login(self, request: identity_pb2.LoginRequest, context: grpc.ServicerContext):
+        email = request.email.strip().lower()
+        password = request.password
+
+        if not email or not password:
+            return identity_pb2.LoginResponse(success=False, message="Email and password are required")
+
+        session_gen = get_session()
+        db = next(session_gen)
+        try:
+            service = UserService(UserRepo(db))
+            tokens = asyncio.run(service.authenticate(email, password))
+            user = tokens["user"]
+            return identity_pb2.LoginResponse(
+                success=True,
+                access_token=tokens["access_token"],
+                refresh_token=tokens["refresh_token"],
+                token_type=tokens["token_type"],
+                user_id=int(user.user_id),
+                email=user.email or "",
+                role=user.role or "",
+                full_name=user.full_name or "",
+                message="Login successful",
+            )
+        except Exception as e:
+            return identity_pb2.LoginResponse(success=False, message=str(e))
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 # Convenience re-export so grpc_server can import without depending on generated module naming.
 add_IdentityServiceServicer_to_server = identity_pb2_grpc.add_IdentityServiceServicer_to_server

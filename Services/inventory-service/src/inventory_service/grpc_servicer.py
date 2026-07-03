@@ -307,6 +307,39 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             except Exception:
                 pass
 
+    def ReserveStock(self, request: inventory_pb2.ReserveStockRequest, context: grpc.ServicerContext):
+        service, db = self._service()
+        try:
+            res_id = service.reserve_stock(
+                product_id=int(request.product_id),
+                quantity=int(request.quantity),
+                warehouse_id=int(request.warehouse_id) if request.warehouse_id else None,
+                event_id=request.event_id or None,
+                source_type=request.source_type or "manual",
+                source_id=int(request.source_id) if request.source_id else None,
+                document_id=int(request.document_id) if request.document_id else None,
+                created_by=request.created_by or None,
+                expires_at=request.expires_at or None,
+            )
+            return inventory_pb2.ReserveStockResponse(
+                success=True,
+                reservation_id=res_id,
+                message="Stock reserved successfully",
+            )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return inventory_pb2.ReserveStockResponse(
+                success=False,
+                reservation_id=0,
+                message=str(exc)
+            )
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server
 

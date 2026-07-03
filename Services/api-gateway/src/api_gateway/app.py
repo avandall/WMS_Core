@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from urllib.request import Request as UrlRequest
-from urllib.request import urlopen
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 import json
+import httpx
 
 import grpc
 from fastapi import FastAPI, Request
@@ -108,48 +106,39 @@ def create_app() -> FastAPI:
     async def api_proxy(path: str, request: Request) -> JSONResponse:
         path = path.strip("/")
         
-        dev_users = {
-            "admin@wms.vn": {"password": "admin123", "user_id": 1, "role": "admin", "full_name": "Administrator"},
-            "warehouse@wms.vn": {"password": "warehouse123", "user_id": 2, "role": "warehouse", "full_name": "Warehouse"},
-            "sales@wms.vn": {"password": "sales123", "user_id": 3, "role": "sales", "full_name": "Sales"},
-            "accountant@wms.vn": {"password": "account123", "user_id": 4, "role": "accountant", "full_name": "Accountant"},
-        }
-        
-        secret_key = os.getenv("SECRET_KEY", "replace-with-render-secret")
+        secret_key = os.getenv("SECRET_KEY")
+        if not secret_key or secret_key == "replace-with-render-secret":
+            return JSONResponse(status_code=500, content={"detail": "JWT secret key is not configured"})
+            
         algorithm = os.getenv("JWT_ALGORITHM", "HS256")
         
-        if path == "auth/login" and request.method == "POST":
+        if path == "auth/refresh" and request.method == "POST":
             payload = await request.json()
-            email = str(payload.get("email", "")).lower()
-            password = str(payload.get("password", ""))
-            user = dev_users.get(email)
-            if not user or user["password"] != password:
-                return JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
-            
-            from datetime import datetime, timezone, timedelta
-            import jwt
-            expires = datetime.now(timezone.utc) + timedelta(hours=8)
-            token = jwt.encode({"sub": str(user["user_id"]), "role": user["role"], "exp": expires}, secret_key, algorithm=algorithm)
-            user_payload = {
-                "user_id": user["user_id"],
-                "email": email,
-                "role": user["role"],
-                "full_name": user["full_name"],
-                "is_active": True,
-            }
-            return JSONResponse(content={
-                "access_token": token,
-                "refresh_token": token,
-                "token_type": "bearer",
-                "user": user_payload,
-            })
-            
-        elif path == "auth/refresh" and request.method == "POST":
-            payload = await request.json()
-            token = payload.get("refresh_token") or ""
-            if not token:
+            refresh_token = payload.get("refresh_token") or ""
+            if not refresh_token:
                 return JSONResponse(status_code=401, content={"detail": "Missing refresh token"})
-            return JSONResponse(content={"access_token": token, "refresh_token": token, "token_type": "bearer"})
+            try:
+                import jwt
+                from datetime import datetime, timezone, timedelta
+                decoded = jwt.decode(refresh_token, secret_key, algorithms=[algorithm])
+                user_id = decoded.get("sub")
+                role = decoded.get("role")
+                if not user_id:
+                    return JSONResponse(status_code=401, content={"detail": "Invalid token: missing subject"})
+                
+                expires = datetime.now(timezone.utc) + timedelta(hours=8)
+                new_token = jwt.encode(
+                    {"sub": str(user_id), "role": role, "exp": expires},
+                    secret_key,
+                    algorithm=algorithm
+                )
+                return JSONResponse(content={
+                    "access_token": new_token,
+                    "refresh_token": refresh_token,
+                    "token_type": "bearer"
+                })
+            except Exception:
+                return JSONResponse(status_code=401, content={"detail": "Invalid refresh token"})
             
         elif path == "users/me" and request.method == "GET":
             auth = request.headers.get("Authorization", "")
@@ -157,23 +146,27 @@ def create_app() -> FastAPI:
                 return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
             token = auth.split(" ", 1)[1]
             try:
-                import jwt
-                payload = jwt.decode(token, secret_key, algorithms=[algorithm])
-                user_id = int(payload.get("sub") or 0)
+                from api_gateway.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
+                from api_gateway.grpc_security import configured_grpc_channel
+                with configured_grpc_channel(os.getenv("IDENTITY_GRPC_ADDR", "identity-service:50051")) as channel:
+                    stub = identity_pb2_grpc.IdentityServiceStub(channel)
+                    resp = stub.ValidateToken(
+                        identity_pb2.ValidateTokenRequest(access_token=token),
+                        timeout=5
+                    )
+                if not resp.valid or not resp.is_active:
+                    return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+                    
+                return JSONResponse(content={
+                    "user_id": int(resp.user_id),
+                    "email": resp.email,
+                    "role": resp.role,
+                    "full_name": resp.full_name,
+                    "is_active": True,
+                    "custom_permissions": [],
+                })
             except Exception:
                 return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
-                
-            for email, user in dev_users.items():
-                if int(user["user_id"]) == user_id:
-                    return JSONResponse(content={
-                        "user_id": user["user_id"],
-                        "email": email,
-                        "role": user["role"],
-                        "full_name": user["full_name"],
-                        "is_active": True,
-                        "custom_permissions": [],
-                    })
-            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
             
         elif path == "users/permissions" and request.method == "GET":
             return JSONResponse(
@@ -215,30 +208,42 @@ def create_app() -> FastAPI:
         method = request.method
         body = await request.body()
         
-        headers = {"Content-Type": "application/json"}
+        headers = {}
+        content_type = request.headers.get("Content-Type")
+        if content_type:
+            headers["Content-Type"] = content_type
+        else:
+            headers["Content-Type"] = "application/json"
+            
         authorization = request.headers.get("Authorization")
         if authorization:
             headers["Authorization"] = authorization
             
-        req = UrlRequest(url, data=body or None, method=method, headers=headers)
-        try:
-            with urlopen(req, timeout=120) as response:
-                raw = response.read().decode("utf-8") or "{}"
-                try:
-                    content = json.loads(raw)
-                except json.JSONDecodeError:
-                    content = {"data": raw}
-                return JSONResponse(status_code=response.status, content=content)
-        except HTTPError as exc:
-            raw = exc.read().decode("utf-8", errors="replace")
+        for h_name, h_val in request.headers.items():
+            if h_name.lower() in ("x-request-id", "traceparent"):
+                headers[h_name] = h_val
+                
+        async with httpx.AsyncClient() as client:
             try:
-                content = json.loads(raw) if raw else {}
-                if not isinstance(content, dict):
-                    content = {"detail": content}
-            except json.JSONDecodeError:
-                content = {"detail": raw or str(exc)}
-            return JSONResponse(status_code=exc.code, content=content)
-        except (URLError, TimeoutError) as exc:
-            return JSONResponse(status_code=502, content={"detail": str(exc)})
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    content=body or None,
+                    headers=headers,
+                    timeout=120.0
+                )
+                try:
+                    content = response.json()
+                except Exception:
+                    content = {"data": response.text}
+                return JSONResponse(status_code=response.status_code, content=content)
+            except httpx.HTTPStatusError as exc:
+                try:
+                    content = exc.response.json()
+                except Exception:
+                    content = {"detail": exc.response.text}
+                return JSONResponse(status_code=exc.response.status_code, content=content)
+            except Exception as exc:
+                return JSONResponse(status_code=502, content={"detail": str(exc)})
 
     return app

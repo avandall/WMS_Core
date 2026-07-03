@@ -236,7 +236,7 @@ class InventoryService:
                 "reservation_id": reservation_id,
             },
         )
-        return True
+        return reservation_id
 
     def release_reservation(
         self,
