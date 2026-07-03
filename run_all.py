@@ -286,7 +286,31 @@ def _shutdown(processes: list[tuple[str, subprocess.Popen]]) -> None:
         _terminate_process(name, process)
 
 
+def _load_env_file(path: Path) -> None:
+    if not path.is_file():
+        return
+    print(f"Loading environment variables from {path}", flush=True)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                        val = val[1:-1]
+                    os.environ.setdefault(key, val)
+    except Exception as e:
+        print(f"Failed to load env file {path}: {e}", flush=True)
+
+
 def main() -> int:
+    for env_file in [ROOT / "secret.txt", ROOT / ".env", Path("/etc/secrets/secret.txt")]:
+        _load_env_file(env_file)
+
     port = int(os.getenv("PORT", "8000"))
     processes: list[tuple[str, subprocess.Popen]] = []
 
