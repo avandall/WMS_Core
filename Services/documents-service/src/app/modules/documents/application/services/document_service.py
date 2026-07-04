@@ -384,20 +384,28 @@ class DocumentService:
                             ),
                             timeout=10,
                         )
+                        released_success = True
                         for res in list_resp.reservations:
                             if res.document_id == document_id:
-                                stub.ReleaseReservation(
+                                resp = stub.ReleaseReservation(
                                     inventory_pb2.ReleaseReservationRequest(
                                         reservation_id=res.id,
                                         released_qty=0,
                                     ),
                                     timeout=10,
                                 )
+                                if not resp.success:
+                                    released_success = False
+                                    raise ValidationError(f"Inventory reservation release failed for reservation ID {res.id}")
                                 reservation_ids.append(str(res.id))
-                    except Exception:
-                        # Continue to make a best-effort release of other lines
-                        pass
-                    item.reserved_qty = 0
+                        if released_success:
+                            item.reserved_qty = 0
+                    except grpc.RpcError as exc:
+                        raise ValidationError(f"Inventory reservation release failed for product {item.product_id}: {exc.details()}")
+                    except Exception as exc:
+                        if isinstance(exc, ValidationError):
+                            raise
+                        raise ValidationError(f"Unexpected error releasing reservation for product {item.product_id}: {str(exc)}")
         
         self.document_repo.save(document)
         self._commit_if_needed()
