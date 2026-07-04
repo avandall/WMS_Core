@@ -131,8 +131,13 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         row = self.session.get(InventoryModel, product_id)
         return row.quantity if row else 0
 
-    def get_all(self) -> List[InventoryItem]:
-        rows = self.session.execute(select(InventoryModel)).scalars().all()
+    def get_all(self, limit: int = 0, offset: int = 0) -> List[InventoryItem]:
+        query = select(InventoryModel).order_by(InventoryModel.product_id)
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        rows = self.session.execute(query).scalars().all()
         return [self._to_domain(row) for row in rows]
 
     def get_inventory_by_warehouse_rows(self) -> list[dict]:
@@ -304,6 +309,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         # Update warehouse reserved_qty
         warehouse_row.reserved_qty += requested_qty
 
+        self.session.flush()
         self._commit_if_auto()
         return reservation.id
 
@@ -373,6 +379,23 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             warehouse_row.physical_qty -= consumed_qty  # Physical stock decreases on consumption
 
         self._commit_if_auto()
+
+    def get_reservation(self, reservation_id: int) -> dict | None:
+        """Return reservation details as a plain dict, or None if not found."""
+        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+        row = self.session.get(StockReservationModel, reservation_id)
+        if not row:
+            return None
+        return {
+            "id": int(row.id),
+            "product_id": int(row.product_id),
+            "warehouse_id": int(row.warehouse_id),
+            "document_id": int(row.document_id) if row.document_id else None,
+            "reserved_qty": int(row.reserved_qty),
+            "consumed_qty": int(row.consumed_qty),
+            "released_qty": int(row.released_qty),
+            "status": row.status,
+        }
 
     def list_reservations(
         self, product_id: int | None = None, warehouse_id: int | None = None, status: str | None = None
@@ -493,6 +516,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             idempotency_key=idempotency_key,
         )
         self.session.add(transaction)
+        self.session.flush()
         self._commit_if_auto()
 
         return {

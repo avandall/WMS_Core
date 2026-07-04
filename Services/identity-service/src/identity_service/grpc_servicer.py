@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import asyncio
+import sys
+import threading
+from typing import TypeVar, Awaitable
 
 import grpc
 
@@ -12,6 +16,36 @@ from app.shared.core.database import get_session
 
 from identity_service.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
 
+# ---------------------------------------------------------------------------
+# Async runner: one dedicated event loop per process, reused across all calls.
+# Using asyncio.run() inside a sync gRPC handler creates & destroys a loop on
+# every invocation and raises RuntimeError when called inside an async context.
+# ---------------------------------------------------------------------------
+_T = TypeVar("_T")
+_loop_lock = threading.Lock()
+_dedicated_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_loop() -> asyncio.AbstractEventLoop:
+    global _dedicated_loop
+    with _loop_lock:
+        if _dedicated_loop is None or _dedicated_loop.is_closed():
+            _dedicated_loop = asyncio.new_event_loop()
+            t = threading.Thread(target=_dedicated_loop.run_forever, daemon=True)
+            t.start()
+        return _dedicated_loop
+
+
+def _run_async(coro: Awaitable[_T]) -> _T:
+    """Run an async coroutine from a sync context on the dedicated loop.
+    
+    A 30-second timeout guards against hangs in the async code — gRPC will
+    deadline the call before then, but this prevents the thread from leaking.
+    """
+    loop = _get_loop()
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=30)
+
 
 class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
     def ValidateToken(self, request: identity_pb2.ValidateTokenRequest, context: grpc.ServicerContext):
@@ -19,14 +53,13 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         if not token:
             return identity_pb2.ValidateTokenResponse(valid=False)
 
-        # Log incoming ValidateToken call for debugging
+        # Log incoming ValidateToken call
         try:
-            import json
             request_id = None
             for k, v in context.invocation_metadata() or []:
                 if k.lower() == "x-request-id":
                     request_id = v
-            print(json.dumps({"msg": "validate_token_received", "request_id": request_id, "token_len": len(token)}))
+            print(json.dumps({"level": "debug", "msg": "validate_token_received", "request_id": request_id, "token_len": len(token)}), file=sys.stderr)
         except Exception:
             pass
 
@@ -45,7 +78,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         db = next(session_gen)
         try:
             service = UserService(UserRepo(db))
-            user = asyncio.run(service.get_user(user_id))
+            user = _run_async(service.get_user(user_id))
             return identity_pb2.ValidateTokenResponse(
                 valid=True,
                 user_id=int(user.user_id),
@@ -76,7 +109,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         try:
             service = UserService(UserRepo(db))
             # Create user using the service
-            user = asyncio.run(service.create_user(email, password, role, full_name))
+            user = _run_async(service.create_user(email, password, role, full_name))
             return identity_pb2.CreateUserResponse(
                 success=True,
                 message="User created successfully",
@@ -99,7 +132,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         db = next(session_gen)
         try:
             service = UserService(UserRepo(db))
-            asyncio.run(service.delete_user(user_id))
+            _run_async(service.delete_user(user_id))
             return identity_pb2.DeleteUserResponse(success=True, message="User deleted successfully")
         except Exception as e:
             return identity_pb2.DeleteUserResponse(success=False, message=str(e))
@@ -114,7 +147,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         db = next(session_gen)
         try:
             service = UserService(UserRepo(db))
-            users = asyncio.run(service.list_users())
+            users = _run_async(service.list_users())
             entries = []
             for u in (users.values() if isinstance(users, dict) else users):
                 entries.append(identity_pb2.UserEntry(
@@ -146,7 +179,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         db = next(session_gen)
         try:
             service = UserService(UserRepo(db))
-            tokens = asyncio.run(service.authenticate(email, password))
+            tokens = _run_async(service.authenticate(email, password))
             user = tokens["user"]
             return identity_pb2.LoginResponse(
                 success=True,

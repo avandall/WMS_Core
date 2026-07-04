@@ -8,7 +8,7 @@ from app.shared.core.database import Base
 class InventoryTransactionModel(Base):
     __tablename__ = "inventory_transactions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     transaction_type = Column(String(50), nullable=False)  # e.g., "ADJUSTMENT", "RESERVATION", "CONSUMPTION", "RECEIPT"
     document_id = Column(BigInteger, nullable=True, index=True)
     document_line_id = Column(BigInteger, nullable=True)

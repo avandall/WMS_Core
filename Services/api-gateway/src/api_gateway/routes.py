@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import concurrent.futures
 import grpc
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api_gateway.auth import get_current_user
@@ -59,10 +61,6 @@ def login_auth(payload: LoginPayload, request: Request):
     email = payload.email.strip().lower()
     password = payload.password
 
-    secret_key = os.getenv("SECRET_KEY")
-    if not secret_key or secret_key == "replace-with-render-secret":
-        raise HTTPException(status_code=500, detail="JWT secret key is not configured")
-
     with identity_stub() as stub:
         try:
             resp = _grpc_call(
@@ -77,24 +75,17 @@ def login_auth(payload: LoginPayload, request: Request):
     if not resp.success:
         raise HTTPException(status_code=401, detail=resp.message or "Invalid credentials")
 
-    import jwt
-    import os
-    from datetime import datetime, timezone, timedelta
-
-    algorithm = os.getenv("JWT_ALGORITHM", "HS256")
-    expires = datetime.now(timezone.utc) + timedelta(hours=8)
-
-    token = jwt.encode(
-        {"sub": str(resp.user_id), "role": resp.role, "exp": expires},
-        secret_key,
-        algorithm=algorithm
-    )
-
+    # Return the token issued by the identity-service directly.
+    # Re-signing here would create a dual-authority problem: both services
+    # would mint tokens but share only one key; a rotation mismatch breaks auth silently.
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "access_token": resp.access_token,
+        "refresh_token": resp.refresh_token,
+        "token_type": resp.token_type or "bearer",
         "user_id": resp.user_id,
-        "role": resp.role
+        "role": resp.role,
+        "email": resp.email,
+        "full_name": resp.full_name,
     }
 
 
@@ -106,12 +97,16 @@ def _md(request: Request):
         metadata.append(("x-request-id", request_id))
     if traceparent:
         metadata.append(("traceparent", traceparent))
+    
+    # Forward user credentials from authenticated context to downstream gRPC services
+    user = getattr(request.state, "user", None)
+    if user:
+        metadata.append(("user-id", str(user.user_id)))
+        metadata.append(("user-email", user.email or ""))
     return metadata or None
 
 
 def _timeout(env: str, default: float) -> float:
-    import os
-
     try:
         return float(os.getenv(env, str(default)))
     except Exception:
@@ -157,7 +152,6 @@ def list_customers(request: Request):
         return []
 
     # Fetch all purchases in parallel threads to avoid N+1 serial gRPC calls
-    import concurrent.futures
     md = _md(request)
 
     def fetch_purchases(customer_id: int) -> tuple[int, list]:
@@ -197,6 +191,10 @@ def create_customer(payload: CustomerPayload, request: Request):
     if not payload.name or not payload.name.strip():
         raise HTTPException(status_code=422, detail="Customer name is required")
     # Duplicate name and email check
+    # TODO(ME-05): This O(n) list-scan duplicate check fetches all customers on every create.
+    # Proper fix: add a UNIQUE constraint on customers.name/email at the DB level and expose
+    # a dedicated ExistsCustomerByName gRPC method. The repo should then raise a DuplicateError
+    # that maps to HTTP 409, removing the need for this pre-flight check entirely.
     with customer_stub() as stub:
         existing = _grpc_call(
             stub.ListCustomers,
@@ -1710,3 +1708,36 @@ def delete_user(user_id: int, request: Request):
             timeout=GRPC_TIMEOUT_FAST,
         )
     return {"success": resp.success, "message": resp.message}
+
+
+@router.get(
+    "/users/permissions",
+    dependencies=[Depends(get_current_user)],
+)
+def get_users_permissions():
+    return {
+        "roles": {
+            "admin": ["*"],
+            "warehouse": ["view_products", "view_warehouses", "view_inventory", "manage_documents"],
+            "sales": ["view_products", "view_customers", "manage_customers", "manage_documents"],
+            "accountant": ["view_reports", "view_customers", "view_documents"],
+        },
+        "permissions": [
+            "view_products", "manage_products",
+            "view_warehouses", "manage_warehouses",
+            "view_inventory",
+            "view_documents", "manage_documents",
+            "doc_create_import", "doc_create_export", "doc_create_transfer", "doc_post",
+            "view_customers", "manage_customers",
+            "view_reports",
+            "manage_users",
+        ],
+    }
+
+
+@router.post(
+    "/users/me/change-password",
+    dependencies=[Depends(get_current_user)],
+)
+def change_password():
+    raise HTTPException(status_code=501, detail="Change password is not implemented")

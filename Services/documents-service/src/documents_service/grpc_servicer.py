@@ -21,6 +21,13 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 return v
         return None
 
+    @staticmethod
+    def _user_id(context: grpc.ServicerContext) -> str:
+        for k, v in context.invocation_metadata() or []:
+            if k.lower() == "user-id":
+                return v
+        return "system"
+
     def _service(self) -> tuple[DocumentService, object]:
         session_gen = get_session()
         db = next(session_gen)
@@ -335,6 +342,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
         try:
             service.complete_request(
                 int(request.document_id),
+                completed_by=self._user_id(context),
                 request_id=self._request_id(context),
             )
             return documents_pb2.CompleteRequestResponse(

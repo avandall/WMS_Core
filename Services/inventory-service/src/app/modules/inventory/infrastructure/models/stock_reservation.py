@@ -8,7 +8,7 @@ from app.shared.core.database import Base
 class StockReservationModel(Base):
     __tablename__ = "stock_reservations"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     source_type = Column(String(50), nullable=False)  # e.g., "document", "manual", "order"
     source_id = Column(BigInteger, nullable=True)
     document_id = Column(BigInteger, nullable=True)

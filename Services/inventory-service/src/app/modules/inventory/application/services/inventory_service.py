@@ -259,12 +259,11 @@ class InventoryService:
             },
         )
         # Phase 15: Retrieve reservation details before release
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
-        reservation = self.inventory_repo.session.get(StockReservationModel, reservation_id)
-        prod_id = reservation.product_id if reservation else 0
-        wh_id = reservation.warehouse_id if reservation else 0
-        doc_id = reservation.document_id if reservation else None
-        qty = released_qty or (reservation.reserved_qty if reservation else 0)
+        reservation = self.inventory_repo.get_reservation(reservation_id)
+        prod_id = reservation["product_id"] if reservation else 0
+        wh_id = reservation["warehouse_id"] if reservation else 0
+        doc_id = reservation["document_id"] if reservation else None
+        qty = released_qty or (reservation["reserved_qty"] if reservation else 0)
 
         # Phase 9: Write immutable ledger entry for reservation release
         self._write_transaction(
@@ -504,11 +503,10 @@ class InventoryService:
         )
 
         # Phase 9: Write immutable ledger entry for reservation consumption
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
-        reservation = self.inventory_repo.session.get(StockReservationModel, reservation_id)
-        prod_id = reservation.product_id if reservation else 0
-        wh_id = reservation.warehouse_id if reservation else 0
-        doc_id = reservation.document_id if reservation else None
+        reservation = self.inventory_repo.get_reservation(reservation_id)
+        prod_id = reservation["product_id"] if reservation else 0
+        wh_id = reservation["warehouse_id"] if reservation else 0
+        doc_id = reservation["document_id"] if reservation else None
 
         self._write_transaction(
             transaction_type="RESERVATION_CONSUME",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.modules.documents.application.ports import (
@@ -178,7 +179,6 @@ class DocumentService:
         This is the new lifecycle method that only changes document status
         and approval metadata. It does NOT emit InventoryMovementRequested.
         """
-        from datetime import datetime
 
         document = self.get_document(document_id)
         if document.status == DocumentStatus.CANCELLED:
@@ -193,8 +193,8 @@ class DocumentService:
         # Only change status and approval metadata - no stock movement
         document.status = DocumentStatus.POSTED
         document.approved_by = approved_by
-        document.approved_at = datetime.now()
-        document.posted_at = datetime.now()  # For backward compatibility
+        document.approved_at = datetime.now(timezone.utc)
+        document.posted_at = datetime.now(timezone.utc)  # For backward compatibility
 
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -251,7 +251,6 @@ class DocumentService:
         For SALE documents, reserves each line from the source warehouse.
         Updates document line reserved_qty with the reservation ID.
         """
-        from datetime import datetime
 
         document = self.get_document(document_id)
         
@@ -305,7 +304,7 @@ class DocumentService:
                 reservation_ids.append(str(resp.reservation_id))
         
         # Update execution metadata
-        document.execution_started_at = datetime.now()
+        document.execution_started_at = datetime.now(timezone.utc)
         
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -338,7 +337,6 @@ class DocumentService:
         Releases all reservations associated with the document lines.
         Restores available stock quantity.
         """
-        from datetime import datetime
 
         document = self.get_document(document_id)
         
@@ -351,7 +349,7 @@ class DocumentService:
                 item.reserved_qty = 0
         
         # Update execution metadata
-        document.completed_at = datetime.now()
+        document.completed_at = datetime.now(timezone.utc)
         
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -380,7 +378,6 @@ class DocumentService:
         request_id: Optional[str] = None,
     ) -> Document:
         """Transitions document to IN_PROGRESS and sets execution_started_at."""
-        from datetime import datetime
 
         document = self.get_document(document_id)
         if document.status == DocumentStatus.CANCELLED:
@@ -389,7 +386,7 @@ class DocumentService:
             raise InvalidDocumentStatusError(f"Cannot start execution on completed document {document_id}")
 
         document.status = DocumentStatus.IN_PROGRESS
-        document.execution_started_at = datetime.now()
+        document.execution_started_at = datetime.now(timezone.utc)
 
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -490,10 +487,10 @@ class DocumentService:
     def complete_request(
         self,
         document_id: int,
+        completed_by: str = "system",
         request_id: Optional[str] = None,
     ) -> Document:
         """Transitions document to COMPLETED status and sets completed_at."""
-        from datetime import datetime
 
         document = self.get_document(document_id)
         if document.status != DocumentStatus.EXECUTED:
@@ -502,7 +499,7 @@ class DocumentService:
             )
 
         document.status = DocumentStatus.COMPLETED
-        document.completed_at = datetime.now()
+        document.completed_at = datetime.now(timezone.utc)
 
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -517,7 +514,7 @@ class DocumentService:
                 "entity_type": "document",
                 "entity_id": document_id,
                 "warehouse_id": document.from_warehouse_id or document.to_warehouse_id,
-                "user_id": "system",
+                "user_id": completed_by,
             },
         )
         return document
@@ -549,9 +546,12 @@ class DocumentService:
         }
 
     def get_pending_documents(self) -> List[Document]:
+        # TODO: Full table scan O(n). Add a SQL-level status filter to IDocumentRepo.get_all()
+        # and push the filter to the DB. Only used in tests / admin tooling currently.
         return [d for d in self.document_repo.get_all() if d.status == DocumentStatus.DRAFT]
 
     def get_documents_by_status(self, status: DocumentStatus) -> List[Document]:
+        # TODO: Full table scan O(n). Add SQL filter param to IDocumentRepo.get_all().
         return [d for d in self.document_repo.get_all() if d.status == status]
 
     def get_document(self, document_id: int) -> Document:
@@ -566,13 +566,17 @@ class DocumentService:
         page: int = 1,
         page_size: int = 20,
     ) -> List[Document]:
-        all_docs = self.document_repo.get_all()
+        offset = (page - 1) * page_size
         if doc_type:
+            # TODO: Full table scan when doc_type filter is present. Proper fix: add a
+            # SQL-level doc_type WHERE clause to IDocumentRepo.get_all() / add a separate
+            # get_by_type(doc_type, limit, offset) method on the interface.
+            all_docs = self.document_repo.get_all()
             doc_type_enum = DocumentType(doc_type.upper())
-            all_docs = [doc for doc in all_docs if doc.doc_type == doc_type_enum]
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        return all_docs[start_idx:end_idx]
+            filtered = [doc for doc in all_docs if doc.doc_type == doc_type_enum]
+            return filtered[offset: offset + page_size]
+        # No type filter — delegate pagination entirely to SQL
+        return self.document_repo.get_all(limit=page_size, offset=offset)
 
     def delete_document(self, document_id: int) -> None:
         document = self.get_document(document_id)

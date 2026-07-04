@@ -110,8 +110,19 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
         model = self.session.get(DocumentModel, document_id)
         return self._to_domain(model) if model else None
 
-    def get_all(self) -> List[Document]:
-        rows = self.session.execute(select(DocumentModel)).scalars().all()
+    def get_all(self, limit: int = 0, offset: int = 0) -> List[Document]:
+        """Return all documents, optionally paginated at the SQL level.
+
+        Args:
+            limit: Maximum rows to return. 0 means no limit (backward-compatible default).
+            offset: Number of rows to skip.
+        """
+        query = select(DocumentModel).order_by(DocumentModel.document_id.desc())
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        rows = self.session.execute(query).scalars().all()
         return [self._to_domain(row) for row in rows]
 
     def update_status(self, document_id: int, new_status: DocumentStatus) -> None:

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
-import json
-import httpx
 
 import grpc
+import httpx
+import jwt
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -26,7 +28,6 @@ def _csv_env(name: str, default: str) -> list[str]:
     value = os.getenv(name, default).strip()
     # Nếu chuỗi truyền vào bọc bởi dấu ngoặc vuông mảng kiểu ["*"] hoặc ["http..."]
     if value.startswith("[") and value.endswith("]"):
-        import json
         try:
             res = json.loads(value)
             if isinstance(res, list):
@@ -118,8 +119,6 @@ def create_app() -> FastAPI:
             if not refresh_token:
                 return JSONResponse(status_code=401, content={"detail": "Missing refresh token"})
             try:
-                import jwt
-                from datetime import datetime, timezone, timedelta
                 decoded = jwt.decode(refresh_token, secret_key, algorithms=[algorithm])
                 user_id = decoded.get("sub")
                 role = decoded.get("role")
@@ -168,30 +167,7 @@ def create_app() -> FastAPI:
             except Exception:
                 return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
             
-        elif path == "users/permissions" and request.method == "GET":
-            return JSONResponse(
-                content={
-                    "roles": {
-                        "admin": ["*"],
-                        "warehouse": ["view_products", "view_warehouses", "view_inventory", "manage_documents"],
-                        "sales": ["view_products", "view_customers", "manage_customers", "manage_documents"],
-                        "accountant": ["view_reports", "view_customers", "view_documents"],
-                    },
-                    "permissions": [
-                        "view_products", "manage_products",
-                        "view_warehouses", "manage_warehouses",
-                        "view_inventory",
-                        "view_documents", "manage_documents",
-                        "doc_create_import", "doc_create_export", "doc_create_transfer", "doc_post",
-                        "view_customers", "manage_customers",
-                        "view_reports",
-                        "manage_users",
-                    ],
-                }
-            )
-            
-        elif path == "users/me/change-password" and request.method == "POST":
-            return JSONResponse(content={"success": True, "message": "Password changed successfully"})
+
 
         def _gateway_path(p: str) -> str:
             if p.startswith("v1/"):

@@ -20,7 +20,7 @@ class IInventoryRepo(ABC):
         pass
 
     @abstractmethod
-    def get_all(self) -> List["InventoryItem"]:
+    def get_all(self, limit: int = 0, offset: int = 0) -> List["InventoryItem"]:
         pass
 
     @abstractmethod
@@ -91,6 +91,11 @@ class IInventoryRepo(ABC):
 
     @abstractmethod
     def consume_reservation(self, reservation_id: int, consumed_qty: int) -> None:
+        pass
+
+    @abstractmethod
+    def get_reservation(self, reservation_id: int) -> dict[str, Any] | None:
+        """Return a dict with keys: product_id, warehouse_id, document_id, reserved_qty, or None if not found."""
         pass
 
     @abstractmethod
