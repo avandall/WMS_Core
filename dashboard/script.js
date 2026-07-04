@@ -934,7 +934,7 @@ function applyInventoryFilters() {
     table.querySelectorAll('tbody tr').forEach(row => {
         const cells = row.querySelectorAll('td');
         let match = true;
-        const columns = ['product', 'warehouse', 'quantity', 'price', 'value'];
+        const columns = ['product', 'warehouse', 'physical', 'reserved', 'available', 'price', 'value'];
         columns.forEach((col, idx) => {
             if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
                 match = false;
@@ -3677,6 +3677,7 @@ async function loadDocumentDetails(documentId, silent = false) {
     } catch (error) {
         if (!silent) showError('Failed to load document details');
     }
+}
 
 // Phase 10/11: Document workflow helpers
 async function approveDocument(id) {
@@ -3797,7 +3798,6 @@ async function completeDocument(id) {
         console.error('Complete error:', error);
         showError(error.detail || 'Failed to complete document');
     }
-}
 }
 
 async function viewDocument(documentId) {

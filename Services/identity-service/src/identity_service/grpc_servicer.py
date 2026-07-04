@@ -72,13 +72,22 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         except Exception:
             return identity_pb2.ValidateTokenResponse(valid=False)
 
+        async def _action():
+            session_gen = get_session()
+            db = next(session_gen)
+            try:
+                service = UserService(UserRepo(db))
+                user = await service.get_user(user_id)
+                return user
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
         # Resolve current user from the identity datastore.
-        # Note: `get_session()` is a FastAPI dependency generator; here we call next() to get a session.
-        session_gen = get_session()
-        db = next(session_gen)
         try:
-            service = UserService(UserRepo(db))
-            user = _run_async(service.get_user(user_id))
+            user = _run_async(_action())
             return identity_pb2.ValidateTokenResponse(
                 valid=True,
                 user_id=int(user.user_id),
@@ -89,11 +98,6 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             )
         except Exception:
             return identity_pb2.ValidateTokenResponse(valid=False)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def CreateUser(self, request: identity_pb2.CreateUserRequest, context: grpc.ServicerContext):
         email = request.email
@@ -104,12 +108,22 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         if not email or not password:
             return identity_pb2.CreateUserResponse(success=False, message="Email and password are required")
 
-        session_gen = get_session()
-        db = next(session_gen)
+        async def _action():
+            session_gen = get_session()
+            db = next(session_gen)
+            try:
+                service = UserService(UserRepo(db))
+                # Create user using the service
+                user = await service.create_user(email, password, role, full_name)
+                return user
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
         try:
-            service = UserService(UserRepo(db))
-            # Create user using the service
-            user = _run_async(service.create_user(email, password, role, full_name))
+            user = _run_async(_action())
             return identity_pb2.CreateUserResponse(
                 success=True,
                 message="User created successfully",
@@ -117,37 +131,46 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             )
         except Exception as e:
             return identity_pb2.CreateUserResponse(success=False, message=str(e))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def DeleteUser(self, request: identity_pb2.DeleteUserRequest, context: grpc.ServicerContext):
         user_id = request.user_id
         if not user_id:
             return identity_pb2.DeleteUserResponse(success=False, message="User ID is required")
 
-        session_gen = get_session()
-        db = next(session_gen)
+        async def _action():
+            session_gen = get_session()
+            db = next(session_gen)
+            try:
+                service = UserService(UserRepo(db))
+                await service.delete_user(user_id)
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
         try:
-            service = UserService(UserRepo(db))
-            _run_async(service.delete_user(user_id))
+            _run_async(_action())
             return identity_pb2.DeleteUserResponse(success=True, message="User deleted successfully")
         except Exception as e:
             return identity_pb2.DeleteUserResponse(success=False, message=str(e))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ListUsers(self, request: identity_pb2.ListUsersRequest, context: grpc.ServicerContext):
-        session_gen = get_session()
-        db = next(session_gen)
+        async def _action():
+            session_gen = get_session()
+            db = next(session_gen)
+            try:
+                service = UserService(UserRepo(db))
+                users = await service.list_users()
+                return users
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
         try:
-            service = UserService(UserRepo(db))
-            users = _run_async(service.list_users())
+            users = _run_async(_action())
             entries = []
             for u in (users.values() if isinstance(users, dict) else users):
                 entries.append(identity_pb2.UserEntry(
@@ -162,11 +185,6 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return identity_pb2.ListUsersResponse()
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def Login(self, request: identity_pb2.LoginRequest, context: grpc.ServicerContext):
         email = request.email.strip().lower()
@@ -175,11 +193,21 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
         if not email or not password:
             return identity_pb2.LoginResponse(success=False, message="Email and password are required")
 
-        session_gen = get_session()
-        db = next(session_gen)
+        async def _action():
+            session_gen = get_session()
+            db = next(session_gen)
+            try:
+                service = UserService(UserRepo(db))
+                tokens = await service.authenticate(email, password)
+                return tokens
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
         try:
-            service = UserService(UserRepo(db))
-            tokens = _run_async(service.authenticate(email, password))
+            tokens = _run_async(_action())
             user = tokens["user"]
             return identity_pb2.LoginResponse(
                 success=True,
@@ -194,11 +222,6 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             )
         except Exception as e:
             return identity_pb2.LoginResponse(success=False, message=str(e))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
 
 # Convenience re-export so grpc_server can import without depending on generated module naming.

@@ -120,11 +120,26 @@ def create_app() -> FastAPI:
                 return JSONResponse(status_code=401, content={"detail": "Missing refresh token"})
             try:
                 decoded = jwt.decode(refresh_token, secret_key, algorithms=[algorithm])
+                if decoded.get("type") != "refresh":
+                    return JSONResponse(status_code=401, content={"detail": "Invalid token type"})
+                
                 user_id = decoded.get("sub")
-                role = decoded.get("role")
                 if not user_id:
                     return JSONResponse(status_code=401, content={"detail": "Invalid token: missing subject"})
                 
+                # Fetch latest user details and role from identity service to detect role changes/deactivation
+                from api_gateway.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
+                from api_gateway.grpc_security import configured_grpc_channel
+                with configured_grpc_channel(os.getenv("IDENTITY_GRPC_ADDR", "identity-service:50051")) as channel:
+                    stub = identity_pb2_grpc.IdentityServiceStub(channel)
+                    resp = stub.ValidateToken(
+                        identity_pb2.ValidateTokenRequest(access_token=refresh_token),
+                        timeout=5
+                    )
+                if not resp.valid or not resp.is_active:
+                    return JSONResponse(status_code=401, content={"detail": "User is inactive or token is invalid"})
+                
+                role = resp.role
                 expires = datetime.now(timezone.utc) + timedelta(hours=8)
                 new_token = jwt.encode(
                     {"sub": str(user_id), "role": role, "exp": expires},

@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -91,10 +91,11 @@ class Settings(BaseSettings):
             return [item.strip() for item in v_str.split(",") if item.strip()]
         return v
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         case_sensitive=False,
         extra="ignore",
+        enable_decoding=False,
     )
 
 

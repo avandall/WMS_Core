@@ -278,7 +278,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == product_id,
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if not warehouse_row:
@@ -338,7 +338,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == reservation.product_id,
                 WarehouseInventoryModel.warehouse_id == reservation.warehouse_id,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if warehouse_row:
@@ -371,12 +371,13 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == reservation.product_id,
                 WarehouseInventoryModel.warehouse_id == reservation.warehouse_id,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if warehouse_row:
             warehouse_row.reserved_qty -= consumed_qty
             warehouse_row.physical_qty -= consumed_qty  # Physical stock decreases on consumption
+            warehouse_row.quantity = warehouse_row.physical_qty  # Keep legacy quantity in sync
 
         self._commit_if_auto()
 

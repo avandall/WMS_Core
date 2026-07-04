@@ -1715,23 +1715,13 @@ def delete_user(user_id: int, request: Request):
     dependencies=[Depends(get_current_user)],
 )
 def get_users_permissions():
+    from api_gateway.permissions import ROLE_PERMISSIONS, Permission
     return {
         "roles": {
-            "admin": ["*"],
-            "warehouse": ["view_products", "view_warehouses", "view_inventory", "manage_documents"],
-            "sales": ["view_products", "view_customers", "manage_customers", "manage_documents"],
-            "accountant": ["view_reports", "view_customers", "view_documents"],
+            role: [p.value for p in perms] if role != "admin" else ["*"]
+            for role, perms in ROLE_PERMISSIONS.items()
         },
-        "permissions": [
-            "view_products", "manage_products",
-            "view_warehouses", "manage_warehouses",
-            "view_inventory",
-            "view_documents", "manage_documents",
-            "doc_create_import", "doc_create_export", "doc_create_transfer", "doc_post",
-            "view_customers", "manage_customers",
-            "view_reports",
-            "manage_users",
-        ],
+        "permissions": [p.value for p in Permission],
     }
 
 

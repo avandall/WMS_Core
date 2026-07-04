@@ -360,16 +360,29 @@ class ReportingReadModelRepo:
     ) -> None:
         row = self.db.get(InventorySummary, product_id)
         if row is None:
-            row = InventorySummary(product_id=product_id, total_quantity=0, warehouse_quantities={})
+            row = InventorySummary(
+                product_id=product_id,
+                total_quantity=0,
+                warehouse_quantities={},
+                warehouse_matrix={}
+            )
             self.db.add(row)
-        row.total_quantity = int(row.total_quantity) + int(total_delta)
-        quantities = dict(row.warehouse_quantities or {})
+
+        matrix = dict(row.warehouse_matrix or {})
         if warehouse_id is not None:
             key = str(int(warehouse_id))
-            quantities[key] = int(quantities.get(key, 0)) + int(
-                total_delta if warehouse_delta is None else warehouse_delta
-            )
-            row.warehouse_quantities = quantities
+            if key not in matrix:
+                matrix[key] = {
+                    "physical_qty": 0,
+                    "reserved_qty": 0,
+                    "incoming_qty": 0,
+                    "in_transit_qty": 0,
+                    "available_qty": 0,
+                }
+            delta = total_delta if warehouse_delta is None else warehouse_delta
+            matrix[key]["physical_qty"] += delta
+            matrix[key]["available_qty"] = matrix[key]["physical_qty"] - matrix[key]["reserved_qty"]
+            row.warehouse_matrix = matrix
         row.updated_at = _now()
 
     def _update_warehouse(self, warehouse_id: Any, quantity_delta: int, document_id: int | None) -> None:

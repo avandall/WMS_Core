@@ -179,6 +179,18 @@ class InventoryService:
         if warehouse_id is None:
             raise ValueError("warehouse_id is required for reservation")
 
+        if event_id and self.inventory_repo.has_movement_event(event_id):
+            from sqlalchemy import select
+            from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+            existing = self.inventory_repo.session.execute(
+                select(StockReservationModel).where(
+                    StockReservationModel.idempotency_key == event_id
+                )
+            ).scalar_one_or_none()
+            if existing:
+                return existing.id
+            return 0
+
         # Phase 4: Use persistent reservation with idempotency
         try:
             expires_dt = datetime.fromisoformat(expires_at) if expires_at else None
@@ -237,7 +249,6 @@ class InventoryService:
             },
         )
         return reservation_id
-
     def release_reservation(
         self,
         *,
@@ -245,6 +256,15 @@ class InventoryService:
         released_qty: Optional[int] = None,
         event_id: Optional[str] = None,
     ) -> bool:
+        # Retrieve reservation details before release
+        reservation = self.inventory_repo.get_reservation(reservation_id)
+        if not reservation:
+            raise KeyError(f"Reservation {reservation_id} not found")
+        prod_id = reservation["product_id"]
+        wh_id = reservation["warehouse_id"]
+        doc_id = reservation["document_id"]
+        qty = released_qty or (reservation["reserved_qty"] - reservation["released_qty"])
+
         # Phase 4: Use persistent reservation release
         self.inventory_repo.release_reservation(reservation_id, released_qty)
 
@@ -255,15 +275,9 @@ class InventoryService:
             document_id=None,
             payload={
                 "reservation_id": reservation_id,
-                "released_qty": released_qty,
+                "released_qty": qty,
             },
         )
-        # Phase 15: Retrieve reservation details before release
-        reservation = self.inventory_repo.get_reservation(reservation_id)
-        prod_id = reservation["product_id"] if reservation else 0
-        wh_id = reservation["warehouse_id"] if reservation else 0
-        doc_id = reservation["document_id"] if reservation else None
-        qty = released_qty or (reservation["reserved_qty"] if reservation else 0)
 
         # Phase 9: Write immutable ledger entry for reservation release
         self._write_transaction(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import grpc
 
 from shared_utils.events import get_publisher
@@ -218,7 +219,9 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 },
             )
             return inventory_pb2.ReleaseReservationResponse(success=True)
-        except Exception:
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
             return inventory_pb2.ReleaseReservationResponse(success=False)
         finally:
             try:
@@ -247,23 +250,23 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             for tx in transactions:
                 transaction_rows.append(
                     inventory_pb2.TransactionRow(
-                        id=tx.get("id"),
+                        id=int(tx.get("id")),
                         transaction_type=tx.get("transaction_type"),
-                        document_id=tx.get("document_id"),
-                        document_line_id=tx.get("document_line_id"),
-                        product_id=tx.get("product_id"),
-                        warehouse_id=tx.get("warehouse_id"),
-                        quantity=tx.get("quantity"),
-                        physical_qty_before=tx.get("physical_qty_before"),
-                        physical_qty_after=tx.get("physical_qty_after"),
-                        reserved_qty_before=tx.get("reserved_qty_before"),
-                        reserved_qty_after=tx.get("reserved_qty_after"),
-                        available_qty_before=tx.get("available_qty_before"),
-                        available_qty_after=tx.get("available_qty_after"),
-                        user_id=tx.get("user_id"),
-                        created_at=tx.get("created_at"),
-                        payload=str(tx.get("payload")) if tx.get("payload") else "",
-                        idempotency_key=tx.get("idempotency_key"),
+                        document_id=int(tx.get("document_id")) if tx.get("document_id") else 0,
+                        document_line_id=int(tx.get("document_line_id")) if tx.get("document_line_id") else 0,
+                        product_id=int(tx.get("product_id")),
+                        warehouse_id=int(tx.get("warehouse_id")),
+                        quantity=int(tx.get("quantity")),
+                        physical_qty_before=int(tx.get("physical_qty_before")) if tx.get("physical_qty_before") is not None else 0,
+                        physical_qty_after=int(tx.get("physical_qty_after")) if tx.get("physical_qty_after") is not None else 0,
+                        reserved_qty_before=int(tx.get("reserved_qty_before")) if tx.get("reserved_qty_before") is not None else 0,
+                        reserved_qty_after=int(tx.get("reserved_qty_after")) if tx.get("reserved_qty_after") is not None else 0,
+                        available_qty_before=int(tx.get("available_qty_before")) if tx.get("available_qty_before") is not None else 0,
+                        available_qty_after=int(tx.get("available_qty_after")) if tx.get("available_qty_after") is not None else 0,
+                        user_id=tx.get("user_id") or "",
+                        created_at=tx.get("created_at") or "",
+                        payload=json.dumps(tx.get("payload")) if tx.get("payload") else "",
+                        idempotency_key=tx.get("idempotency_key") or "",
                     )
                 )
             

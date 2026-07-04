@@ -189,6 +189,10 @@ class DocumentService:
                     f"Document {document_id} has already been approved by {document.approved_by}"
                 )
             return document
+        if document.status != DocumentStatus.DRAFT:
+            raise InvalidDocumentStatusError(
+                f"Document must be in DRAFT status to approve, got {document.status}"
+            )
 
         # Only change status and approval metadata - no stock movement
         document.status = DocumentStatus.POSTED
@@ -276,38 +280,56 @@ class DocumentService:
         inventory_addr = os.getenv("INVENTORY_GRPC_ADDR", "inventory-service:50055")
         
         # Reserve each line from source warehouse
-        with configured_grpc_channel(inventory_addr) as channel:
-            stub = inventory_pb2_grpc.InventoryServiceStub(channel)
-            for item in document.items:
-                event_id = f"doc_{document_id}_product_{item.product_id}"
+        reserved_list = []  # track (reservation_id, item) for rollback
+        try:
+            with configured_grpc_channel(inventory_addr) as channel:
+                stub = inventory_pb2_grpc.InventoryServiceStub(channel)
+                for item in document.items:
+                    event_id = f"doc_{document_id}_product_{item.product_id}"
+                    try:
+                        resp = stub.ReserveStock(
+                            inventory_pb2.ReserveStockRequest(
+                                product_id=int(item.product_id),
+                                quantity=int(item.requested_qty),
+                                warehouse_id=int(document.from_warehouse_id),
+                                event_id=event_id,
+                                source_type="sale_document",
+                                source_id=int(document_id),
+                                document_id=int(document_id),
+                                created_by=document.created_by or "system",
+                            ),
+                            timeout=10,
+                        )
+                    except grpc.RpcError as exc:
+                        raise ValidationError(f"Inventory reservation failed for product {item.product_id}: {exc.details()}")
+                    
+                    if not resp.success:
+                        raise ValidationError(f"Inventory reservation failed for product {item.product_id}: {resp.message}")
+                    
+                    item.reserved_qty = item.requested_qty
+                    reservation_ids.append(str(resp.reservation_id))
+                    reserved_list.append((resp.reservation_id, item))
+            
+            self.document_repo.save(document)
+            self._commit_if_needed()
+        except Exception:
+            # Compensating rollback transaction for previously made reservations
+            if reserved_list:
                 try:
-                    resp = stub.ReserveStock(
-                        inventory_pb2.ReserveStockRequest(
-                            product_id=int(item.product_id),
-                            quantity=int(item.requested_qty),
-                            warehouse_id=int(document.from_warehouse_id),
-                            event_id=event_id,
-                            source_type="sale_document",
-                            source_id=int(document_id),
-                            document_id=int(document_id),
-                            created_by=document.created_by or "system",
-                        ),
-                        timeout=10,
-                    )
-                except grpc.RpcError as exc:
-                    raise ValidationError(f"Inventory reservation failed for product {item.product_id}: {exc.details()}")
-                
-                if not resp.success:
-                    raise ValidationError(f"Inventory reservation failed for product {item.product_id}: {resp.message}")
-                
-                item.reserved_qty = item.requested_qty
-                reservation_ids.append(str(resp.reservation_id))
-        
-        # Update execution metadata
-        document.execution_started_at = datetime.now(timezone.utc)
-        
-        self.document_repo.save(document)
-        self._commit_if_needed()
+                    with configured_grpc_channel(inventory_addr) as release_channel:
+                        release_stub = inventory_pb2_grpc.InventoryServiceStub(release_channel)
+                        for res_id, item in reserved_list:
+                            item.reserved_qty = 0
+                            release_stub.ReleaseReservation(
+                                inventory_pb2.ReleaseReservationRequest(
+                                    reservation_id=int(res_id),
+                                    released_qty=0,
+                                ),
+                                timeout=10,
+                            )
+                except Exception:
+                    pass
+            raise
         
         # Emit StockReserved event
         self.event_publisher.publish(
@@ -342,14 +364,40 @@ class DocumentService:
         
         # Release reservations for each line
         reservation_ids = []
-        for item in document.items:
-            if item.reserved_qty > 0:
-                # In real implementation, would call inventory_service.release_reservation()
-                reservation_ids.append(f"reservation_{document_id}_{item.product_id}")
-                item.reserved_qty = 0
+        import os
+        import grpc
+        from shared_utils.security.grpc import configured_grpc_channel
+        from documents_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_grpc
         
-        # Update execution metadata
-        document.completed_at = datetime.now(timezone.utc)
+        inventory_addr = os.getenv("INVENTORY_GRPC_ADDR", "inventory-service:50055")
+        
+        with configured_grpc_channel(inventory_addr) as channel:
+            stub = inventory_pb2_grpc.InventoryServiceStub(channel)
+            for item in document.items:
+                if item.reserved_qty > 0:
+                    try:
+                        list_resp = stub.ListReservations(
+                            inventory_pb2.ListReservationsRequest(
+                                product_id=int(item.product_id),
+                                warehouse_id=int(document.from_warehouse_id),
+                                status="RESERVED",
+                            ),
+                            timeout=10,
+                        )
+                        for res in list_resp.reservations:
+                            if res.document_id == document_id:
+                                stub.ReleaseReservation(
+                                    inventory_pb2.ReleaseReservationRequest(
+                                        reservation_id=res.id,
+                                        released_qty=0,
+                                    ),
+                                    timeout=10,
+                                )
+                                reservation_ids.append(str(res.id))
+                    except Exception:
+                        # Continue to make a best-effort release of other lines
+                        pass
+                    item.reserved_qty = 0
         
         self.document_repo.save(document)
         self._commit_if_needed()
