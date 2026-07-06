@@ -21,7 +21,7 @@ TARGETS = {
     "Services/documents-service": ("src/documents_service/gen", ["wms/documents", "wms/inventory"]),
     "Services/audit-service": ("src/audit_service/gen", ["wms/audit"]),
     "Services/reporting-service": ("src/reporting_service/gen", ["wms/reporting"]),
-    "Services/ai-service": ("src/ai_service/gen", ["wms/ai"]),
+    "../WMS_AI_Services": ("src/ai_service/gen", ["wms/ai"]),
     "Services/api-gateway": ("src/api_gateway/gen", [""]),  # Gateway needs everything.
 }
 

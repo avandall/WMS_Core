@@ -286,11 +286,10 @@ services:
     image: wms/ai-service:dev
     profiles: ["ai"]
     build:
-      <<: *build-common
-      args:
-        UV_PACKAGE: ai-service
+      context: ../WMS_AI_Services
+      dockerfile: Dockerfile
     env_file:
-      - Services/ai-service/.env
+      - ../WMS_AI_Services/.env
     environment:
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
@@ -312,10 +311,11 @@ services:
       AI_BACKEND_QUERY_TIMEOUT: "10"
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      PYTHONPATH: /app/Services/ai-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/src:/app/shared_utils
     command: ["ai-grpc"]
     volumes:
-      - ./Services/ai-service/src:/app/Services/ai-service/src
+      - ../WMS_AI_Services/src:/app/src
+      - ../WMS_AI_Services/training:/app/training
       - ./Libraries/shared-utils/src/shared_utils:/app/shared_utils
       - ai-hf-cache:/root/.cache/huggingface
     depends_on:
