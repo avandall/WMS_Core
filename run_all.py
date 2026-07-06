@@ -133,8 +133,8 @@ GRPC_SERVICES: tuple[ServiceSpec, ...] = (
     ),
     ServiceSpec(
         name="ai-service",
-        service_dir=ROOT / "Services" / "ai-service",
-        src_dir=ROOT / "Services" / "ai-service" / "src",
+        service_dir=ROOT.parent / "WMS_AI_Services",
+        src_dir=ROOT.parent / "WMS_AI_Services" / "src",
         module="ai_service.main",
         function="main_grpc",
         grpc_port=50059,
