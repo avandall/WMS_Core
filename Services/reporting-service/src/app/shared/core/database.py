@@ -112,6 +112,19 @@ def init_db() -> None:
                 conn.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id})
                 try:
                     Base.metadata.create_all(bind=conn, tables=_init_db_tables())
+                    
+                    # Ensure new NOT NULL columns exist on existing databases
+                    from sqlalchemy import inspect
+                    inspector = inspect(conn)
+                    if "inventory_summary" in inspector.get_table_names():
+                        cols = [c["name"] for c in inspector.get_columns("inventory_summary")]
+                        if "warehouse_matrix" not in cols:
+                            conn.execute(text("ALTER TABLE inventory_summary ADD COLUMN warehouse_matrix JSON NOT NULL DEFAULT '{}'"))
+                    if "document_summary" in inspector.get_table_names():
+                        cols = [c["name"] for c in inspector.get_columns("document_summary")]
+                        if "executed_quantity" not in cols:
+                            conn.execute(text("ALTER TABLE document_summary ADD COLUMN executed_quantity INTEGER NOT NULL DEFAULT 0"))
+                    
                     conn.commit()
                 except Exception:
                     conn.rollback()
@@ -124,6 +137,19 @@ def init_db() -> None:
                         conn.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
         else:
             Base.metadata.create_all(bind=engine, tables=_init_db_tables())
+            # Ensure new NOT NULL columns exist on SQLite
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            if "inventory_summary" in inspector.get_table_names():
+                cols = [c["name"] for c in inspector.get_columns("inventory_summary")]
+                if "warehouse_matrix" not in cols:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE inventory_summary ADD COLUMN warehouse_matrix JSON NOT NULL DEFAULT '{}'"))
+            if "document_summary" in inspector.get_table_names():
+                cols = [c["name"] for c in inspector.get_columns("document_summary")]
+                if "executed_quantity" not in cols:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE document_summary ADD COLUMN executed_quantity INTEGER NOT NULL DEFAULT 0"))
         logger.info("Database tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")

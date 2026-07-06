@@ -110,7 +110,7 @@ pytest
 - `docs/` — architecture, governance, events, and operations documentation
 - `proto/` — Protobuf service contract definitions
 - `scripts/` — dev tooling, seeding, migrations, replay, and validation
-- `shared_utils/` — cross-service shared libraries and helpers
+- `Libraries/shared-utils/` — cross-service shared libraries and helpers
 - `tests/` — unit, integration, contract, security, and e2e tests
 
 ## Documentation

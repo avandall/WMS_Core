@@ -13,11 +13,6 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-# Add shared_utils to Python path for contract tests
-shared_utils_path = project_root / "shared_utils"
-if str(shared_utils_path) not in sys.path:
-    sys.path.insert(0, str(shared_utils_path))
-
 # Add Libraries/shared-utils/src to Python path for contract tests
 shared_utils_lib_path = project_root / "Libraries" / "shared-utils" / "src"
 if str(shared_utils_lib_path) not in sys.path:

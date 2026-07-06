@@ -15,7 +15,7 @@ class IDocumentRepo(ABC):
         pass
 
     @abstractmethod
-    def get_all(self) -> List["Document"]:
+    def get_all(self, limit: int = 0, offset: int = 0) -> List["Document"]:
         pass
 
     @abstractmethod

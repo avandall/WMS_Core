@@ -64,11 +64,15 @@ def document_to_dict(document: Any) -> dict[str, Any]:
         "from_warehouse_id": getattr(document, "from_warehouse_id", None),
         "to_warehouse_id": getattr(document, "to_warehouse_id", None),
         "customer_id": getattr(document, "customer_id", None),
+        "transaction_type": getattr(document, "transaction_type", None),
+        "reason_code": getattr(document, "reason_code", None),
         "items": [
             {
                 "product_id": int(item.product_id),
                 "quantity": int(item.quantity),
                 "unit_price": float(item.unit_price),
+                "requested_qty": int(getattr(item, "requested_qty", 0) or item.quantity),
+                "executed_qty": getattr(item, "executed_qty", None),
             }
             for item in document.items
         ],

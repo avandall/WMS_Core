@@ -8,6 +8,7 @@ dependencies = [
   "grpcio>=1.80.0",
   "protobuf>=6.31.1",
   "shared-utils",
+  "httpx",
 ]
 
 [project.scripts]

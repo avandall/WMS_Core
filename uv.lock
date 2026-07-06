@@ -281,6 +281,7 @@ source = { editable = "Services/api-gateway" }
 dependencies = [
     { name = "fastapi" },
     { name = "grpcio" },
+    { name = "httpx" },
     { name = "protobuf" },
     { name = "shared-utils" },
     { name = "uvicorn" },
@@ -290,6 +291,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "grpcio", specifier = ">=1.80.0" },
+    { name = "httpx" },
     { name = "protobuf", specifier = ">=6.31.1" },
     { name = "shared-utils", editable = "Libraries/shared-utils" },
     { name = "uvicorn", specifier = ">=0.40.0" },
