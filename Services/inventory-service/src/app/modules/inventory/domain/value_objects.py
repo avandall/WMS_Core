@@ -30,3 +30,15 @@ class WarehouseLocation:
     def __post_init__(self) -> None:
         if not isinstance(self.warehouse_id, int) or self.warehouse_id <= 0:
             raise ValidationError("warehouse_id must be a positive integer")
+
+
+@dataclass(frozen=True)
+class StockBalance:
+    physical_qty: int = 0
+    reserved_qty: int = 0
+    incoming_qty: int = 0
+    in_transit_qty: int = 0
+
+    @property
+    def available_qty(self) -> int:
+        return self.physical_qty - self.reserved_qty

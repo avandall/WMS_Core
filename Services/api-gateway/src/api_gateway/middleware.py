@@ -120,6 +120,12 @@ async def rate_limit_middleware(request: Request, call_next):
     window = 1.0
     client = f"{_rate_limit_client(request)}:{request.url.path}"
 
+    # Evict stale entries to prevent unbounded memory growth.
+    # Only keep entries whose time window is still active.
+    stale_keys = [k for k, (start, _) in _rate_state.items() if now - start >= window]
+    for k in stale_keys:
+        _rate_state.pop(k, None)
+
     start, count = _rate_state.get(client, (now, 0))
     if now - start >= window:
         start, count = now, 0

@@ -934,7 +934,7 @@ function applyInventoryFilters() {
     table.querySelectorAll('tbody tr').forEach(row => {
         const cells = row.querySelectorAll('td');
         let match = true;
-        const columns = ['product', 'warehouse', 'quantity', 'price', 'value'];
+        const columns = ['product', 'warehouse', 'physical', 'reserved', 'available', 'price', 'value'];
         columns.forEach((col, idx) => {
             if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
                 match = false;
@@ -993,14 +993,18 @@ async function loadInventory() {
                         <tr>
                             <th>Product</th>
                             <th>Warehouse Name</th>
-                            <th>Quantity</th>
+                            <th>Physical</th>
+                            <th>Reserved</th>
+                            <th>Available</th>
                             <th>Unit Price</th>
                             <th>Total Value</th>
                         </tr>
                         <tr class="filter-row">
                             <th><input type="text" class="filter-input" data-column="product" placeholder="Filter Product" onkeyup="applyInventoryFilters()"></th>
                             <th><input type="text" class="filter-input" data-column="warehouse" placeholder="Filter Warehouse" onkeyup="applyInventoryFilters()"></th>
-                            <th><input type="text" class="filter-input" data-column="quantity" placeholder="Filter Qty" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="physical" placeholder="Filter Physical" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="reserved" placeholder="Filter Reserved" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="available" placeholder="Filter Available" onkeyup="applyInventoryFilters()"></th>
                             <th><input type="text" class="filter-input" data-column="price" placeholder="Filter Price" onkeyup="applyInventoryFilters()"></th>
                             <th><input type="text" class="filter-input" data-column="value" placeholder="Filter Value" onkeyup="applyInventoryFilters()"></th>
                         </tr>
@@ -1018,12 +1022,18 @@ async function loadInventory() {
                                     : (item.warehouse_name && item.warehouse_name !== String(item.warehouse_id))
                                         ? item.warehouse_name
                                         : `Warehouse ${item.warehouse_id}`;
-                            const totalValue = (product?.price || 0) * item.quantity;
+                            // Phase 5: Use quantity matrix fields with fallbacks for backward compatibility
+                            const physicalQty = item.physical_qty ?? item.quantity ?? 0;
+                            const reservedQty = item.reserved_qty ?? 0;
+                            const availableQty = item.available_qty ?? (physicalQty - reservedQty);
+                            const totalValue = (product?.price || 0) * physicalQty;
                             return `
                                 <tr>
                                     <td>${product ? product.name : `Product ${item.product_id}`}</td>
                                     <td>${warehouseName}</td>
-                                    <td>${item.quantity}</td>
+                                    <td>${physicalQty}</td>
+                                    <td>${reservedQty}</td>
+                                    <td>${availableQty}</td>
                                     <td>$${((product?.price || 0).toFixed(2))}</td>
                                     <td>$${totalValue.toFixed(2)}</td>
                                 </tr>
@@ -1153,18 +1163,54 @@ async function loadDocuments() {
                 <tbody>
                     ${documents.slice(0, 20).map(doc => {
                         const status = (doc.status || 'draft').toString().toLowerCase();
+                        const type = (doc.doc_type || '').toString().toUpperCase();
+                        const statusColors = {
+                            draft: 'fff3cd',
+                            posted: 'cfe2ff',
+                            approved: 'e0cffc',
+                            reserved: 'ffe8cc',
+                            in_progress: 'cff4fc',
+                            executed: 'd1e7dd',
+                            completed: 'd1e7dd',
+                            cancelled: 'f8d7da'
+                        };
+                        const bgColor = statusColors[status] || 'ffffff';
+                        
+                        // Action buttons generator
+                        let actions = `<button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>`;
+                        
+                        if (status === 'draft') {
+                            actions += ` <button class="btn-primary" onclick="approveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#0d6efd;">Approve</button>`;
+                            actions += ` <button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>`;
+                        } else if (status === 'approved' || status === 'posted') {
+                            if (type === 'SALE' || type === 'SALES_SHIPMENT' || type === 'PRODUCTION_ISSUE') {
+                                actions += ` <button class="btn-primary" onclick="reserveDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#fd7e14;">Reserve Stock</button>`;
+                            } else {
+                                actions += ` <button class="btn-primary" onclick="startExecution(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#6f42c1;">Start Execution</button>`;
+                            }
+                        } else if (status === 'reserved') {
+                            actions += ` <button class="btn-primary" onclick="startExecution(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#6f42c1;">Start Execution</button>`;
+                        } else if (status === 'in_progress') {
+                            actions += ` <button class="btn-primary" onclick="openConfirmExecutionModal(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#198754;">Confirm Qty</button>`;
+                        } else if (status === 'executed') {
+                            if (type === 'TRANSFER' || type === 'TRANSFER_ISSUE') {
+                                actions += ` <button class="btn-primary" onclick="openConfirmExecutionModal(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#fd7e14;">Confirm Receipt</button>`;
+                            } else {
+                                actions += ` <button class="btn-primary" onclick="completeDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#20c997;">Complete</button>`;
+                            }
+                        } else {
+                            actions += ` <span style="color:#6c757d;font-size:0.9em">${doc.status}</span>`;
+                        }
+
                         return `
                         <tr>
                             <td>${doc.document_id}</td>
                             <td>${doc.doc_type}</td>
-                            <td><span style="padding:4px 8px;border-radius:4px;background:#${status === 'draft' ? 'fff3cd' : status === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status || 'DRAFT'}</span></td>
+                            <td><span style="padding:4px 8px;border-radius:4px;background:#${bgColor}">${doc.status || 'DRAFT'}</span></td>
                             <td>${doc.created_by || '-'}</td>
                             <td>${doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '-'}</td>
                             <td>
-                                <button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>
-                                ${status === 'draft' ? `<button class="btn-primary" onclick="postDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">Approve & Post</button>` : ''}
-                                ${status === 'draft' ? `<button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>` : ''}
-                                ${status === 'posted' ? `<span style="color:#6c757d;font-size:0.9em">Posted</span>` : ''}
+                                ${actions}
                             </td>
                         </tr>
                     `}).join('')}
@@ -1558,9 +1604,14 @@ async function handleCreateDocument(event) {
     event.preventDefault();
 
     const docType = document.getElementById('doc-type').value;
+    const transactionTypeSelect = document.getElementById('transaction-type');
+    const reasonCodeSelect = document.getElementById('reason-code');
+
     const documentData = {
         doc_type: docType,
-        items: []
+        items: [],
+        transaction_type: (transactionTypeSelect && transactionTypeSelect.value) ? transactionTypeSelect.value : '',
+        reason_code: (reasonCodeSelect && reasonCodeSelect.value) ? reasonCodeSelect.value : ''
     };
 
     // Add warehouse info based on type
@@ -2257,6 +2308,54 @@ function updateDocumentForm() {
     const sourceSelect = document.getElementById('source-warehouse');
     const destSelect = document.getElementById('dest-warehouse');
 
+    const transactionTypeGroup = document.getElementById('transaction-type-group');
+    const reasonCodeGroup = document.getElementById('reason-code-group');
+    const transactionTypeSelect = document.getElementById('transaction-type');
+    const reasonCodeSelect = document.getElementById('reason-code');
+
+    // Dynamically manage transaction sub-types and reason codes
+    if (docType === 'import' || docType === 'export') {
+        if (transactionTypeGroup) transactionTypeGroup.style.display = 'block';
+        
+        const isImportOptions = transactionTypeSelect && transactionTypeSelect.querySelector('option[value="PURCHASE_RECEIPT"]');
+        const isExportOptions = transactionTypeSelect && transactionTypeSelect.querySelector('option[value="PRODUCTION_ISSUE"]');
+        
+        if (docType === 'import' && !isImportOptions) {
+            transactionTypeSelect.innerHTML = `
+                <option value="">Select Sub-type</option>
+                <option value="PURCHASE_RECEIPT">Purchase Receipt</option>
+                <option value="PRODUCTION_RECEIPT">Production Receipt</option>
+                <option value="SALES_RETURN_RECEIPT">Sales Return Receipt</option>
+                <option value="ADJUSTMENT_IN">Adjustment In</option>
+            `;
+        } else if (docType === 'export' && !isExportOptions) {
+            transactionTypeSelect.innerHTML = `
+                <option value="">Select Sub-type</option>
+                <option value="PRODUCTION_ISSUE">Production Issue</option>
+                <option value="PURCHASE_RETURN_SHIPMENT">Purchase Return Shipment</option>
+                <option value="INTERNAL_CONSUMPTION">Internal Consumption</option>
+                <option value="SCRAP">Scrap</option>
+                <option value="ADJUSTMENT_OUT">Adjustment Out</option>
+            `;
+        }
+
+        const subVal = transactionTypeSelect ? transactionTypeSelect.value : '';
+        const requiresReason = ['ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'SCRAP', 'INTERNAL_CONSUMPTION'].includes(subVal);
+        
+        if (requiresReason) {
+            if (reasonCodeGroup) reasonCodeGroup.style.display = 'block';
+            if (reasonCodeSelect) reasonCodeSelect.required = true;
+        } else {
+            if (reasonCodeGroup) reasonCodeGroup.style.display = 'none';
+            if (reasonCodeSelect) { reasonCodeSelect.required = false; reasonCodeSelect.value = ''; }
+        }
+    } else {
+        if (transactionTypeGroup) transactionTypeGroup.style.display = 'none';
+        if (transactionTypeSelect) transactionTypeSelect.innerHTML = '<option value="">Select Sub-type</option>';
+        if (reasonCodeGroup) reasonCodeGroup.style.display = 'none';
+        if (reasonCodeSelect) { reasonCodeSelect.required = false; reasonCodeSelect.value = ''; }
+    }
+
     if (docType === 'import') {
         sourceGroup.style.display = 'none';
         if (sourceSelect) sourceSelect.required = false;
@@ -2264,36 +2363,38 @@ function updateDocumentForm() {
         if (destSelect) destSelect.required = true;
         priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
         if (customerGroup) customerGroup.style.display = 'none';
-    } else if (docType === 'export') {
-        sourceGroup.style.display = 'block';
-        if (sourceSelect) sourceSelect.required = true;
-        destGroup.style.display = 'none';
-        if (destSelect) destSelect.required = false;
-        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
-        if (customerGroup) customerGroup.style.display = 'none';
-    } else if (docType === 'transfer') {
-        sourceGroup.style.display = 'block';
-        if (sourceSelect) sourceSelect.required = true;
-        destGroup.style.display = 'block';
-        if (destSelect) destSelect.required = true;
-        priceInputs.forEach(inp => { inp.required = false; inp.style.display = 'none'; inp.value = ''; });
-        if (customerGroup) customerGroup.style.display = 'none';
-    } else if (docType === 'sale') {
-        sourceGroup.style.display = 'block';
-        if (sourceSelect) sourceSelect.required = true;
-        destGroup.style.display = 'none';
-        if (destSelect) destSelect.required = false;
-        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
-        if (customerGroup) {
-            customerGroup.style.display = 'block';
-            const custSelect = document.getElementById('sale-customer');
-            if (custSelect) custSelect.required = true;
-        }
-        const salespersonGroup = document.getElementById('salesperson-group');
-        if (salespersonGroup) {
-            salespersonGroup.style.display = 'block';
-            const spSelect = document.getElementById('sale-salesperson');
-            if (spSelect) spSelect.required = true;
+    } else {
+        if (docType === 'export') {
+            sourceGroup.style.display = 'block';
+            if (sourceSelect) sourceSelect.required = true;
+            destGroup.style.display = 'none';
+            if (destSelect) destSelect.required = false;
+            priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
+            if (customerGroup) customerGroup.style.display = 'none';
+        } else if (docType === 'transfer') {
+            sourceGroup.style.display = 'block';
+            if (sourceSelect) sourceSelect.required = true;
+            destGroup.style.display = 'block';
+            if (destSelect) destSelect.required = true;
+            priceInputs.forEach(inp => { inp.required = false; inp.style.display = 'none'; inp.value = ''; });
+            if (customerGroup) customerGroup.style.display = 'none';
+        } else if (docType === 'sale') {
+            sourceGroup.style.display = 'block';
+            if (sourceSelect) sourceSelect.required = true;
+            destGroup.style.display = 'none';
+            if (destSelect) destSelect.required = false;
+            priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
+            if (customerGroup) {
+                customerGroup.style.display = 'block';
+                const custSelect = document.getElementById('sale-customer');
+                if (custSelect) custSelect.required = true;
+            }
+            const salespersonGroup = document.getElementById('salesperson-group');
+            if (salespersonGroup) {
+                salespersonGroup.style.display = 'block';
+                const spSelect = document.getElementById('sale-salesperson');
+                if (spSelect) spSelect.required = true;
+            }
         }
     }
 
@@ -3561,12 +3662,141 @@ async function loadDocumentDetails(documentId, silent = false) {
                 <p><strong>Total Items:</strong> ${items.reduce((sum, item) => sum + item.quantity, 0)}</p>
                 <p><strong>Total Value:</strong> $${totalValue.toFixed(2)}</p>
             </div>
-            ${documentStatus === 'draft' ? `<div style="margin-top: 20px;"><button class="btn-primary" onclick="postDocument(${document_data.document_id})">Approve & Post</button></div>` : ''}
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                ${documentStatus === 'draft' ? `<button class="btn-primary" onclick="approveDocument(${document_data.document_id}); hideModals();" style="background:#0d6efd;">Approve</button>` : ''}
+                ${(documentStatus === 'approved' || documentStatus === 'posted') && (docType === 'sale' || docType === 'sales_shipment' || docType === 'production_issue') ? `<button class="btn-primary" onclick="reserveDocument(${document_data.document_id}); hideModals();" style="background:#fd7e14;">Reserve Stock</button>` : ''}
+                ${(documentStatus === 'approved' || documentStatus === 'posted') && !(docType === 'sale' || docType === 'sales_shipment' || docType === 'production_issue') ? `<button class="btn-primary" onclick="startExecution(${document_data.document_id}); hideModals();" style="background:#6f42c1;">Start Execution</button>` : ''}
+                ${documentStatus === 'reserved' ? `<button class="btn-primary" onclick="startExecution(${document_data.document_id}); hideModals();" style="background:#6f42c1;">Start Execution</button>` : ''}
+                ${documentStatus === 'in_progress' ? `<button class="btn-primary" onclick="openConfirmExecutionModal(${document_data.document_id}); hideModals();" style="background:#198754;">Confirm Qty</button>` : ''}
+                ${documentStatus === 'executed' && (docType === 'transfer' || docType === 'transfer_issue') ? `<button class="btn-primary" onclick="openConfirmExecutionModal(${document_data.document_id}); hideModals();" style="background:#fd7e14;">Confirm Receipt</button>` : ''}
+                ${documentStatus === 'executed' && !(docType === 'transfer' || docType === 'transfer_issue') ? `<button class="btn-primary" onclick="completeDocument(${document_data.document_id}); hideModals();" style="background:#20c997;">Complete</button>` : ''}
+            </div>
         `;
 
         if (detailsDiv) detailsDiv.innerHTML = detailsHTML;
     } catch (error) {
         if (!silent) showError('Failed to load document details');
+    }
+}
+
+// Phase 10/11: Document workflow helpers
+async function approveDocument(id) {
+    try {
+        if (!currentUser || !currentUser.email) {
+            showError('Unable to approve: user not logged in');
+            return;
+        }
+        await apiRequest(`/api/documents/${id}/approve`, { 
+            method: 'POST',
+            body: JSON.stringify({ approved_by: currentUser.email })
+        });
+        showSuccess('Document approved successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Approve error:', error);
+        showError(error.detail || 'Failed to approve document');
+    }
+}
+
+async function reserveDocument(id) {
+    try {
+        await apiRequest(`/api/documents/${id}/reserve`, { 
+            method: 'POST'
+        });
+        showSuccess('Stock reservation completed successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Reservation error:', error);
+        showError(error.detail || 'Failed to reserve stock');
+    }
+}
+
+async function startExecution(id) {
+    try {
+        await apiRequest(`/api/documents/${id}/start-execution`, { 
+            method: 'POST'
+        });
+        showSuccess('Execution started successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Start execution error:', error);
+        showError(error.detail || 'Failed to start execution');
+    }
+}
+
+async function openConfirmExecutionModal(id) {
+    try {
+        const doc = await apiRequest(`/api/documents/${id}`);
+        if (!doc) {
+            showError('Document not found');
+            return;
+        }
+        document.getElementById('confirm-exec-doc-id').value = id;
+        
+        const container = document.getElementById('confirm-execution-items-container');
+        if (container) {
+            container.innerHTML = (doc.items || []).map(item => {
+                const prod = products.find(p => p.product_id === item.product_id);
+                return `
+                    <div style="margin-bottom:15px; display:flex; flex-direction:column; gap:5px;">
+                        <label style="font-weight:bold;">Product: ${prod ? prod.name : `ID ${item.product_id}`} (Requested: ${item.quantity})</label>
+                        <input type="number" class="confirm-qty-input" data-product-id="${item.product_id}" value="${item.quantity}" min="0" style="padding:6px; border:1px solid #ccc; border-radius:4px;" required />
+                    </div>
+                `;
+            }).join('');
+        }
+        openModal('confirm-execution-modal');
+    } catch (error) {
+        showError('Failed to load document details for execution');
+    }
+}
+
+async function submitConfirmExecution(event) {
+    event.preventDefault();
+    const id = document.getElementById('confirm-exec-doc-id').value;
+    const inputs = document.querySelectorAll('.confirm-qty-input');
+    const items = [];
+    inputs.forEach(input => {
+        items.push({
+            product_id: parseInt(input.getAttribute('data-product-id')),
+            quantity: parseInt(input.value)
+        });
+    });
+
+    try {
+        await apiRequest(`/api/documents/${id}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ items: items })
+        });
+        showSuccess('Execution confirmed successfully!');
+        closeModal('confirm-execution-modal');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Confirm execution error:', error);
+        showError(error.detail || 'Failed to confirm execution');
+    }
+}
+
+async function completeDocument(id) {
+    try {
+        await apiRequest(`/api/documents/${id}/complete`, { 
+            method: 'POST'
+        });
+        showSuccess('Document completed successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Complete error:', error);
+        showError(error.detail || 'Failed to complete document');
     }
 }
 

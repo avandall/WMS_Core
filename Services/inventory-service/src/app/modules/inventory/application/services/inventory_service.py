@@ -26,6 +26,40 @@ class InventoryService:
         self.inventory_repo = inventory_repo
         self.event_publisher = event_publisher or NoopInventoryEventPublisher()
 
+    def _write_transaction(self, **kwargs) -> dict:
+        tx = self.inventory_repo.write_transaction(**kwargs)
+        if not isinstance(tx, dict):
+            tx = {
+                "id": 0,
+                "transaction_type": kwargs.get("transaction_type") or "UNKNOWN",
+                "product_id": kwargs.get("product_id") or 0,
+                "warehouse_id": kwargs.get("warehouse_id") or 0,
+                "quantity": kwargs.get("quantity") or 0,
+                "document_id": kwargs.get("document_id"),
+                "document_line_id": kwargs.get("document_line_id"),
+                "created_at": None,
+                "idempotency_key": kwargs.get("idempotency_key"),
+            }
+        self.event_publisher.publish(
+            event_type="InventoryTransactionRecorded",
+            payload={
+                "event_id": f"inventory:transaction:{tx['id']}",
+                "entity_type": "inventory_transaction",
+                "entity_id": tx["id"],
+                "transaction_id": tx["id"],
+                "transaction_type": tx["transaction_type"],
+                "product_id": tx["product_id"],
+                "warehouse_id": tx["warehouse_id"],
+                "quantity": tx["quantity"],
+                "document_id": tx["document_id"],
+                "document_line_id": tx["document_line_id"],
+                "created_at": tx["created_at"],
+                "idempotency_key": tx["idempotency_key"],
+                "user_id": kwargs.get("user_id") or "system",
+            }
+        )
+        return tx
+
     def add_to_total_inventory(self, product_id: int, quantity: int) -> None:
         if quantity < 0:
             raise InvalidQuantityError("Cannot add negative quantity to inventory")
@@ -44,6 +78,7 @@ class InventoryService:
         warehouse_id: Optional[int] = None,
         event_id: Optional[str] = None,
         reason: str = "manual_adjustment",
+        transaction_type: Optional[str] = None,
     ) -> bool:
         Sku(product_id)
         if quantity_delta == 0:
@@ -66,6 +101,17 @@ class InventoryService:
                 "reason": reason,
             },
         )
+        # Phase 9: Write immutable ledger entry for every adjustment
+        if warehouse_id is not None:
+            tx_type = transaction_type or ("ADJUSTMENT_IN" if quantity_delta > 0 else "ADJUSTMENT_OUT")
+            self._write_transaction(
+                transaction_type=tx_type,
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                quantity=abs(quantity_delta),
+                idempotency_key=f"{event_id}:adjustment" if event_id else None,
+                payload={"reason": reason, "quantity_delta": quantity_delta},
+            )
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="InventoryAdjusted",
@@ -81,6 +127,37 @@ class InventoryService:
         )
         return True
 
+    def adjust_in_transit(
+        self,
+        *,
+        product_id: int,
+        quantity_delta: int,
+        warehouse_id: int,
+        event_id: Optional[str] = None,
+        reason: str = "transfer_in_transit",
+    ) -> bool:
+        Sku(product_id)
+        WarehouseLocation(warehouse_id)
+        if quantity_delta == 0:
+            raise InvalidQuantityError("quantity_delta must not be zero")
+        if event_id and self.inventory_repo.has_movement_event(event_id):
+            return False
+
+        self.inventory_repo.adjust_warehouse_in_transit(product_id, warehouse_id, quantity_delta)
+        self._record_movement(
+            event_id=event_id,
+            movement_type="InventoryInTransitAdjusted",
+            document_id=None,
+            payload={
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "quantity_delta": quantity_delta,
+                "reason": reason,
+            },
+        )
+        self._commit_if_needed()
+        return True
+
     def reserve_stock(
         self,
         *,
@@ -88,24 +165,74 @@ class InventoryService:
         quantity: int,
         warehouse_id: Optional[int] = None,
         event_id: Optional[str] = None,
+        source_type: str = "manual",
+        source_id: Optional[int] = None,
+        document_id: Optional[int] = None,
+        created_by: Optional[str] = None,
+        expires_at: Optional[str] = None,
     ) -> bool:
+        from datetime import datetime
+
         Sku(product_id)
         requested = Quantity(quantity)
+
+        if warehouse_id is None:
+            raise ValueError("warehouse_id is required for reservation")
+
         if event_id and self.inventory_repo.has_movement_event(event_id):
-            return False
-        available = self.inventory_repo.get_quantity(product_id)
-        if available < requested.value:
-            raise InsufficientStockError(
-                f"Insufficient inventory: only {available} items available"
-            )
+            from sqlalchemy import select
+            from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+            existing = self.inventory_repo.session.execute(
+                select(StockReservationModel).where(
+                    StockReservationModel.idempotency_key == event_id
+                )
+            ).scalar_one_or_none()
+            if existing:
+                return existing.id
+            return 0
+
+        # Phase 4: Use persistent reservation with idempotency
+        try:
+            expires_dt = datetime.fromisoformat(expires_at) if expires_at else None
+        except (ValueError, TypeError):
+            expires_dt = None
+
+        reservation_id = self.inventory_repo.create_reservation(
+            source_type=source_type,
+            source_id=source_id,
+            document_id=document_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            requested_qty=requested.value,
+            created_by=created_by,
+            idempotency_key=event_id,  # Use event_id as idempotency key
+            expires_at=expires_dt,
+        )
+
+        # Record legacy movement event for backward compatibility
         self._record_movement(
             event_id=event_id,
             movement_type="StockReserved",
-            document_id=None,
+            document_id=document_id,
             payload={
                 "product_id": product_id,
                 "warehouse_id": warehouse_id,
                 "quantity": requested.value,
+                "reservation_id": reservation_id,
+            },
+        )
+        # Phase 9: Write immutable ledger entry for reservation
+        self._write_transaction(
+            transaction_type="RESERVATION",
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            quantity=requested.value,
+            document_id=document_id,
+            idempotency_key=f"{event_id}:reservation" if event_id else None,
+            payload={
+                "reservation_id": reservation_id,
+                "source_type": source_type,
+                "source_id": source_id,
             },
         )
         self._commit_if_needed()
@@ -118,31 +245,49 @@ class InventoryService:
                 "product_id": product_id,
                 "warehouse_id": warehouse_id,
                 "quantity": requested.value,
+                "reservation_id": reservation_id,
             },
         )
-        return True
-
+        return reservation_id
     def release_reservation(
         self,
         *,
-        product_id: int,
-        quantity: int,
-        warehouse_id: Optional[int] = None,
+        reservation_id: int,
+        released_qty: Optional[int] = None,
         event_id: Optional[str] = None,
     ) -> bool:
-        Sku(product_id)
-        released = Quantity(quantity)
-        if event_id and self.inventory_repo.has_movement_event(event_id):
-            return False
+        # Retrieve reservation details before release
+        reservation = self.inventory_repo.get_reservation(reservation_id)
+        if not reservation:
+            raise KeyError(f"Reservation {reservation_id} not found")
+        prod_id = reservation["product_id"]
+        wh_id = reservation["warehouse_id"]
+        doc_id = reservation["document_id"]
+        qty = released_qty or (reservation["reserved_qty"] - reservation["released_qty"])
+
+        # Phase 4: Use persistent reservation release
+        self.inventory_repo.release_reservation(reservation_id, released_qty)
+
+        # Record legacy movement event for backward compatibility
         self._record_movement(
             event_id=event_id,
             movement_type="ReservationReleased",
             document_id=None,
             payload={
-                "product_id": product_id,
-                "warehouse_id": warehouse_id,
-                "quantity": released.value,
+                "reservation_id": reservation_id,
+                "released_qty": qty,
             },
+        )
+
+        # Phase 9: Write immutable ledger entry for reservation release
+        self._write_transaction(
+            transaction_type="RESERVATION_RELEASE",
+            product_id=prod_id,
+            warehouse_id=wh_id,
+            quantity=qty,
+            document_id=doc_id,
+            idempotency_key=f"{event_id}:release" if event_id else None,
+            payload={"reservation_id": reservation_id, "released_qty": qty},
         )
         self._commit_if_needed()
         self.event_publisher.publish(
@@ -150,10 +295,11 @@ class InventoryService:
             payload={
                 "event_id": event_id,
                 "entity_type": "inventory",
-                "entity_id": product_id,
-                "product_id": product_id,
-                "warehouse_id": warehouse_id,
-                "quantity": released.value,
+                "reservation_id": reservation_id,
+                "released_qty": qty,
+                "product_id": prod_id,
+                "warehouse_id": wh_id,
+                "document_id": doc_id,
             },
         )
         return True
@@ -192,6 +338,27 @@ class InventoryService:
             document_id=document_id,
             payload=payload,
         )
+        # Phase 9: Write immutable ledger entries for every physical stock change
+        _tx_type_map = {
+            "IMPORT": "PURCHASE_RECEIPT",
+            "EXPORT": "ADJUSTMENT_OUT",
+            "SALE": "SALES_SHIPMENT",
+            "TRANSFER": "TRANSFER_ISSUE",
+        }
+        ledger_tx_type = _tx_type_map.get(doc_type, doc_type)
+        for item in items:
+            _product_id = int(item["product_id"])
+            _quantity = int(item["quantity"])
+            _wh_id = int(to_warehouse_id or from_warehouse_id or 0)
+            self._write_transaction(
+                transaction_type=ledger_tx_type,
+                product_id=_product_id,
+                warehouse_id=_wh_id,
+                quantity=_quantity,
+                document_id=document_id,
+                idempotency_key=f"{event_id}:ledger:{_product_id}" if event_id else None,
+                payload={"doc_type": doc_type, "item": item},
+            )
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="InventoryMovementApplied",
@@ -327,7 +494,198 @@ class InventoryService:
                 payload=payload,
             )
 
+    # Phase 10: Consume reservation
+    def consume_reservation(
+        self,
+        *,
+        reservation_id: int,
+        consumed_qty: int,
+        event_id: Optional[str] = None,
+    ) -> bool:
+        """Consumes a persistent reservation and updates physical stock."""
+        self.inventory_repo.consume_reservation(reservation_id, consumed_qty)
+
+        # Record legacy movement event for backward compatibility
+        self._record_movement(
+            event_id=event_id,
+            movement_type="ReservationConsumed",
+            document_id=None,
+            payload={
+                "reservation_id": reservation_id,
+                "consumed_qty": consumed_qty,
+            },
+        )
+
+        # Phase 9: Write immutable ledger entry for reservation consumption
+        reservation = self.inventory_repo.get_reservation(reservation_id)
+        prod_id = reservation["product_id"] if reservation else 0
+        wh_id = reservation["warehouse_id"] if reservation else 0
+        doc_id = reservation["document_id"] if reservation else None
+
+        self._write_transaction(
+            transaction_type="RESERVATION_CONSUME",
+            product_id=prod_id,
+            warehouse_id=wh_id,
+            quantity=consumed_qty,
+            document_id=doc_id,
+            idempotency_key=f"{event_id}:consume" if event_id else None,
+            payload={"reservation_id": reservation_id, "consumed_qty": consumed_qty},
+        )
+        self._commit_if_needed()
+        self.event_publisher.publish(
+            event_type="ReservationConsumed",
+            payload={
+                "event_id": event_id,
+                "entity_type": "inventory",
+                "reservation_id": reservation_id,
+                "consumed_qty": consumed_qty,
+                "product_id": prod_id,
+                "warehouse_id": wh_id,
+                "document_id": doc_id,
+            },
+        )
+        return True
+
+    # Phase 10: Confirm inventory transaction
+    def confirm_inventory_transaction(
+        self,
+        *,
+        transaction_type: str,
+        product_id: int,
+        warehouse_id: int,
+        quantity: int,
+        reservation_id: int = 0,
+        user_id: str = "system",
+        idempotency_key: Optional[str] = None,
+        source_warehouse_id: int = 0,
+    ) -> int:
+        """Confirms an inventory transaction (either consuming a reservation or directly updating stock)."""
+        if quantity <= 0:
+            raise InvalidQuantityError("Quantity must be positive")
+
+        # Phase 15: Extract document_id from idempotency_key for rich events
+        document_id = None
+        if idempotency_key:
+            parts = idempotency_key.split("_")
+            if len(parts) >= 2 and parts[0] == "confirm":
+                try:
+                    document_id = int(parts[1])
+                except ValueError:
+                    pass
+
+        if reservation_id > 0:
+            self.consume_reservation(
+                reservation_id=reservation_id,
+                consumed_qty=quantity,
+                event_id=idempotency_key,
+            )
+            # Fetch last transaction to return its ID
+            txs = self.inventory_repo.list_transactions(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                transaction_type="RESERVATION_CONSUME",
+                limit=1,
+            )
+            return txs[0]["id"] if txs else 0
+        else:
+            # Handle Transfer lifecycle stock movements
+            if transaction_type == "TRANSFER_ISSUE":
+                # TRANSFER_ISSUE reduces physical stock at source, increases in_transit stock at source
+                self.adjust_inventory(
+                    product_id=product_id,
+                    quantity_delta=-quantity,
+                    warehouse_id=warehouse_id,
+                    event_id=idempotency_key,
+                    reason=f"confirm_issue_{document_id or 'transfer'}",
+                    transaction_type="TRANSFER_ISSUE",
+                )
+                self.adjust_in_transit(
+                    product_id=product_id,
+                    quantity_delta=quantity,
+                    warehouse_id=warehouse_id,
+                    event_id=f"{idempotency_key}:in_transit" if idempotency_key else None,
+                    reason="transfer_issue_in_transit",
+                )
+                # Phase 15: Publish TransferIssued event
+                self.event_publisher.publish(
+                    event_type="TransferIssued",
+                    payload={
+                        "event_id": f"inventory:transfer-issue:{idempotency_key}" if idempotency_key else None,
+                        "entity_type": "document",
+                        "entity_id": document_id,
+                        "document_id": document_id,
+                        "product_id": product_id,
+                        "warehouse_id": warehouse_id,
+                        "quantity": quantity,
+                        "user_id": user_id,
+                    }
+                )
+            elif transaction_type == "TRANSFER_RECEIPT":
+                # TRANSFER_RECEIPT increases physical stock at destination, reduces in_transit stock at source
+                self.adjust_inventory(
+                    product_id=product_id,
+                    quantity_delta=quantity,
+                    warehouse_id=warehouse_id,
+                    event_id=idempotency_key,
+                    reason=f"confirm_receipt_{document_id or 'transfer'}",
+                    transaction_type="TRANSFER_RECEIPT",
+                )
+                # Decrement in-transit stock at the source warehouse
+                src_wh = source_warehouse_id if source_warehouse_id > 0 else warehouse_id
+                self.adjust_in_transit(
+                    product_id=product_id,
+                    quantity_delta=-quantity,
+                    warehouse_id=src_wh,
+                    event_id=f"{idempotency_key}:in_transit" if idempotency_key else None,
+                    reason="transfer_receipt_in_transit",
+                )
+                # Phase 15: Publish TransferReceived event
+                self.event_publisher.publish(
+                    event_type="TransferReceived",
+                    payload={
+                        "event_id": f"inventory:transfer-receipt:{idempotency_key}" if idempotency_key else None,
+                        "entity_type": "document",
+                        "entity_id": document_id,
+                        "document_id": document_id,
+                        "product_id": product_id,
+                        "warehouse_id": warehouse_id,
+                        "source_warehouse_id": src_wh,
+                        "quantity": quantity,
+                        "user_id": user_id,
+                    }
+                )
+            else:
+                # Direct physical quantity adjustment
+                OUTBOUND_TYPES = {
+                    "SALES_SHIPMENT",
+                    "PRODUCTION_ISSUE",
+                    "PURCHASE_RETURN_SHIPMENT",
+                    "TRANSFER_ISSUE",
+                    "INTERNAL_CONSUMPTION",
+                    "SCRAP",
+                    "ADJUSTMENT_OUT"
+                }
+                is_outbound = transaction_type in OUTBOUND_TYPES
+                delta = -quantity if is_outbound else quantity
+
+                self.adjust_inventory(
+                    product_id=product_id,
+                    quantity_delta=delta,
+                    warehouse_id=warehouse_id,
+                    event_id=idempotency_key,
+                    reason=f"direct_transaction_{transaction_type}",
+                    transaction_type=transaction_type,
+                )
+
+            txs = self.inventory_repo.list_transactions(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                limit=1,
+            )
+            return txs[0]["id"] if txs else 0
+
     def _commit_if_needed(self) -> None:
         session = getattr(self.inventory_repo, "session", None)
         if session is not None:
             session.commit()
+

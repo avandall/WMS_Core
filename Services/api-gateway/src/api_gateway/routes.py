@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import concurrent.futures
 import grpc
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api_gateway.auth import get_current_user
@@ -37,6 +39,8 @@ from api_gateway.schemas import (
     ProductPayload,
     WarehousePayload,
     WarehouseTransferPayload,
+    ConfirmExecutionPayload,
+    LoginPayload,
 )
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
@@ -52,6 +56,39 @@ from api_gateway.gen.wms.identity.v1 import identity_pb2
 router = APIRouter(prefix="/api/v1")
 
 
+@router.post("/auth/login")
+def login_auth(payload: LoginPayload, request: Request):
+    email = payload.email.strip().lower()
+    password = payload.password
+
+    with identity_stub() as stub:
+        try:
+            resp = _grpc_call(
+                stub.Login,
+                identity_pb2.LoginRequest(email=email, password=password),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not resp.success:
+        raise HTTPException(status_code=401, detail=resp.message or "Invalid credentials")
+
+    # Return the token issued by the identity-service directly.
+    # Re-signing here would create a dual-authority problem: both services
+    # would mint tokens but share only one key; a rotation mismatch breaks auth silently.
+    return {
+        "access_token": resp.access_token,
+        "refresh_token": resp.refresh_token,
+        "token_type": resp.token_type or "bearer",
+        "user_id": resp.user_id,
+        "role": resp.role,
+        "email": resp.email,
+        "full_name": resp.full_name,
+    }
+
+
 def _md(request: Request):
     request_id = getattr(request.state, "request_id", None)
     traceparent = getattr(request.state, "traceparent", None)
@@ -60,12 +97,16 @@ def _md(request: Request):
         metadata.append(("x-request-id", request_id))
     if traceparent:
         metadata.append(("traceparent", traceparent))
+    
+    # Forward user credentials from authenticated context to downstream gRPC services
+    user = getattr(request.state, "user", None)
+    if user:
+        metadata.append(("user-id", str(user.user_id)))
+        metadata.append(("user-email", user.email or ""))
     return metadata or None
 
 
 def _timeout(env: str, default: float) -> float:
-    import os
-
     try:
         return float(os.getenv(env, str(default)))
     except Exception:
@@ -111,7 +152,6 @@ def list_customers(request: Request):
         return []
 
     # Fetch all purchases in parallel threads to avoid N+1 serial gRPC calls
-    import concurrent.futures
     md = _md(request)
 
     def fetch_purchases(customer_id: int) -> tuple[int, list]:
@@ -151,6 +191,10 @@ def create_customer(payload: CustomerPayload, request: Request):
     if not payload.name or not payload.name.strip():
         raise HTTPException(status_code=422, detail="Customer name is required")
     # Duplicate name and email check
+    # TODO(ME-05): This O(n) list-scan duplicate check fetches all customers on every create.
+    # Proper fix: add a UNIQUE constraint on customers.name/email at the DB level and expose
+    # a dedicated ExistsCustomerByName gRPC method. The repo should then raise a DuplicateError
+    # that maps to HTTP 409, removing the need for this pre-flight check entirely.
     with customer_stub() as stub:
         existing = _grpc_call(
             stub.ListCustomers,
@@ -530,6 +574,8 @@ def create_import_document(
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -557,6 +603,8 @@ def create_export_document(payload: DocumentPayload, request: Request):
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -585,6 +633,8 @@ def create_sale_document(payload: DocumentPayload, request: Request):
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -613,6 +663,8 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
                 ],
                 created_by=payload.created_by,
                 note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
             ),
             request=request,
             timeout=GRPC_TIMEOUT_SLOW,
@@ -623,8 +675,15 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
 @router.post(
     "/documents/{document_id}/post",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+    deprecated=True,
 )
 def post_document(document_id: int, payload: PostDocumentPayload, request: Request):
+    import warnings
+    warnings.warn(
+        "POST /api/v1/documents/{document_id}/post is deprecated. Use POST /api/v1/documents/{document_id}/approve instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     with documents_stub() as stub:
         resp = _grpc_call(
             stub.PostDocument,
@@ -635,7 +694,267 @@ def post_document(document_id: int, payload: PostDocumentPayload, request: Reque
     return {"message": resp.message}
 
 
+# Phase 7: Approve without stock movement
+@router.post(
+    "/documents/{document_id}/approve",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def approve_document(document_id: int, payload: PostDocumentPayload, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ApproveRequest,
+            documents_pb2.ApproveRequestRequest(document_id=document_id, approved_by=payload.approved_by),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
+# Phase 8: Sales reservation workflow
+@router.post(
+    "/documents/{document_id}/reserve",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def reserve_document(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ReserveRequest,
+            documents_pb2.ReserveRequestRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
+@router.post(
+    "/documents/{document_id}/release-reservation",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def release_document_reservation(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ReleaseReservation,
+            documents_pb2.ReleaseReservationRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
+# Phase 10: Execution Confirmation
+@router.post(
+    "/documents/{document_id}/start-execution",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def start_execution(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.StartExecution,
+            documents_pb2.StartExecutionRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
+@router.post(
+    "/documents/{document_id}/confirm",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayload, request: Request):
+    # 1. Get the document details to know the status BEFORE confirming
+    with documents_stub() as doc_stub:
+        try:
+            doc = _grpc_call(
+                doc_stub.GetDocument,
+                documents_pb2.GetDocumentRequest(document_id=document_id),
+                request=request,
+                timeout=GRPC_TIMEOUT_DEFAULT,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+    doc_type = (doc.doc_type or "").upper()
+    tx_type = (doc.transaction_type or "").upper()
+    current_status = (doc.status or "").upper()
+
+    REQUIRES_REASON_CODE = {"ADJUSTMENT_IN", "ADJUSTMENT_OUT", "SCRAP", "INTERNAL_CONSUMPTION"}
+
+    # Early validation of reason code
+    if doc_type == "TRANSFER":
+        is_transfer_receipt = (current_status == "EXECUTED")
+        target_tx_type = "TRANSFER_RECEIPT" if is_transfer_receipt else "TRANSFER_ISSUE"
+    else:
+        if tx_type:
+            target_tx_type = tx_type
+        else:
+            if doc_type in ("SALE", "SALES_SHIPMENT"):
+                target_tx_type = "SALES_SHIPMENT"
+            elif doc_type in ("IMPORT", "PURCHASE_RECEIPT"):
+                target_tx_type = "PURCHASE_RECEIPT"
+            elif doc_type in ("EXPORT", "SCRAP"):
+                target_tx_type = "SCRAP"
+            else:
+                target_tx_type = doc_type
+
+        if target_tx_type in REQUIRES_REASON_CODE and not doc.reason_code:
+            raise HTTPException(status_code=400, detail=f"Reason code is required for {target_tx_type}")
+
+    # Determine if it's a Transfer Issue or Receipt
+    is_transfer_receipt = (doc_type == "TRANSFER" and current_status == "EXECUTED")
+
+    # 2. Update the document side: executed_qty and difference_qty
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.ConfirmExecution,
+            documents_pb2.ConfirmExecutionRequest(
+                document_id=document_id,
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=item.product_id,
+                        quantity=item.quantity,
+                    )
+                    for item in payload.items
+                ],
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+
+    # Coordinate inventory confirmation based on document/transaction type
+    REQUIRES_RESERVATION = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "TRANSFER_ISSUE"}
+    OUTBOUND_TYPES = {"SALES_SHIPMENT", "PRODUCTION_ISSUE", "PURCHASE_RETURN_SHIPMENT", "TRANSFER_ISSUE", "INTERNAL_CONSUMPTION", "SCRAP", "ADJUSTMENT_OUT"}
+
+    if doc_type == "TRANSFER":
+        if is_transfer_receipt:
+            target_tx_type = "TRANSFER_RECEIPT"
+            # TRANSFER_RECEIPT: warehouse_id = to_warehouse_id, source_warehouse_id = from_warehouse_id
+            with inventory_stub() as inv_stub:
+                for item in payload.items:
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type="TRANSFER_RECEIPT",
+                            product_id=item.product_id,
+                            warehouse_id=doc.to_warehouse_id,
+                            quantity=item.quantity,
+                            reservation_id=0,
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}_receipt",
+                            source_warehouse_id=doc.from_warehouse_id,
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
+            # Transition document to COMPLETED
+            with documents_stub() as doc_stub:
+                _grpc_call(
+                    doc_stub.CompleteRequest,
+                    documents_pb2.CompleteRequestRequest(document_id=document_id),
+                    request=request,
+                    timeout=GRPC_TIMEOUT_SLOW,
+                )
+        else:
+            target_tx_type = "TRANSFER_ISSUE"
+            # TRANSFER_ISSUE: warehouse_id = from_warehouse_id
+            with inventory_stub() as inv_stub:
+                for item in payload.items:
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type="TRANSFER_ISSUE",
+                            product_id=item.product_id,
+                            warehouse_id=doc.from_warehouse_id,
+                            quantity=item.quantity,
+                            reservation_id=0,
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}_issue",
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
+    else:
+        # Validate reason code (already validated early)
+        pass
+
+        # Determine warehouse and confirmation path
+        is_outbound = target_tx_type in OUTBOUND_TYPES
+        wh_id = doc.from_warehouse_id if is_outbound else (doc.to_warehouse_id or doc.from_warehouse_id)
+
+        if target_tx_type in REQUIRES_RESERVATION:
+            with inventory_stub() as inv_stub:
+                # Query reservations to find the matching ones for this document
+                reservations_resp = _grpc_call(
+                    inv_stub.ListReservations,
+                    inventory_pb2.ListReservationsRequest(status="RESERVED"),
+                    request=request,
+                    timeout=GRPC_TIMEOUT_DEFAULT,
+                )
+
+                # Match by document_id and product_id
+                reservations_by_product = {
+                    r.product_id: r
+                    for r in reservations_resp.reservations
+                    if r.document_id == document_id
+                }
+
+                for item in payload.items:
+                    res = reservations_by_product.get(item.product_id)
+                    res_id = res.id if res else 0
+                    item_wh_id = res.warehouse_id if res else wh_id
+
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type=target_tx_type,
+                            product_id=item.product_id,
+                            warehouse_id=item_wh_id,
+                            quantity=item.quantity,
+                            reservation_id=res_id,
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}",
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
+        else:
+            with inventory_stub() as inv_stub:
+                for item in payload.items:
+                    _grpc_call(
+                        inv_stub.ConfirmInventoryTransaction,
+                        inventory_pb2.ConfirmInventoryTransactionRequest(
+                            transaction_type=target_tx_type,
+                            product_id=item.product_id,
+                            warehouse_id=wh_id,
+                            quantity=item.quantity,
+                            reservation_id=0,  # Direct stock confirmation
+                            user_id="system",
+                            idempotency_key=f"confirm_{document_id}_{item.product_id}",
+                        ),
+                        request=request,
+                        timeout=GRPC_TIMEOUT_SLOW,
+                    )
+
+    return {"message": resp.message}
+
+
+@router.post(
+    "/documents/{document_id}/complete",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def complete_document(document_id: int, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.CompleteRequest,
+            documents_pb2.CompleteRequestRequest(document_id=document_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message}
+
+
 @router.get(
+
     "/documents/{document_id}",
     dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],
 )
@@ -1155,6 +1474,12 @@ def inventory_by_warehouse(request: Request):
             "warehouse_id": int(r.warehouse_id),
             "warehouse_name": warehouse_name_map.get(int(r.warehouse_id), r.warehouse_name or str(r.warehouse_id)),
             "quantity": int(r.quantity),
+            # Phase 3: Quantity matrix fields
+            "physical_qty": int(r.physical_qty),
+            "reserved_qty": int(r.reserved_qty),
+            "incoming_qty": int(r.incoming_qty),
+            "in_transit_qty": int(r.in_transit_qty),
+            "available_qty": int(r.available_qty),
         }
         for r in resp.rows
     ]
@@ -1174,6 +1499,151 @@ def product_quantity(product_id: int, request: Request):
             idempotent=True,
         )
     return {"product_id": int(resp.product_id), "quantity": int(resp.quantity)}
+
+
+# Phase 5: Availability and reservations
+@router.get(
+    "/inventory/availability",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def get_availability(product_id: int, warehouse_id: int, request: Request):
+    with inventory_stub() as stub:
+        resp = _grpc_call(
+            stub.GetAvailability,
+            inventory_pb2.GetAvailabilityRequest(product_id=product_id, warehouse_id=warehouse_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {
+        "product_id": int(resp.product_id),
+        "warehouse_id": int(resp.warehouse_id),
+        "physical_qty": int(resp.physical_qty),
+        "reserved_qty": int(resp.reserved_qty),
+        "available_qty": int(resp.available_qty),
+    }
+
+
+@router.get(
+    "/inventory/reservations",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def list_reservations(
+    product_id: int | None = None,
+    warehouse_id: int | None = None,
+    status: str | None = None,
+    request: Request = None,
+):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ListReservationsRequest()
+        if product_id is not None:
+            req.product_id = product_id
+        if warehouse_id is not None:
+            req.warehouse_id = warehouse_id
+        if status is not None:
+            req.status = status
+        resp = _grpc_call(
+            stub.ListReservations,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return [
+        {
+            "id": int(r.id),
+            "source_type": r.source_type,
+            "source_id": int(r.source_id) if r.source_id else None,
+            "document_id": int(r.document_id) if r.document_id else None,
+            "product_id": int(r.product_id),
+            "warehouse_id": int(r.warehouse_id),
+            "requested_qty": int(r.requested_qty),
+            "reserved_qty": int(r.reserved_qty),
+            "released_qty": int(r.released_qty),
+            "consumed_qty": int(r.consumed_qty),
+            "status": r.status,
+            "expires_at": r.expires_at if r.expires_at else None,
+            "created_by": r.created_by if r.created_by else None,
+            "created_at": r.created_at if r.created_at else None,
+        }
+        for r in resp.reservations
+    ]
+
+
+@router.post(
+    "/inventory/reservations/{reservation_id}/release",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def release_reservation(reservation_id: int, released_qty: int | None = None, request: Request = None):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ReleaseReservationRequest(reservation_id=reservation_id)
+        if released_qty is not None:
+            req.released_qty = released_qty
+        resp = _grpc_call(
+            stub.ReleaseReservation,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {"success": bool(resp.success)}
+
+
+# Phase 9: Inventory transaction ledger
+@router.get(
+    "/inventory/transactions",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def list_transactions(
+    document_id: int | None = None,
+    product_id: int | None = None,
+    warehouse_id: int | None = None,
+    transaction_type: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    request: Request = None,
+):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ListTransactionsRequest(limit=limit, offset=offset)
+        if document_id is not None:
+            req.document_id = document_id
+        if product_id is not None:
+            req.product_id = product_id
+        if warehouse_id is not None:
+            req.warehouse_id = warehouse_id
+        if transaction_type is not None:
+            req.transaction_type = transaction_type
+        resp = _grpc_call(
+            stub.ListTransactions,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {
+        "transactions": [
+            {
+                "id": tx.id,
+                "transaction_type": tx.transaction_type,
+                "document_id": tx.document_id,
+                "document_line_id": tx.document_line_id,
+                "product_id": tx.product_id,
+                "warehouse_id": tx.warehouse_id,
+                "quantity": tx.quantity,
+                "physical_qty_before": tx.physical_qty_before,
+                "physical_qty_after": tx.physical_qty_after,
+                "reserved_qty_before": tx.reserved_qty_before,
+                "reserved_qty_after": tx.reserved_qty_after,
+                "available_qty_before": tx.available_qty_before,
+                "available_qty_after": tx.available_qty_after,
+                "user_id": tx.user_id,
+                "created_at": tx.created_at,
+                "payload": tx.payload,
+                "idempotency_key": tx.idempotency_key,
+            }
+            for tx in resp.transactions
+        ]
+    }
 
 
 @router.get(
@@ -1238,3 +1708,26 @@ def delete_user(user_id: int, request: Request):
             timeout=GRPC_TIMEOUT_FAST,
         )
     return {"success": resp.success, "message": resp.message}
+
+
+@router.get(
+    "/users/permissions",
+    dependencies=[Depends(get_current_user)],
+)
+def get_users_permissions():
+    from api_gateway.permissions import ROLE_PERMISSIONS, Permission
+    return {
+        "roles": {
+            role: [p.value for p in perms] if role != "admin" else ["*"]
+            for role, perms in ROLE_PERMISSIONS.items()
+        },
+        "permissions": [p.value for p in Permission],
+    }
+
+
+@router.post(
+    "/users/me/change-password",
+    dependencies=[Depends(get_current_user)],
+)
+def change_password():
+    raise HTTPException(status_code=501, detail="Change password is not implemented")

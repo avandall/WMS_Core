@@ -94,6 +94,11 @@ venv.bak/
 .env.prod
 *.env
 
+# Secrets / local config files (NEVER commit these)
+secret.txt
+secrets.txt
+*.secret
+
 # Spyder project settings
 .spyderproject
 .spyproject

@@ -74,6 +74,36 @@ class DocumentsServiceStub(object):
                 request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.DeleteDocumentRequest.SerializeToString,
                 response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.DeleteDocumentResponse.FromString,
                 _registered_method=True)
+        self.ApproveRequest = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/ApproveRequest',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ApproveRequestRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ApproveRequestResponse.FromString,
+                _registered_method=True)
+        self.ReserveRequest = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/ReserveRequest',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReserveRequestRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReserveRequestResponse.FromString,
+                _registered_method=True)
+        self.ReleaseReservation = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/ReleaseReservation',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReleaseReservationRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReleaseReservationResponse.FromString,
+                _registered_method=True)
+        self.StartExecution = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/StartExecution',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.StartExecutionRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.StartExecutionResponse.FromString,
+                _registered_method=True)
+        self.ConfirmExecution = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/ConfirmExecution',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ConfirmExecutionRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ConfirmExecutionResponse.FromString,
+                _registered_method=True)
+        self.CompleteRequest = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/CompleteRequest',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestResponse.FromString,
+                _registered_method=True)
 
 
 class DocumentsServiceServicer(object):
@@ -127,6 +157,45 @@ class DocumentsServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ApproveRequest(self, request, context):
+        """Phase 7: Approve without stock movement
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReserveRequest(self, request, context):
+        """Phase 8: Sales reservation workflow
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReleaseReservation(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StartExecution(self, request, context):
+        """Phase 10: Execution confirmation
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ConfirmExecution(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CompleteRequest(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DocumentsServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -169,6 +238,36 @@ def add_DocumentsServiceServicer_to_server(servicer, server):
                     servicer.DeleteDocument,
                     request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.DeleteDocumentRequest.FromString,
                     response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.DeleteDocumentResponse.SerializeToString,
+            ),
+            'ApproveRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.ApproveRequest,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ApproveRequestRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ApproveRequestResponse.SerializeToString,
+            ),
+            'ReserveRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReserveRequest,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReserveRequestRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReserveRequestResponse.SerializeToString,
+            ),
+            'ReleaseReservation': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReleaseReservation,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReleaseReservationRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ReleaseReservationResponse.SerializeToString,
+            ),
+            'StartExecution': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartExecution,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.StartExecutionRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.StartExecutionResponse.SerializeToString,
+            ),
+            'ConfirmExecution': grpc.unary_unary_rpc_method_handler(
+                    servicer.ConfirmExecution,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.ConfirmExecutionRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.ConfirmExecutionResponse.SerializeToString,
+            ),
+            'CompleteRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.CompleteRequest,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -387,6 +486,168 @@ class DocumentsService(object):
             '/wms.documents.v1.DocumentsService/DeleteDocument',
             wms_dot_documents_dot_v1_dot_documents__pb2.DeleteDocumentRequest.SerializeToString,
             wms_dot_documents_dot_v1_dot_documents__pb2.DeleteDocumentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ApproveRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/ApproveRequest',
+            wms_dot_documents_dot_v1_dot_documents__pb2.ApproveRequestRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.ApproveRequestResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReserveRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/ReserveRequest',
+            wms_dot_documents_dot_v1_dot_documents__pb2.ReserveRequestRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.ReserveRequestResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReleaseReservation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/ReleaseReservation',
+            wms_dot_documents_dot_v1_dot_documents__pb2.ReleaseReservationRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.ReleaseReservationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartExecution(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/StartExecution',
+            wms_dot_documents_dot_v1_dot_documents__pb2.StartExecutionRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.StartExecutionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ConfirmExecution(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/ConfirmExecution',
+            wms_dot_documents_dot_v1_dot_documents__pb2.ConfirmExecutionRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.ConfirmExecutionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CompleteRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/CompleteRequest',
+            wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestResponse.FromString,
             options,
             channel_credentials,
             insecure,

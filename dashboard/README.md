@@ -80,7 +80,12 @@ The dashboard communicates with the WMS API using REST endpoints:
 - `GET /api/inventory` - Retrieve inventory data
 - `GET /api/documents` - Retrieve all documents
 - `POST /api/documents` - Create new document
-- `POST /api/documents/{id}/post` - Post a draft document
+- `POST /api/documents/{id}/approve` - Approve a document/request
+- `POST /api/documents/{id}/reserve` - Reserve inventory stock for a document
+- `POST /api/documents/{id}/start-execution` - Start warehouse execution for a document
+- `POST /api/documents/{id}/confirm` - Confirm picked/received/executed quantities
+- `POST /api/documents/{id}/complete` - Complete a document
+- `POST /api/documents/{id}/post` - [Deprecated] Post a draft document (legacy)
 - `GET /api/reports/*` - Generate various reports
 
 ## Technologies Used

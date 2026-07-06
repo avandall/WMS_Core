@@ -147,14 +147,137 @@ class ReportingReadModelRepo:
         payload = dict(envelope.payload or {})
         if envelope.type == "DocumentUploaded":
             self._upsert_document(payload, status=str(payload.get("status") or "DRAFT"))
-        elif envelope.type == "DocumentPosted":
-            self._mark_document_status(payload, "POSTED", posted_at=payload.get("posted_at"))
+        elif envelope.type in ("DocumentPosted", "DocumentApproved", "WarehouseExecutionStarted", "DocumentCompleted", "StockReserved", "ReservationReleased"):
+            status = payload.get("status")
+            if not status:
+                if envelope.type == "DocumentApproved":
+                    status = "APPROVED"
+                elif envelope.type == "WarehouseExecutionStarted":
+                    status = "IN_PROGRESS"
+                elif envelope.type == "DocumentCompleted":
+                    status = "COMPLETED"
+                elif envelope.type == "StockReserved":
+                    status = "RESERVED"
+                elif envelope.type == "ReservationReleased":
+                    status = "COMPLETED"
+                else:
+                    status = "POSTED"
+            self._mark_document_status(payload, status, posted_at=payload.get("posted_at"))
+        elif envelope.type == "WarehouseExecutionConfirmed":
+            document_id = int(payload["document_id"])
+            items = list(payload.get("items") or [])
+            executed_qty = sum(int(item.get("quantity") or 0) for item in items)
+            row = self.db.get(DocumentSummary, document_id)
+            if row:
+                row.executed_quantity = executed_qty
+                row.status = "EXECUTED"
+                row.updated_at = _now()
+                if row.doc_type == "SALE":
+                    self._upsert_sale_from_document(row)
         elif envelope.type == "DocumentCancelled":
             self._mark_document_status(payload, "CANCELLED")
         elif envelope.type == "InventoryMovementApplied":
             self._apply_inventory_projection(payload)
         elif envelope.type == "InventoryAdjusted":
             self._apply_inventory_adjustment(payload)
+        elif envelope.type == "InventoryTransactionRecorded":
+            self._project_inventory_transaction(payload)
+
+    def _update_matrix(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        *,
+        physical_delta: int = 0,
+        reserved_delta: int = 0,
+        in_transit_delta: int = 0,
+        incoming_delta: int = 0,
+    ) -> None:
+        row = self.db.get(InventorySummary, product_id)
+        if row is None:
+            row = InventorySummary(
+                product_id=product_id,
+                total_quantity=0,
+                warehouse_quantities={},
+                warehouse_matrix={}
+            )
+            self.db.add(row)
+
+        matrix = dict(row.warehouse_matrix or {})
+        key = str(warehouse_id)
+        if key not in matrix:
+            matrix[key] = {
+                "physical_qty": 0,
+                "reserved_qty": 0,
+                "incoming_qty": 0,
+                "in_transit_qty": 0,
+                "available_qty": 0,
+            }
+
+        m = matrix[key]
+        m["physical_qty"] += physical_delta
+        m["reserved_qty"] += reserved_delta
+        m["in_transit_qty"] += in_transit_delta
+        m["incoming_qty"] += incoming_delta
+        m["available_qty"] = m["physical_qty"] - m["reserved_qty"]
+
+        row.warehouse_matrix = matrix
+
+        # Sync to backward compatible fields:
+        row.warehouse_quantities = {
+            wh: data["physical_qty"]
+            for wh, data in matrix.items()
+        }
+        row.total_quantity = sum(data["physical_qty"] for data in matrix.values())
+        row.updated_at = _now()
+
+    def _project_inventory_transaction(self, payload: dict[str, Any]) -> None:
+        tx_type = str(payload.get("transaction_type") or "").upper()
+        product_id = int(payload.get("product_id") or 0)
+        warehouse_id = int(payload.get("warehouse_id") or 0)
+        quantity = int(payload.get("quantity") or 0)
+
+        if not product_id or not warehouse_id:
+            return
+
+        OUTBOUND_TYPES = {
+            "SALES_SHIPMENT",
+            "PRODUCTION_ISSUE",
+            "PURCHASE_RETURN_SHIPMENT",
+            "INTERNAL_CONSUMPTION",
+            "SCRAP",
+            "ADJUSTMENT_OUT",
+        }
+        INBOUND_TYPES = {
+            "PURCHASE_RECEIPT",
+            "PRODUCTION_RECEIPT",
+            "SALES_RETURN_RECEIPT",
+            "ADJUSTMENT_IN",
+        }
+
+        if tx_type == "RESERVATION":
+            self._update_matrix(product_id, warehouse_id, reserved_delta=quantity)
+        elif tx_type == "RESERVATION_RELEASE":
+            self._update_matrix(product_id, warehouse_id, reserved_delta=-quantity)
+        elif tx_type == "RESERVATION_CONSUME":
+            self._update_matrix(product_id, warehouse_id, physical_delta=-quantity, reserved_delta=-quantity)
+            self._update_warehouse(warehouse_id, -quantity, payload.get("document_id"))
+        elif tx_type == "TRANSFER_ISSUE":
+            self._update_matrix(product_id, warehouse_id, physical_delta=-quantity, in_transit_delta=quantity)
+            self._update_warehouse(warehouse_id, -quantity, payload.get("document_id"))
+        elif tx_type == "TRANSFER_RECEIPT":
+            self._update_matrix(product_id, warehouse_id, physical_delta=quantity)
+            self._update_warehouse(warehouse_id, quantity, payload.get("document_id"))
+
+            src_wh = int(payload.get("source_warehouse_id") or 0)
+            if src_wh:
+                self._update_matrix(product_id, src_wh, in_transit_delta=-quantity)
+        elif tx_type in OUTBOUND_TYPES:
+            self._update_matrix(product_id, warehouse_id, physical_delta=-quantity)
+            self._update_warehouse(warehouse_id, -quantity, payload.get("document_id"))
+        elif tx_type in INBOUND_TYPES:
+            self._update_matrix(product_id, warehouse_id, physical_delta=quantity)
+            self._update_warehouse(warehouse_id, quantity, payload.get("document_id"))
 
     def _upsert_document(self, payload: dict[str, Any], *, status: str) -> None:
         document_id = int(payload["document_id"])
@@ -235,19 +358,9 @@ class ReportingReadModelRepo:
         *,
         warehouse_delta: int | None = None,
     ) -> None:
-        row = self.db.get(InventorySummary, product_id)
-        if row is None:
-            row = InventorySummary(product_id=product_id, total_quantity=0, warehouse_quantities={})
-            self.db.add(row)
-        row.total_quantity = int(row.total_quantity) + int(total_delta)
-        quantities = dict(row.warehouse_quantities or {})
+        delta = total_delta if warehouse_delta is None else warehouse_delta
         if warehouse_id is not None:
-            key = str(int(warehouse_id))
-            quantities[key] = int(quantities.get(key, 0)) + int(
-                total_delta if warehouse_delta is None else warehouse_delta
-            )
-            row.warehouse_quantities = quantities
-        row.updated_at = _now()
+            self._update_matrix(product_id, int(warehouse_id), physical_delta=delta)
 
     def _update_warehouse(self, warehouse_id: Any, quantity_delta: int, document_id: int | None) -> None:
         if warehouse_id is None:
@@ -282,6 +395,7 @@ class ReportingReadModelRepo:
             "from_warehouse_id": row.from_warehouse_id,
             "to_warehouse_id": row.to_warehouse_id,
             "total_quantity": int(row.total_quantity),
+            "executed_quantity": int(row.executed_quantity or 0),
             "total_value": float(row.total_value),
             "created_at": row.created_at,
             "posted_at": row.posted_at,

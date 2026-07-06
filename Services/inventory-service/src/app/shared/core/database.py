@@ -92,6 +92,8 @@ def import_all_models():
         "app.modules.inventory.infrastructure.models.inventory",
         "app.modules.inventory.infrastructure.models.warehouse_inventory",
         "app.modules.inventory.infrastructure.models.movement_ledger",
+        "app.modules.inventory.infrastructure.models.inventory_transaction",
+        "app.modules.inventory.infrastructure.models.stock_reservation",
     ]
     for module in model_modules:
         try:

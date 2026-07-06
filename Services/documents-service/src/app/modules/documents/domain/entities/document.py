@@ -24,8 +24,16 @@ class DocumentType(str, Enum):
 
 class DocumentStatus(str, Enum):
     DRAFT = "DRAFT"
-    POSTED = "POSTED"
+    REQUESTED = "REQUESTED"
+    APPROVED = "APPROVED"
+    RESERVED = "RESERVED"
+    PARTIALLY_RESERVED = "PARTIALLY_RESERVED"
+    IN_PROGRESS = "IN_PROGRESS"
+    EXECUTED = "EXECUTED"
+    PARTIALLY_EXECUTED = "PARTIALLY_EXECUTED"
+    COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+    POSTED = "POSTED"
 
 
 class DocumentProduct:
@@ -39,6 +47,13 @@ class DocumentProduct:
         self.product_id = product_id
         self.quantity = quantity
         self.unit_price = float(unit_price)
+
+        self.requested_qty: int = quantity
+        self.reserved_qty: int = 0
+        self.executed_qty: Optional[int] = None
+        self.rejected_qty: int = 0
+        self.difference_qty: int = 0
+        self.execution_status: Optional[str] = None
 
     @staticmethod
     def _validate_product_id(product_id: int) -> None:
@@ -102,6 +117,14 @@ class Document(DomainEntity):
         self.created_by = created_by
         self.note = note
         self.approved_by = None
+
+        self.transaction_type: Optional[str] = None
+        self.reason_code: Optional[str] = None
+        self.requested_by: Optional[str] = None
+        self.approved_at: Optional[datetime] = None
+        self.execution_started_at: Optional[datetime] = None
+        self.completed_at: Optional[datetime] = None
+        self.assigned_to: Optional[str] = None
 
     @staticmethod
     def _validate_document_id(document_id: int) -> None:
@@ -255,6 +278,8 @@ class Document(DomainEntity):
                 "product_id": item.product_id,
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
+                "requested_qty": item.requested_qty,
+                "executed_qty": item.executed_qty,
             }
             for item in self.items
         ]
@@ -281,6 +306,8 @@ class Document(DomainEntity):
             "total_value": self.calculate_total_value(),
             "created_by": self.created_by,
             "approved_by": self.approved_by,
+            "transaction_type": self.transaction_type,
+            "reason_code": self.reason_code,
         }
 
     def can_be_modified(self) -> bool:

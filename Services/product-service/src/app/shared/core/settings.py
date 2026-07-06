@@ -32,13 +32,6 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
 
-    @field_validator("database_url")
-    @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        if not v:
-            raise ValueError("DATABASE_URL environment variable is required")
-        return v
-
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
@@ -60,6 +53,26 @@ class Settings(BaseSettings):
                 return False
             if normalized in {"debug", "dev", "development"}:
                 return True
+        return v
+    
+    # --- COPY ĐOẠN NÀY DÁN VÀO CÁC SERVICE KHÁC ---
+    @field_validator("cors_origins", "cors_allow_methods", "cors_allow_headers", mode="before")
+    @classmethod
+    def parse_string_to_list(cls, v):
+        import json
+        if isinstance(v, str):
+            v_str = v.strip()
+            # Nếu truyền dấu sao đơn lẻ "*" từ run_all.py, tự động biến đổi thành ["*"]
+            if v_str == "*":
+                return ["*"]
+            # Nếu truyền dạng mảng JSON hợp lệ như ["http://localhost:3000"]
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    return json.loads(v_str)
+                except json.JSONDecodeError:
+                    pass
+            # Nếu truyền chuỗi phân tách bằng dấu phẩy: "origin1, origin2"
+            return [item.strip() for item in v_str.split(",") if item.strip()]
         return v
 
     model_config = ConfigDict(

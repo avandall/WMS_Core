@@ -20,6 +20,14 @@ class InventoryMovementConsumer:
         if envelope.type != "InventoryMovementRequested":
             return
 
+        import warnings
+        warnings.warn(
+            "InventoryMovementRequested event type is deprecated. Use granular transaction/execution confirmations instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning("Handling deprecated event type: InventoryMovementRequested")
+
         session_gen = get_session()
         db = next(session_gen)
         try:

@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -47,12 +47,6 @@ class Settings(BaseSettings):
     redis_critical_streams_consumer_prefix: str = "api"
     redis_critical_streams_claim_idle_ms: int = 60_000
 
-    @field_validator("database_url")
-    @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        if not v:
-            raise ValueError("DATABASE_URL environment variable is required")
-        return v
 
     @field_validator("secret_key")
     @classmethod
@@ -77,10 +71,31 @@ class Settings(BaseSettings):
                 return True
         return v
 
-    model_config = ConfigDict(
+    # --- COPY ĐOẠN NÀY DÁN VÀO CÁC SERVICE KHÁC ---
+    @field_validator("cors_origins", "cors_allow_methods", "cors_allow_headers", mode="before")
+    @classmethod
+    def parse_string_to_list(cls, v):
+        import json
+        if isinstance(v, str):
+            v_str = v.strip()
+            # Nếu truyền dấu sao đơn lẻ "*" từ run_all.py, tự động biến đổi thành ["*"]
+            if v_str == "*":
+                return ["*"]
+            # Nếu truyền dạng mảng JSON hợp lệ như ["http://localhost:3000"]
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    return json.loads(v_str)
+                except json.JSONDecodeError:
+                    pass
+            # Nếu truyền chuỗi phân tách bằng dấu phẩy: "origin1, origin2"
+            return [item.strip() for item in v_str.split(",") if item.strip()]
+        return v
+
+    model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         case_sensitive=False,
         extra="ignore",
+        enable_decoding=False,
     )
 
 

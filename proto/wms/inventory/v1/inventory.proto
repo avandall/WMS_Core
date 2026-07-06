@@ -6,6 +6,16 @@ service InventoryService {
   rpc ListInventoryItems(ListInventoryItemsRequest) returns (ListInventoryItemsResponse);
   rpc GetInventoryByWarehouse(GetInventoryByWarehouseRequest) returns (GetInventoryByWarehouseResponse);
   rpc GetProductQuantity(GetProductQuantityRequest) returns (GetProductQuantityResponse);
+  // Phase 5: Availability and reservations
+  rpc GetAvailability(GetAvailabilityRequest) returns (GetAvailabilityResponse);
+  rpc ListReservations(ListReservationsRequest) returns (ListReservationsResponse);
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+  // Phase 9: Inventory transaction ledger
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse);
+  // Phase 10: Confirm inventory transaction (consume reservation or direct physical qty change)
+  rpc ConfirmInventoryTransaction(ConfirmInventoryTransactionRequest) returns (ConfirmInventoryTransactionResponse);
+  // Add ReserveStock RPC
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
 }
 
 message InventoryItem {
@@ -18,6 +28,12 @@ message WarehouseInventoryRow {
   int64 warehouse_id = 2;
   string warehouse_name = 3;
   int64 quantity = 4;
+  // Phase 3: Quantity matrix fields
+  int64 physical_qty = 5;
+  int64 reserved_qty = 6;
+  int64 incoming_qty = 7;
+  int64 in_transit_qty = 8;
+  int64 available_qty = 9;
 }
 
 message ListInventoryItemsRequest {}
@@ -40,4 +56,124 @@ message GetProductQuantityResponse {
   int64 product_id = 1;
   int64 quantity = 2;
 }
+
+// Phase 5: Availability and reservations
+message GetAvailabilityRequest {
+  int64 product_id = 1;
+  int64 warehouse_id = 2;
+}
+
+message GetAvailabilityResponse {
+  int64 product_id = 1;
+  int64 warehouse_id = 2;
+  int64 physical_qty = 3;
+  int64 reserved_qty = 4;
+  int64 available_qty = 5;
+}
+
+message ReservationRow {
+  int64 id = 1;
+  string source_type = 2;
+  int64 source_id = 3;
+  int64 document_id = 4;
+  int64 product_id = 5;
+  int64 warehouse_id = 6;
+  int64 requested_qty = 7;
+  int64 reserved_qty = 8;
+  int64 released_qty = 9;
+  int64 consumed_qty = 10;
+  string status = 11;
+  string expires_at = 12;
+  string created_by = 13;
+  string created_at = 14;
+}
+
+message ListReservationsRequest {
+  int64 product_id = 1;
+  int64 warehouse_id = 2;
+  string status = 3;
+}
+
+message ListReservationsResponse {
+  repeated ReservationRow reservations = 1;
+}
+
+message ReleaseReservationRequest {
+  int64 reservation_id = 1;
+  int64 released_qty = 2;
+}
+
+message ReleaseReservationResponse {
+  bool success = 1;
+}
+
+// Phase 9: Inventory transaction ledger
+message TransactionRow {
+  int64 id = 1;
+  string transaction_type = 2;
+  int64 document_id = 3;
+  int64 document_line_id = 4;
+  int64 product_id = 5;
+  int64 warehouse_id = 6;
+  int64 quantity = 7;
+  int64 physical_qty_before = 8;
+  int64 physical_qty_after = 9;
+  int64 reserved_qty_before = 10;
+  int64 reserved_qty_after = 11;
+  int64 available_qty_before = 12;
+  int64 available_qty_after = 13;
+  string user_id = 14;
+  string created_at = 15;
+  string payload = 16;
+  string idempotency_key = 17;
+}
+
+message ListTransactionsRequest {
+  int64 document_id = 1;
+  int64 product_id = 2;
+  int64 warehouse_id = 3;
+  string transaction_type = 4;
+  int64 limit = 5;
+  int64 offset = 6;
+}
+
+message ListTransactionsResponse {
+  repeated TransactionRow transactions = 1;
+}
+
+// Phase 10: Confirm inventory transaction
+message ConfirmInventoryTransactionRequest {
+  string transaction_type = 1;
+  int64 product_id = 2;
+  int64 warehouse_id = 3;
+  int64 quantity = 4;
+  int64 reservation_id = 5;
+  string user_id = 6;
+  string idempotency_key = 7;
+  int64 source_warehouse_id = 8;
+}
+
+message ConfirmInventoryTransactionResponse {
+  bool success = 1;
+  int64 transaction_id = 2;
+}
+
+message ReserveStockRequest {
+  int64 product_id = 1;
+  int64 quantity = 2;
+  int64 warehouse_id = 3;
+  string event_id = 4;
+  string source_type = 5;
+  int64 source_id = 6;
+  int64 document_id = 7;
+  string created_by = 8;
+  string expires_at = 9;
+}
+
+message ReserveStockResponse {
+  bool success = 1;
+  int64 reservation_id = 2;
+  string message = 3;
+}
+
 

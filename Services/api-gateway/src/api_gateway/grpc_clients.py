@@ -19,6 +19,7 @@ from api_gateway.gen.wms.audit.v1 import audit_pb2_grpc
 from api_gateway.gen.wms.reporting.v1 import reporting_pb2_grpc
 from api_gateway.gen.wms.ai.v1 import ai_pb2_grpc
 from api_gateway.gen.wms.identity.v1 import identity_pb2_grpc
+from api_gateway.grpc_security import configured_grpc_channel
 
 # ... rest of file ...
 
@@ -29,7 +30,7 @@ def identity_stub() -> Iterator[identity_pb2_grpc.IdentityServiceStub]:
         yield identity_pb2_grpc.IdentityServiceStub(channel)
     finally:
         channel.close()
-from api_gateway.grpc_security import configured_grpc_channel
+
 
 T = TypeVar("T")
 

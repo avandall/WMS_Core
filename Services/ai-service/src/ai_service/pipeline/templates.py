@@ -43,9 +43,10 @@ Return ONLY valid JSON with this exact shape (no explanation, no markdown):
 Rules:
 - If the question mentions a product ID or product number, put it in filters as "product_id"
 - If the question mentions a warehouse ID or warehouse number, put it in filters as "warehouse_id"
-- If the question asks about quantity/stock/inventory, set intent="inventory_lookup" and target="inventory"
+- If the question asks about quantity/stock/inventory (including physical quantity, reserved stock, incoming stock, in-transit stock, or available quantity), set intent="inventory_lookup" and target="inventory"
 - If the question asks about customers, set intent="customer_lookup" and target="customers"
-- If the question asks about documents/orders/sales, set intent="document_lookup" and target="documents"
+- If the question asks about documents/orders/sales or pending execution, set intent="document_lookup" and target="documents"
+- If the question asks about transaction types or the stock ledger, set intent="document_lookup" and target="documents"
 - If the question asks about products, set intent="product_lookup" and target="products"
 - If the question asks about warehouses, set intent="warehouse_lookup" and target="warehouses"
 - Always extract numeric IDs from the question into filters
@@ -55,14 +56,17 @@ Examples:
 Q: "how many product ID 2 in warehouse ID 2"
 A: {{"intent":"inventory_lookup","target":"inventory","filters":{{"product_id":"2","warehouse_id":"2"}},"metrics":["quantity"],"limit":1,"sql":null}}
 
-Q: "stock of product 5 across all warehouses"
-A: {{"intent":"inventory_lookup","target":"inventory","filters":{{"product_id":"5"}},"metrics":["quantity"],"limit":20,"sql":null}}
+Q: "show reserved stock of product 5"
+A: {{"intent":"inventory_lookup","target":"inventory","filters":{{"product_id":"5"}},"metrics":["reserved_qty"],"limit":20,"sql":null}}
 
-Q: "list all customers"
-A: {{"intent":"customer_lookup","target":"customers","filters":{{}},"metrics":["name","debt"],"limit":20,"sql":null}}
+Q: "list pending execution documents"
+A: {{"intent":"document_lookup","target":"documents","filters":{{"status":"pending_execution"}},"metrics":["status"],"limit":20,"sql":null}}
 
-Q: "show sale documents this month"
-A: {{"intent":"document_lookup","target":"documents","filters":{{"doc_type":"sale"}},"metrics":["status","total"],"limit":20,"sql":null}}
+Q: "show stock ledger for warehouse 1"
+A: {{"intent":"document_lookup","target":"documents","filters":{{"warehouse_id":"1"}},"metrics":["transaction_type"],"limit":20,"sql":null}}
+
+Q: "available quantity of product 3"
+A: {{"intent":"inventory_lookup","target":"inventory","filters":{{"product_id":"3"}},"metrics":["available_qty"],"limit":20,"sql":null}}
 
 Question: {question}
 """
@@ -160,6 +164,14 @@ class HeuristicQueryTemplateExtractor:
     _document_keywords = re.compile(r"\b(list (all )?(documents?|orders?|sales?|invoices?)|show (all )?(documents?|sale documents?))\b", re.IGNORECASE)
     _warehouse_list_keywords = re.compile(r"\b(list (all )?warehouses?|show (all )?warehouses?|warehouse (id|name|list))\b", re.IGNORECASE)
 
+    # Phase 15: New keywords for WMS terms
+    _available_keywords = re.compile(r"\b(available quantity|available stock|available|atp)\b", re.IGNORECASE)
+    _reserved_keywords = re.compile(r"\b(reserved stock|reserved quantity|reserved|reservation)\b", re.IGNORECASE)
+    _in_transit_keywords = re.compile(r"\b(in-transit|in transit|transit stock|transfer issue|transfer receipt)\b", re.IGNORECASE)
+    _transaction_type_keywords = re.compile(r"\b(transaction type|reason code)\b", re.IGNORECASE)
+    _stock_ledger_keywords = re.compile(r"\b(stock ledger|ledger|movement ledger|inventory transaction)\b", re.IGNORECASE)
+    _pending_execution_keywords = re.compile(r"\b(pending execution|unexecuted|execution status|in progress|draft|requested)\b", re.IGNORECASE)
+
     def extract(self, *, question: str) -> QueryTemplate:
         filters: dict[str, Any] = {}
 
@@ -175,6 +187,46 @@ class HeuristicQueryTemplateExtractor:
         sku = self._sku_pattern.search(question)
         if sku:
             filters["sku"] = sku.group(1)
+
+        # Check new matrix/ledger terms first to avoid generic inventory fallback
+        metrics = ["quantity"]
+        is_matrix_query = False
+        if self._available_keywords.search(question):
+            metrics.append("available_qty")
+            is_matrix_query = True
+        if self._reserved_keywords.search(question):
+            metrics.append("reserved_qty")
+            is_matrix_query = True
+        if self._in_transit_keywords.search(question):
+            metrics.append("in_transit_qty")
+            is_matrix_query = True
+
+        if is_matrix_query:
+            return QueryTemplate(
+                intent="inventory_lookup",
+                target="inventory",
+                filters=filters,
+                metrics=tuple(metrics),
+                raw_question=question,
+            )
+
+        if self._transaction_type_keywords.search(question) or self._stock_ledger_keywords.search(question):
+            return QueryTemplate(
+                intent="document_lookup",
+                target="documents",
+                filters=filters,
+                metrics=("transaction_type", "reason_code", "status"),
+                raw_question=question,
+            )
+
+        if self._pending_execution_keywords.search(question):
+            return QueryTemplate(
+                intent="document_lookup",
+                target="documents",
+                filters=filters,
+                metrics=("status", "execution_status"),
+                raw_question=question,
+            )
 
         # If any IDs were found, it's definitely an inventory lookup
         if filters:

@@ -43,6 +43,8 @@ class DocumentPayload(BaseModel):
     items: list[DocumentItemPayload] = Field(default_factory=list)
     created_by: str = "system"
     note: str = ""
+    transaction_type: str = ""
+    reason_code: str = ""
 
 
 class PostDocumentPayload(BaseModel):
@@ -52,3 +54,19 @@ class PostDocumentPayload(BaseModel):
 class AIQueryPayload(BaseModel):
     question: str = ""
     mode: str = "auto"
+
+
+class ConfirmItemPayload(BaseModel):
+    product_id: int = 0
+    quantity: int = 0
+
+
+class ConfirmExecutionPayload(BaseModel):
+    items: list[ConfirmItemPayload] = Field(default_factory=list)
+
+
+class LoginPayload(BaseModel):
+    email: str = ""
+    password: str = ""
+
+
