@@ -61,6 +61,16 @@ def create_app() -> FastAPI:
     app = FastAPI(title="API Gateway", version="0.1.0")
     dashboard_dir = _find_dashboard_dir()
 
+    @app.on_event("startup")
+    async def startup_event():
+        from api_gateway.ingest_buffer import ingest_buffer
+        ingest_buffer.start()
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        from api_gateway.ingest_buffer import ingest_buffer
+        await ingest_buffer.stop()
+
     @app.get("/")
     async def root() -> FileResponse:
         return FileResponse(dashboard_dir / "index.html")
