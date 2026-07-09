@@ -94,6 +94,7 @@ dependencies = [
     { name = "grpcio" },
     { name = "httpx" },
     { name = "protobuf" },
+    { name = "redis" },
     { name = "shared-utils" },
     { name = "uvicorn" },
 ]
@@ -104,6 +105,7 @@ requires-dist = [
     { name = "grpcio", specifier = ">=1.80.0" },
     { name = "httpx" },
     { name = "protobuf", specifier = ">=6.31.1" },
+    { name = "redis", specifier = ">=7.0.0" },
     { name = "shared-utils", editable = "Libraries/shared-utils" },
     { name = "uvicorn", specifier = ">=0.40.0" },
 ]

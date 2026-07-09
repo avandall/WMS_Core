@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import grpc
 import os
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api_gateway.auth import get_current_user
@@ -51,6 +52,132 @@ from api_gateway.gen.wms.audit.v1 import audit_pb2
 from api_gateway.gen.wms.reporting.v1 import reporting_pb2
 from api_gateway.gen.wms.ai.v1 import ai_pb2
 from api_gateway.gen.wms.identity.v1 import identity_pb2
+from urllib.parse import urlparse
+from shared_utils.events import build_event
+
+class AsyncRedisSocketPool:
+    def __init__(self, url: str, max_connections: int = 100):
+        parsed = urlparse(url)
+        self.host = parsed.hostname or "localhost"
+        self.port = parsed.port or 6379
+        self.db = int((parsed.path or "/0").lstrip("/") or "0")
+        self.pool = asyncio.Queue(maxsize=max_connections)
+        self.max_connections = max_connections
+        self.created = 0
+        self.lock = asyncio.Lock()
+
+    def _encode_command(self, *parts: object) -> bytes:
+        encoded = [str(part).encode("utf-8") for part in parts]
+        chunks = [f"*{len(encoded)}\r\n".encode("ascii")]
+        for item in encoded:
+            chunks.append(f"${len(item)}\r\n".encode("ascii"))
+            chunks.append(item)
+            chunks.append(b"\r\n")
+        return b"".join(chunks)
+
+    async def _read_line(self, reader: asyncio.StreamReader) -> bytes:
+        line = await reader.readline()
+        return line[:-2]
+
+    async def _read_response(self, reader: asyncio.StreamReader) -> Any:
+        prefix = await reader.read(1)
+        if not prefix:
+            raise RuntimeError("Connection closed by server")
+        if prefix in (b"+", b"-", b":"):
+            line = await self._read_line(reader)
+            if prefix == b"-":
+                raise RuntimeError(line.decode("utf-8"))
+            val = line.decode("utf-8")
+            if prefix == b":":
+                return int(val)
+            return val
+        if prefix == b"$":
+            length = int(await self._read_line(reader))
+            if length == -1:
+                return None
+            data = await reader.readexactly(length)
+            await reader.readexactly(2)  # trailer \r\n
+            return data.decode("utf-8")
+        if prefix == b"*":
+            length = int(await self._read_line(reader))
+            if length == -1:
+                return None
+            return [await self._read_response(reader) for _ in range(length)]
+        raise RuntimeError(f"Unknown response prefix: {prefix!r}")
+
+    async def get_connection(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        async with self.lock:
+            # Check if there is an available connection in the pool
+            if not self.pool.empty():
+                return await self.pool.get()
+            
+            # If we haven't reached max_connections, create a new one
+            if self.created < self.max_connections:
+                reader, writer = await asyncio.open_connection(self.host, self.port)
+                if self.db:
+                    writer.write(self._encode_command("SELECT", self.db))
+                    await writer.drain()
+                    await self._read_response(reader)
+                self.created += 1
+                return reader, writer
+
+        # If pool is empty and we reached max_connections, block waiting for one
+        return await self.pool.get()
+
+    async def release_connection(self, conn: tuple[asyncio.StreamReader, asyncio.StreamWriter], err: bool = False):
+        reader, writer = conn
+        if err:
+            async with self.lock:
+                self.created -= 1
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+        else:
+            try:
+                self.pool.put_nowait(conn)
+            except asyncio.QueueFull:
+                async with self.lock:
+                    self.created -= 1
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+
+    async def xadd(self, stream: str, json_data: str):
+        conn = await self.get_connection()
+        reader, writer = conn
+        cmd = self._encode_command("XADD", stream, "*", "event", json_data)
+        try:
+            writer.write(cmd)
+            await writer.drain()
+            await self._read_response(reader)
+            await self.release_connection(conn, False)
+        except Exception:
+            await self.release_connection(conn, True)
+            raise
+
+    async def xadd_batch(self, stream: str, payloads: list[str]):
+        conn = await self.get_connection()
+        reader, writer = conn
+        cmds = []
+        for payload in payloads:
+            cmds.append(self._encode_command("XADD", stream, "*", "event", payload))
+        try:
+            writer.write(b"".join(cmds))
+            await writer.drain()
+            for _ in range(len(payloads)):
+                await self._read_response(reader)
+            await self.release_connection(conn, False)
+        except Exception:
+            await self.release_connection(conn, True)
+            raise
+
+REDIS_URL = os.getenv("EVENT_BUS_URL", "redis://localhost:6379/0")
+EVENT_STREAM = os.getenv("EVENT_STREAM", "wms.events")
+redis_pool = AsyncRedisSocketPool(REDIS_URL, max_connections=100)
 
 
 router = APIRouter(prefix="/api/v1")
@@ -1420,6 +1547,16 @@ def ai_status(request: Request):
             idempotent=True,
         )
     return parse_json(resp.json)
+
+@router.post(
+    "/inventory/ingest",
+    status_code=202,
+)
+async def inventory_ingest(payload: dict):
+    from api_gateway.ingest_buffer import ingest_buffer
+    envelope = build_event(source="api-gateway", event_type="InventoryIngested", payload=payload)
+    await ingest_buffer.add_event(envelope.to_json())
+    return {"status": "accepted"}
 
 
 # ---- Inventory ----

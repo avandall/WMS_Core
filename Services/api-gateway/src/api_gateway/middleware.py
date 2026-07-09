@@ -109,6 +109,9 @@ def _rate_limit_client(request: Request) -> str:
 
 
 async def rate_limit_middleware(request: Request, call_next):
+    if request.url.path in {"/api/v1/inventory/ingest", "/inventory/ingest"}:
+        return await call_next(request)
+
     try:
         rps = float(os.getenv("RATE_LIMIT_RPS", "10"))
     except ValueError:
