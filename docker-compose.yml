@@ -72,7 +72,6 @@ services:
     environment:
       <<: *shared-env
       PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
-
       # gRPC upstream addresses
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
       CUSTOMER_GRPC_ADDR: "${CUSTOMER_GRPC_ADDR:-customer-service:50052}"
@@ -99,6 +98,9 @@ services:
       CORS_ALLOW_CREDENTIALS: "${CORS_ALLOW_CREDENTIALS:-0}"
       MAX_REQUEST_BODY_BYTES: "${MAX_REQUEST_BODY_BYTES:-1048576}"
       RATE_LIMIT_RPS: "${RATE_LIMIT_RPS:-10}"
+
+      # Concurrency / Workers
+      UVICORN_WORKERS: "${UVICORN_WORKERS:-4}"
     command: ["api-gateway"]
     volumes:
       - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
