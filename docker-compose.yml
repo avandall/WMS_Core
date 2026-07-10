@@ -55,6 +55,7 @@ services:
     environment:
       <<: *api-gateway-env
       PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
     command: ["api-gateway"]
     volumes:
       - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
