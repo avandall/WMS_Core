@@ -1,60 +1,100 @@
+# =============================================================================
+# WMS Core — docker-compose.yml  (local dev stack)
+# =============================================================================
+# HOW TO RUN:
+#   cp .env.local.example .env.local      # first time only
+#   docker compose --env-file .env.local up
+#
+# All environment variables come from a SINGLE root .env.local file.
+# No per-service .env files are loaded here.
+# Per-service .env.example files still exist for standalone service runs.
+# =============================================================================
+
 x-build-common: &build-common
   context: .
   dockerfile: Dockerfile
 
-x-api-gateway-env: &api-gateway-env
-  SECRET_KEY: replace-with-local-dev-secret
-  PYTHONUNBUFFERED: "1"
-  IDENTITY_GRPC_ADDR: identity-service:50051
-  CUSTOMER_GRPC_ADDR: customer-service:50052
-  PRODUCT_GRPC_ADDR: product-service:50053
-  WAREHOUSE_GRPC_ADDR: warehouse-service:50054
-  INVENTORY_GRPC_ADDR: inventory-service:50055
-  DOCUMENTS_GRPC_ADDR: documents-service:50056
-  AUDIT_GRPC_ADDR: audit-service:50057
-  REPORTING_GRPC_ADDR: reporting-service:50058
-  AI_GRPC_ADDR: ai-service:50059
-  GRPC_TIMEOUT_FAST: "5"
-  GRPC_TIMEOUT_DEFAULT: "10"
-  GRPC_TIMEOUT_SLOW: "30"
-  GRPC_TIMEOUT_AI: "180"
-  GRPC_RETRY_ATTEMPTS: "2"
-  GRPC_RETRY_BACKOFF_SECONDS: "0.05"
-  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
-  CIRCUIT_BREAKER_RECOVERY_SECONDS: "15"
-  GRPC_CLIENT_TLS_ENABLED: "0"
-  GRPC_CLIENT_ROOT_CERT_FILE: ""
-  GRPC_CLIENT_CERT_FILE: ""
-  GRPC_CLIENT_KEY_FILE: ""
-  CORS_ORIGINS: http://localhost:3000,http://localhost:8000,http://localhost:8080
-  CORS_ALLOW_CREDENTIALS: "0"
-  MAX_REQUEST_BODY_BYTES: "1048576"
-  RATE_LIMIT_RPS: "10"
-  EVENT_BUS_URL: redis://event-bus:6379/0
-  EVENT_STREAM: wms.events
-  EVENTS_ENABLED: "1"
-  OTEL_TRACES_EXPORTER: otlp
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-  LOG_FORMAT: json
+# ---------------------------------------------------------------------------
+# Shared env block — every backing-service variable is read from .env.local
+# via Docker Compose variable substitution (${VAR}).
+# This anchor is merged into each service with <<: *shared-env.
+# ---------------------------------------------------------------------------
+x-shared-env: &shared-env
+  # Python runtime
+  PYTHONUNBUFFERED: "${PYTHONUNBUFFERED:-1}"
+  DEBUG: "${DEBUG:-false}"
 
-x-service-env: &service-env
-  PYTHONUNBUFFERED: "1"
-  OTEL_TRACES_EXPORTER: otlp
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-  LOG_FORMAT: json
+  # Security
+  SECRET_KEY: "${SECRET_KEY}"
+  JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+
+  # Event Bus (Redis Streams)
+  EVENT_BUS_URL: "${EVENT_BUS_URL}"
+  EVENT_STREAM: "${EVENT_STREAM:-wms.events}"
+  EVENTS_ENABLED: "${EVENTS_ENABLED:-1}"
+
+  # Observability
+  OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-otlp}"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+  LOG_FORMAT: "${LOG_FORMAT:-json}"
+
+  # gRPC TLS (off by default locally)
+  GRPC_TLS_ENABLED: "${GRPC_TLS_ENABLED:-0}"
+  GRPC_TLS_CERT_FILE: "${GRPC_TLS_CERT_FILE:-}"
+  GRPC_TLS_KEY_FILE: "${GRPC_TLS_KEY_FILE:-}"
+  GRPC_TLS_CLIENT_CA_FILE: "${GRPC_TLS_CLIENT_CA_FILE:-}"
+  GRPC_CLIENT_TLS_ENABLED: "${GRPC_CLIENT_TLS_ENABLED:-0}"
+  GRPC_CLIENT_ROOT_CERT_FILE: "${GRPC_CLIENT_ROOT_CERT_FILE:-}"
+  GRPC_CLIENT_CERT_FILE: "${GRPC_CLIENT_CERT_FILE:-}"
+  GRPC_CLIENT_KEY_FILE: "${GRPC_CLIENT_KEY_FILE:-}"
+
+  # Database Connection Pool
+  DB_POOL_SIZE: "${DB_POOL_SIZE:-50}"
+  DB_MAX_OVERFLOW: "${DB_MAX_OVERFLOW:-30}"
+  DB_POOL_TIMEOUT: "${DB_POOL_TIMEOUT:-5}"
+  DB_POOL_RECYCLE: "${DB_POOL_RECYCLE:-1800}"
+  LOCAL_DB_BOOTSTRAP_ENABLED: "${LOCAL_DB_BOOTSTRAP_ENABLED:-1}"
 
 services:
+  # ---------------------------------------------------------------------------
+  # API Gateway — the single public-facing entry point
+  # ---------------------------------------------------------------------------
   api-gateway:
     image: wms/api-gateway:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: api-gateway
-    env_file:
-      - Services/api-gateway/.env.example
     environment:
-      <<: *api-gateway-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
+
+      # gRPC upstream addresses
+      IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
+      CUSTOMER_GRPC_ADDR: "${CUSTOMER_GRPC_ADDR:-customer-service:50052}"
+      PRODUCT_GRPC_ADDR: "${PRODUCT_GRPC_ADDR:-product-service:50053}"
+      WAREHOUSE_GRPC_ADDR: "${WAREHOUSE_GRPC_ADDR:-warehouse-service:50054}"
+      INVENTORY_GRPC_ADDR: "${INVENTORY_GRPC_ADDR:-inventory-service:50055}"
+      DOCUMENTS_GRPC_ADDR: "${DOCUMENTS_GRPC_ADDR:-documents-service:50056}"
+      AUDIT_GRPC_ADDR: "${AUDIT_GRPC_ADDR:-audit-service:50057}"
+      REPORTING_GRPC_ADDR: "${REPORTING_GRPC_ADDR:-reporting-service:50058}"
+      AI_GRPC_ADDR: "${AI_GRPC_ADDR:-ai-service:50059}"
+
+      # gRPC client timeouts & resilience
+      GRPC_TIMEOUT_FAST: "${GRPC_TIMEOUT_FAST:-5}"
+      GRPC_TIMEOUT_DEFAULT: "${GRPC_TIMEOUT_DEFAULT:-10}"
+      GRPC_TIMEOUT_SLOW: "${GRPC_TIMEOUT_SLOW:-30}"
+      GRPC_TIMEOUT_AI: "${GRPC_TIMEOUT_AI:-180}"
+      GRPC_RETRY_ATTEMPTS: "${GRPC_RETRY_ATTEMPTS:-2}"
+      GRPC_RETRY_BACKOFF_SECONDS: "${GRPC_RETRY_BACKOFF_SECONDS:-0.05}"
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: "${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}"
+      CIRCUIT_BREAKER_RECOVERY_SECONDS: "${CIRCUIT_BREAKER_RECOVERY_SECONDS:-15}"
+
+      # HTTP / CORS
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,http://localhost:8080}"
+      CORS_ALLOW_CREDENTIALS: "${CORS_ALLOW_CREDENTIALS:-0}"
+      MAX_REQUEST_BODY_BYTES: "${MAX_REQUEST_BODY_BYTES:-1048576}"
+      RATE_LIMIT_RPS: "${RATE_LIMIT_RPS:-10}"
     command: ["api-gateway"]
     volumes:
       - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
@@ -73,14 +113,18 @@ services:
       - audit-service
       - reporting-service
 
+  # ---------------------------------------------------------------------------
+  # Dashboard — internal admin UI
+  # ---------------------------------------------------------------------------
   dashboard:
     image: wms/api-gateway:dev
     environment:
-      API_GATEWAY_URL: http://api-gateway:8000
-      DASHBOARD_GATEWAY_TIMEOUT: "185"
-      DASHBOARD_DEV_JWT_SECRET: replace-with-local-dev-secret
-      DASHBOARD_DEV_JWT_ALGORITHM: HS256
+      <<: *shared-env
       PYTHONPATH: /app:/app/Libraries/shared-utils/src
+      API_GATEWAY_URL: "${API_GATEWAY_URL:-http://api-gateway:8000}"
+      DASHBOARD_GATEWAY_TIMEOUT: "${DASHBOARD_GATEWAY_TIMEOUT:-185}"
+      DASHBOARD_DEV_JWT_SECRET: "${DASHBOARD_DEV_JWT_SECRET:-replace-with-local-dev-secret}"
+      DASHBOARD_DEV_JWT_ALGORITHM: "${DASHBOARD_DEV_JWT_ALGORITHM:-HS256}"
     command: ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8080"]
     volumes:
       - ./dashboard:/app/dashboard:ro
@@ -90,18 +134,23 @@ services:
     depends_on:
       - api-gateway
 
+  # ---------------------------------------------------------------------------
+  # Identity Service
+  # ---------------------------------------------------------------------------
   identity-service:
     image: wms/identity-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: identity-service
-    env_file:
-      - Services/identity-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/identity-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-identity.db
+      DATABASE_URL: "${IDENTITY_DATABASE_URL}"
+      INIT_DB_TABLES: "users"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-60}"
+      REFRESH_TOKEN_EXPIRE_MINUTES: "${REFRESH_TOKEN_EXPIRE_MINUTES:-10080}"
+      RATE_LIMIT_PER_MINUTE: "${RATE_LIMIT_PER_MINUTE:-300}"
     command: ["identity-grpc"]
     volumes:
       - ./Services/identity-service/src:/app/Services/identity-service/src:ro
@@ -110,18 +159,21 @@ services:
     depends_on:
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Customer Service
+  # ---------------------------------------------------------------------------
   customer-service:
     image: wms/customer-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: customer-service
-    env_file:
-      - Services/customer-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/customer-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-customer.db
+      DATABASE_URL: "${CUSTOMER_DATABASE_URL}"
+      INIT_DB_TABLES: "customers,customer_purchases"
+      IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["customer-grpc"]
     volumes:
       - ./Services/customer-service/src:/app/Services/customer-service/src:ro
@@ -131,18 +183,21 @@ services:
       - event-bus
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Product Service
+  # ---------------------------------------------------------------------------
   product-service:
     image: wms/product-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: product-service
-    env_file:
-      - Services/product-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/product-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-product.db
+      DATABASE_URL: "${PRODUCT_DATABASE_URL}"
+      INIT_DB_TABLES: "products"
+      IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["product-grpc"]
     volumes:
       - ./Services/product-service/src:/app/Services/product-service/src:ro
@@ -152,18 +207,21 @@ services:
       - event-bus
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Warehouse Service
+  # ---------------------------------------------------------------------------
   warehouse-service:
     image: wms/warehouse-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: warehouse-service
-    env_file:
-      - Services/warehouse-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/warehouse-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-warehouse.db
+      DATABASE_URL: "${WAREHOUSE_DATABASE_URL}"
+      INIT_DB_TABLES: "warehouses,positions"
+      IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["warehouse-grpc"]
     volumes:
       - ./Services/warehouse-service/src:/app/Services/warehouse-service/src:ro
@@ -173,18 +231,24 @@ services:
       - event-bus
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Inventory Service
+  # ---------------------------------------------------------------------------
   inventory-service:
     image: wms/inventory-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: inventory-service
-    env_file:
-      - Services/inventory-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/inventory-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-inventory.db
+      DATABASE_URL: "${INVENTORY_DATABASE_URL}"
+      INIT_DB_TABLES: "inventory,warehouse_inventory,inventory_movement_ledger"
+      INVENTORY_MOVEMENT_CONSUMER_ENABLED: "${INVENTORY_MOVEMENT_CONSUMER_ENABLED:-1}"
+      INVENTORY_DLQ_STREAM: "${INVENTORY_DLQ_STREAM:-wms.events.inventory.dlq}"
+      INVENTORY_CONSUMER_MAX_ATTEMPTS: "${INVENTORY_CONSUMER_MAX_ATTEMPTS:-3}"
+      INVENTORY_RECLAIM_IDLE_MS: "${INVENTORY_RECLAIM_IDLE_MS:-60000}"
     command: ["inventory-grpc"]
     volumes:
       - ./Services/inventory-service/src:/app/Services/inventory-service/src:ro
@@ -195,18 +259,20 @@ services:
       - otel-collector
       - warehouse-service
 
+  # ---------------------------------------------------------------------------
+  # Documents Service
+  # ---------------------------------------------------------------------------
   documents-service:
     image: wms/documents-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: documents-service
-    env_file:
-      - Services/documents-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/documents-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-documents.db
+      DATABASE_URL: "${DOCUMENTS_DATABASE_URL}"
+      INIT_DB_TABLES: "documents,document_items"
     command: ["documents-grpc"]
     volumes:
       - ./Services/documents-service/src:/app/Services/documents-service/src:ro
@@ -216,18 +282,30 @@ services:
       - event-bus
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Audit Service
+  # ---------------------------------------------------------------------------
   audit-service:
     image: wms/audit-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: audit-service
-    env_file:
-      - Services/audit-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/audit-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-audit.db
+      DATABASE_URL: "${AUDIT_DATABASE_URL}"
+      INIT_DB_TABLES: "audit_events"
+      AUDIT_EVENT_CONSUMER_ENABLED: "${AUDIT_EVENT_CONSUMER_ENABLED:-1}"
+      AUDIT_EVENT_CONSUMER_START_ID: "${AUDIT_EVENT_CONSUMER_START_ID:-$}"
+      AUDIT_EVENT_CONSUMER_BLOCK_MS: "${AUDIT_EVENT_CONSUMER_BLOCK_MS:-5000}"
+      AUDIT_EVENT_CONSUMER_BATCH_SIZE: "${AUDIT_EVENT_CONSUMER_BATCH_SIZE:-20}"
+      AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH: "${AUDIT_EVENT_CONSUMER_MAX_STREAM_LENGTH:-10000}"
+      AUDIT_EVENT_CONSUMER_GROUP: "${AUDIT_EVENT_CONSUMER_GROUP:-audit-service}"
+      AUDIT_EVENT_CONSUMER_NAME: "${AUDIT_EVENT_CONSUMER_NAME:-audit-service-1}"
+      AUDIT_EVENT_DLQ_STREAM: "${AUDIT_EVENT_DLQ_STREAM:-wms.events.audit.dlq}"
+      AUDIT_EVENT_CONSUMER_MAX_ATTEMPTS: "${AUDIT_EVENT_CONSUMER_MAX_ATTEMPTS:-3}"
+      AUDIT_EVENT_CONSUMER_RECLAIM_IDLE_MS: "${AUDIT_EVENT_CONSUMER_RECLAIM_IDLE_MS:-60000}"
     command: ["audit-grpc"]
     volumes:
       - ./Services/audit-service/src:/app/Services/audit-service/src:ro
@@ -237,18 +315,25 @@ services:
       - event-bus
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Reporting Service
+  # ---------------------------------------------------------------------------
   reporting-service:
     image: wms/reporting-service:dev
     build:
       <<: *build-common
       args:
         UV_PACKAGE: reporting-service
-    env_file:
-      - Services/reporting-service/.env.example
     environment:
-      <<: *service-env
+      <<: *shared-env
       PYTHONPATH: /app/Services/reporting-service/src:/app/Libraries/shared-utils/src
-      DATABASE_URL: sqlite:////data/wms-reporting.db
+      DATABASE_URL: "${REPORTING_DATABASE_URL}"
+      INIT_DB_TABLES: "reporting_read_model_events,inventory_summary,document_summary,sales_summary,warehouse_activity_summary"
+      REPORTING_READ_MODEL_CONSUMER_ENABLED: "${REPORTING_READ_MODEL_CONSUMER_ENABLED:-1}"
+      REPORTING_READ_MODEL_CONSUMER_GROUP: "${REPORTING_READ_MODEL_CONSUMER_GROUP:-reporting-service}"
+      REPORTING_READ_MODEL_CONSUMER_NAME: "${REPORTING_READ_MODEL_CONSUMER_NAME:-reporting-service-1}"
+      REPORTING_READ_MODEL_CONSUMER_START_ID: "${REPORTING_READ_MODEL_CONSUMER_START_ID:-0}"
+      REPORTING_READ_MODEL_DLQ_STREAM: "${REPORTING_READ_MODEL_DLQ_STREAM:-wms.events.reporting.dlq}"
     command: ["reporting-grpc"]
     volumes:
       - ./Services/reporting-service/src:/app/Services/reporting-service/src:ro
@@ -258,6 +343,9 @@ services:
       - event-bus
       - otel-collector
 
+  # ---------------------------------------------------------------------------
+  # Infrastructure / Backing Services
+  # ---------------------------------------------------------------------------
   jaeger:
     image: jaegertracing/all-in-one:1.57
     environment:
@@ -282,6 +370,9 @@ services:
       - "4317:4317"
       - "4318:4318"
 
+  # ---------------------------------------------------------------------------
+  # AI Service — optional profile
+  # ---------------------------------------------------------------------------
   ai-service:
     image: wms/ai-service:dev
     profiles: ["ai"]
@@ -291,27 +382,26 @@ services:
     env_file:
       - ../WMS_AI_Services/.env
     environment:
+      <<: *shared-env
+      PYTHONPATH: /app/src:/app/shared_utils
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
-      AI_REINDEX_CONSUMER_ENABLED: "0"
-      AI_REINDEX_QUEUE_PATH: /tmp/wms-ai-reindex-queue.jsonl
-      AI_REINDEX_CONSUMER_GROUP: ai-service
-      AI_REINDEX_CONSUMER_NAME: ai-service-1
-      AI_REINDEX_DLQ_STREAM: wms.events.ai.dlq
-      AI_REINDEX_CONSUMER_BLOCK_MS: "5000"
-      AI_REINDEX_CONSUMER_BATCH_SIZE: "10"
-      AI_REINDEX_CONSUMER_MAX_ATTEMPTS: "3"
-      AI_REINDEX_CONSUMER_RECLAIM_IDLE_MS: "60000"
-      AI_REINDEX_CONSUMER_START_ID: "0"
-      FINE_TUNED_MODEL_PATH: training/fine_tuning/wms_final_adapter
-      FINE_TUNED_MODEL_DEVICE: cuda
-      FINE_TUNED_MAX_NEW_TOKENS: "256"
-      AI_BACKEND_QUERY_URL: "http://api-gateway:8000/api/v1/ai/backend-query"
-      AI_BACKEND_QUERY_TOKEN: ""
-      AI_BACKEND_QUERY_TIMEOUT: "10"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      PYTHONPATH: /app/src:/app/shared_utils
+      AI_REINDEX_CONSUMER_ENABLED: "${AI_REINDEX_CONSUMER_ENABLED:-0}"
+      AI_REINDEX_QUEUE_PATH: "${AI_REINDEX_QUEUE_PATH:-/tmp/wms-ai-reindex-queue.jsonl}"
+      AI_REINDEX_CONSUMER_GROUP: "${AI_REINDEX_CONSUMER_GROUP:-ai-service}"
+      AI_REINDEX_CONSUMER_NAME: "${AI_REINDEX_CONSUMER_NAME:-ai-service-1}"
+      AI_REINDEX_DLQ_STREAM: "${AI_REINDEX_DLQ_STREAM:-wms.events.ai.dlq}"
+      AI_REINDEX_CONSUMER_BLOCK_MS: "${AI_REINDEX_CONSUMER_BLOCK_MS:-5000}"
+      AI_REINDEX_CONSUMER_BATCH_SIZE: "${AI_REINDEX_CONSUMER_BATCH_SIZE:-10}"
+      AI_REINDEX_CONSUMER_MAX_ATTEMPTS: "${AI_REINDEX_CONSUMER_MAX_ATTEMPTS:-3}"
+      AI_REINDEX_CONSUMER_RECLAIM_IDLE_MS: "${AI_REINDEX_CONSUMER_RECLAIM_IDLE_MS:-60000}"
+      AI_REINDEX_CONSUMER_START_ID: "${AI_REINDEX_CONSUMER_START_ID:-0}"
+      FINE_TUNED_MODEL_PATH: "${FINE_TUNED_MODEL_PATH:-training/fine_tuning/wms_final_adapter}"
+      FINE_TUNED_MODEL_DEVICE: "${FINE_TUNED_MODEL_DEVICE:-cuda}"
+      FINE_TUNED_MAX_NEW_TOKENS: "${FINE_TUNED_MAX_NEW_TOKENS:-256}"
+      AI_BACKEND_QUERY_URL: "${AI_BACKEND_QUERY_URL:-http://api-gateway:8000/api/v1/ai/backend-query}"
+      AI_BACKEND_QUERY_TOKEN: "${AI_BACKEND_QUERY_TOKEN:-}"
+      AI_BACKEND_QUERY_TIMEOUT: "${AI_BACKEND_QUERY_TIMEOUT:-10}"
     command: ["ai-grpc"]
     volumes:
       - ../WMS_AI_Services/src:/app/src
