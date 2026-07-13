@@ -92,6 +92,7 @@ venv.bak/
 .env.docker
 .env.dev
 .env.prod
+.env.local    # root dev env — copy of .env.local.example with real values; NEVER commit
 *.env
 
 # Secrets / local config files (NEVER commit these)
