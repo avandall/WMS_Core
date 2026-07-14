@@ -24,6 +24,10 @@ x-shared-env: &shared-env
   PYTHONUNBUFFERED: "${PYTHONUNBUFFERED:-1}"
   DEBUG: "${DEBUG:-false}"
 
+  # WMS Debugger SDK
+  WMS_DEBUG_ENABLED: "${WMS_DEBUG_ENABLED:-false}"
+  WMS_DEBUG_MASK_FIELDS: "${WMS_DEBUG_MASK_FIELDS:-password,token,jwt_token}"
+
   # Security
   SECRET_KEY: "${SECRET_KEY}"
   JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
