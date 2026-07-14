@@ -23,6 +23,7 @@ TARGETS = {
     "Services/reporting-service": ("src/reporting_service/gen", ["wms/reporting"]),
     "../WMS_AI_Services": ("src/ai_service/gen", ["wms/ai"]),
     "Services/api-gateway": ("src/api_gateway/gen", [""]),  # Gateway needs everything.
+    "../WMS_MCP_Server": ("app/gen", [""]),  # MCP needs everything.
 }
 
 def fix_generated_imports(path: Path) -> None:
