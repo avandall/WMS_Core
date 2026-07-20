@@ -11,7 +11,7 @@ import httpx
 import jwt
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 
 from api_gateway.errors import grpc_http_exception
 from api_gateway.routes import router as v1_router
@@ -57,9 +57,31 @@ def _find_dashboard_dir() -> Path:
     return path
 
 
+def _find_portfolio_dir() -> Path:
+    path = Path(__file__).resolve().parents[4] / "portfolio"
+    if path.exists():
+        return path
+    cwd = Path.cwd()
+    if (cwd / "portfolio").exists():
+        return cwd / "portfolio"
+    if (cwd.parent / "portfolio").exists():
+        return cwd.parent / "portfolio"
+    return path
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="API Gateway", version="0.1.0")
     dashboard_dir = _find_dashboard_dir()
+
+    @app.on_event("startup")
+    async def startup_event():
+        from api_gateway.ingest_buffer import ingest_buffer
+        ingest_buffer.start()
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        from api_gateway.ingest_buffer import ingest_buffer
+        await ingest_buffer.stop()
 
     @app.get("/")
     async def root() -> FileResponse:
@@ -76,6 +98,30 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "healthy"}
+
+    @app.get("/portfolio")
+    async def get_portfolio_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/portfolio/")
+
+    @app.get("/portfolio/")
+    async def get_portfolio_index() -> FileResponse:
+        portfolio_dir = _find_portfolio_dir()
+        return FileResponse(portfolio_dir / "index.html")
+
+    @app.get("/portfolio/styles.css")
+    async def get_portfolio_styles() -> FileResponse:
+        portfolio_dir = _find_portfolio_dir()
+        return FileResponse(portfolio_dir / "styles.css")
+
+    @app.get("/portfolio/script.js")
+    async def get_portfolio_script() -> FileResponse:
+        portfolio_dir = _find_portfolio_dir()
+        return FileResponse(portfolio_dir / "script.js")
+
+    @app.get("/portfolio/benchmark_stress_test.py")
+    async def get_portfolio_benchmark_stress_test() -> FileResponse:
+        portfolio_dir = _find_portfolio_dir()
+        return FileResponse(portfolio_dir / "benchmark_stress_test.py")
 
     app.add_middleware(
         CORSMiddleware,
