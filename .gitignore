@@ -162,5 +162,8 @@ lessons/
 
 # Local fine-tuning artifacts
 # training/fine_tuning/wms_checkpoints/
-# training/fine_tuning/wms_final_adapter/
 training/fine_tuning/wms_final_model/
+
+# Pipeline runtime and Ralph artifacts
+pipeline/docs/runtime/
+pipeline/.ralph/
