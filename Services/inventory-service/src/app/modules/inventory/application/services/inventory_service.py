@@ -26,6 +26,15 @@ class InventoryService:
         self.inventory_repo = inventory_repo
         self.event_publisher = event_publisher or NoopInventoryEventPublisher()
 
+    def _record_outbox_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        session = getattr(self.inventory_repo, "session", None)
+        if session is not None:
+            try:
+                from shared_utils.outbox.models import record_outbox_event
+                record_outbox_event(session, event_type=event_type, payload=payload)
+            except Exception as exc:
+                logger.warning(f"Failed to record outbox event: {exc}")
+
     def _write_transaction(self, **kwargs) -> dict:
         tx = self.inventory_repo.write_transaction(**kwargs)
         if not isinstance(tx, dict):
@@ -40,23 +49,25 @@ class InventoryService:
                 "created_at": None,
                 "idempotency_key": kwargs.get("idempotency_key"),
             }
+        tx_payload = {
+            "event_id": f"inventory:transaction:{tx['id']}",
+            "entity_type": "inventory_transaction",
+            "entity_id": tx["id"],
+            "transaction_id": tx["id"],
+            "transaction_type": tx["transaction_type"],
+            "product_id": tx["product_id"],
+            "warehouse_id": tx["warehouse_id"],
+            "quantity": tx["quantity"],
+            "document_id": tx["document_id"],
+            "document_line_id": tx["document_line_id"],
+            "created_at": tx["created_at"],
+            "idempotency_key": tx["idempotency_key"],
+            "user_id": kwargs.get("user_id") or "system",
+        }
+        self._record_outbox_event("InventoryTransactionRecorded", tx_payload)
         self.event_publisher.publish(
             event_type="InventoryTransactionRecorded",
-            payload={
-                "event_id": f"inventory:transaction:{tx['id']}",
-                "entity_type": "inventory_transaction",
-                "entity_id": tx["id"],
-                "transaction_id": tx["id"],
-                "transaction_type": tx["transaction_type"],
-                "product_id": tx["product_id"],
-                "warehouse_id": tx["warehouse_id"],
-                "quantity": tx["quantity"],
-                "document_id": tx["document_id"],
-                "document_line_id": tx["document_line_id"],
-                "created_at": tx["created_at"],
-                "idempotency_key": tx["idempotency_key"],
-                "user_id": kwargs.get("user_id") or "system",
-            }
+            payload=tx_payload,
         )
         return tx
 
@@ -112,18 +123,20 @@ class InventoryService:
                 idempotency_key=f"{event_id}:adjustment" if event_id else None,
                 payload={"reason": reason, "quantity_delta": quantity_delta},
             )
+        event_payload = {
+            "event_id": event_id,
+            "entity_type": "inventory",
+            "entity_id": product_id,
+            "product_id": product_id,
+            "warehouse_id": warehouse_id,
+            "quantity_delta": quantity_delta,
+            "reason": reason,
+        }
+        self._record_outbox_event("InventoryAdjusted", event_payload)
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="InventoryAdjusted",
-            payload={
-                "event_id": event_id,
-                "entity_type": "inventory",
-                "entity_id": product_id,
-                "product_id": product_id,
-                "warehouse_id": warehouse_id,
-                "quantity_delta": quantity_delta,
-                "reason": reason,
-            },
+            payload=event_payload,
         )
         return True
 
@@ -235,18 +248,20 @@ class InventoryService:
                 "source_id": source_id,
             },
         )
+        res_payload = {
+            "event_id": event_id,
+            "entity_type": "inventory",
+            "entity_id": product_id,
+            "product_id": product_id,
+            "warehouse_id": warehouse_id,
+            "quantity": requested.value,
+            "reservation_id": reservation_id,
+        }
+        self._record_outbox_event("StockReserved", res_payload)
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="StockReserved",
-            payload={
-                "event_id": event_id,
-                "entity_type": "inventory",
-                "entity_id": product_id,
-                "product_id": product_id,
-                "warehouse_id": warehouse_id,
-                "quantity": requested.value,
-                "reservation_id": reservation_id,
-            },
+            payload=res_payload,
         )
         return reservation_id
     def release_reservation(
@@ -289,18 +304,20 @@ class InventoryService:
             idempotency_key=f"{event_id}:release" if event_id else None,
             payload={"reservation_id": reservation_id, "released_qty": qty},
         )
+        rel_payload = {
+            "event_id": event_id,
+            "entity_type": "inventory",
+            "reservation_id": reservation_id,
+            "released_qty": qty,
+            "product_id": prod_id,
+            "warehouse_id": wh_id,
+            "document_id": doc_id,
+        }
+        self._record_outbox_event("ReservationReleased", rel_payload)
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="ReservationReleased",
-            payload={
-                "event_id": event_id,
-                "entity_type": "inventory",
-                "reservation_id": reservation_id,
-                "released_qty": qty,
-                "product_id": prod_id,
-                "warehouse_id": wh_id,
-                "document_id": doc_id,
-            },
+            payload=rel_payload,
         )
         return True
 
@@ -359,20 +376,22 @@ class InventoryService:
                 idempotency_key=f"{event_id}:ledger:{_product_id}" if event_id else None,
                 payload={"doc_type": doc_type, "item": item},
             )
+        doc_mov_payload = {
+            "event_id": f"{event_id}:applied",
+            "source_event_id": event_id,
+            "entity_type": "document",
+            "entity_id": document_id,
+            "document_id": document_id,
+            "doc_type": doc_type,
+            "from_warehouse_id": from_warehouse_id,
+            "to_warehouse_id": to_warehouse_id,
+            "items": items,
+        }
+        self._record_outbox_event("InventoryMovementApplied", doc_mov_payload)
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="InventoryMovementApplied",
-            payload={
-                "event_id": f"{event_id}:applied",
-                "source_event_id": event_id,
-                "entity_type": "document",
-                "entity_id": document_id,
-                "document_id": document_id,
-                "doc_type": doc_type,
-                "from_warehouse_id": from_warehouse_id,
-                "to_warehouse_id": to_warehouse_id,
-                "items": items,
-            },
+            payload=doc_mov_payload,
         )
         return True
 
@@ -531,18 +550,20 @@ class InventoryService:
             idempotency_key=f"{event_id}:consume" if event_id else None,
             payload={"reservation_id": reservation_id, "consumed_qty": consumed_qty},
         )
+        con_payload = {
+            "event_id": event_id,
+            "entity_type": "inventory",
+            "reservation_id": reservation_id,
+            "consumed_qty": consumed_qty,
+            "product_id": prod_id,
+            "warehouse_id": wh_id,
+            "document_id": doc_id,
+        }
+        self._record_outbox_event("ReservationConsumed", con_payload)
         self._commit_if_needed()
         self.event_publisher.publish(
             event_type="ReservationConsumed",
-            payload={
-                "event_id": event_id,
-                "entity_type": "inventory",
-                "reservation_id": reservation_id,
-                "consumed_qty": consumed_qty,
-                "product_id": prod_id,
-                "warehouse_id": wh_id,
-                "document_id": doc_id,
-            },
+            payload=con_payload,
         )
         return True
 
@@ -607,18 +628,20 @@ class InventoryService:
                     reason="transfer_issue_in_transit",
                 )
                 # Phase 15: Publish TransferIssued event
+                issue_payload = {
+                    "event_id": f"inventory:transfer-issue:{idempotency_key}" if idempotency_key else None,
+                    "entity_type": "document",
+                    "entity_id": document_id,
+                    "document_id": document_id,
+                    "product_id": product_id,
+                    "warehouse_id": warehouse_id,
+                    "quantity": quantity,
+                    "user_id": user_id,
+                }
+                self._record_outbox_event("TransferIssued", issue_payload)
                 self.event_publisher.publish(
                     event_type="TransferIssued",
-                    payload={
-                        "event_id": f"inventory:transfer-issue:{idempotency_key}" if idempotency_key else None,
-                        "entity_type": "document",
-                        "entity_id": document_id,
-                        "document_id": document_id,
-                        "product_id": product_id,
-                        "warehouse_id": warehouse_id,
-                        "quantity": quantity,
-                        "user_id": user_id,
-                    }
+                    payload=issue_payload,
                 )
             elif transaction_type == "TRANSFER_RECEIPT":
                 # TRANSFER_RECEIPT increases physical stock at destination, reduces in_transit stock at source
@@ -640,19 +663,21 @@ class InventoryService:
                     reason="transfer_receipt_in_transit",
                 )
                 # Phase 15: Publish TransferReceived event
+                rcpt_payload = {
+                    "event_id": f"inventory:transfer-receipt:{idempotency_key}" if idempotency_key else None,
+                    "entity_type": "document",
+                    "entity_id": document_id,
+                    "document_id": document_id,
+                    "product_id": product_id,
+                    "warehouse_id": warehouse_id,
+                    "source_warehouse_id": src_wh,
+                    "quantity": quantity,
+                    "user_id": user_id,
+                }
+                self._record_outbox_event("TransferReceived", rcpt_payload)
                 self.event_publisher.publish(
                     event_type="TransferReceived",
-                    payload={
-                        "event_id": f"inventory:transfer-receipt:{idempotency_key}" if idempotency_key else None,
-                        "entity_type": "document",
-                        "entity_id": document_id,
-                        "document_id": document_id,
-                        "product_id": product_id,
-                        "warehouse_id": warehouse_id,
-                        "source_warehouse_id": src_wh,
-                        "quantity": quantity,
-                        "user_id": user_id,
-                    }
+                    payload=rcpt_payload,
                 )
             else:
                 # Direct physical quantity adjustment
