@@ -9,7 +9,7 @@ from app.modules.inventory.application.ports import (
 )
 from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.modules.inventory.domain.value_objects import Quantity, Sku, WarehouseLocation
-from app.shared.domain.business_exceptions import InsufficientStockError, InvalidQuantityError
+from app.shared.domain.business_exceptions import InvalidQuantityError
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 
 logger = get_logger(__name__)
@@ -684,8 +684,46 @@ class InventoryService:
             )
             return txs[0]["id"] if txs else 0
 
+    def get_inventory_locations(
+        self,
+        warehouse_id: Optional[int] = None,
+        product_id: Optional[int] = None,
+        position_id: Optional[int] = None,
+        lpn: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[dict]:
+        return self.inventory_repo.get_inventory_locations(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            position_id=position_id,
+            lpn=lpn,
+            status=status,
+        )
+
+    def adjust_location_inventory(
+        self,
+        *,
+        warehouse_id: int,
+        position_id: int,
+        product_id: int,
+        quantity_delta: int,
+        allocated_delta: int = 0,
+        lpn: str = "",
+        status: str = "AVAILABLE",
+    ) -> dict:
+        return self.inventory_repo.adjust_location_quantity(
+            warehouse_id=warehouse_id,
+            position_id=position_id,
+            product_id=product_id,
+            quantity_delta=quantity_delta,
+            allocated_delta=allocated_delta,
+            lpn=lpn,
+            status=status,
+        )
+
     def _commit_if_needed(self) -> None:
         session = getattr(self.inventory_repo, "session", None)
         if session is not None:
             session.commit()
+
 

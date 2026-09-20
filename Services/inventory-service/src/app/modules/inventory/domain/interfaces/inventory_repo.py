@@ -142,6 +142,38 @@ class IInventoryRepo(ABC):
     ) -> list[dict[str, Any]]:
         pass
 
+    # TASK-002: Inventory location methods
+    @abstractmethod
+    def get_inventory_locations(
+        self,
+        warehouse_id: int | None = None,
+        product_id: int | None = None,
+        position_id: int | None = None,
+        lpn: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def adjust_location_quantity(
+        self,
+        warehouse_id: int,
+        position_id: int,
+        product_id: int,
+        quantity_delta: int,
+        allocated_delta: int = 0,
+        lpn: str = "",
+        status: str = "AVAILABLE",
+    ) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def sync_warehouse_inventory_summary(
+        self, warehouse_id: int, product_id: int
+    ) -> None:
+        pass
+
 
 # Alias for backward compatibility
 InventoryRepo = IInventoryRepo
+

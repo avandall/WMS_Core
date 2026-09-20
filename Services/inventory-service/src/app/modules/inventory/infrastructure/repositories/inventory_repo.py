@@ -13,6 +13,7 @@ from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
 from app.modules.inventory.infrastructure.models.inventory import InventoryModel
+from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
 from app.modules.inventory.infrastructure.models.inventory_transaction import InventoryTransactionModel
 from app.modules.inventory.infrastructure.models.movement_ledger import InventoryMovementLedgerModel
 from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
@@ -580,3 +581,155 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             }
             for r in rows
         ]
+
+    def get_inventory_locations(
+        self,
+        warehouse_id: Optional[int] = None,
+        product_id: Optional[int] = None,
+        position_id: Optional[int] = None,
+        lpn: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[dict]:
+        query = select(InventoryLocationModel)
+        if warehouse_id is not None:
+            query = query.where(InventoryLocationModel.warehouse_id == warehouse_id)
+        if product_id is not None:
+            query = query.where(InventoryLocationModel.product_id == product_id)
+        if position_id is not None:
+            query = query.where(InventoryLocationModel.position_id == position_id)
+        if lpn is not None:
+            query = query.where(InventoryLocationModel.lpn == lpn)
+        if status is not None:
+            query = query.where(InventoryLocationModel.status == status)
+
+        query = query.order_by(
+            InventoryLocationModel.warehouse_id,
+            InventoryLocationModel.position_id,
+            InventoryLocationModel.product_id,
+        )
+        rows = self.session.execute(query).scalars().all()
+        return [
+            {
+                "id": int(r.id),
+                "warehouse_id": int(r.warehouse_id),
+                "position_id": int(r.position_id),
+                "product_id": int(r.product_id),
+                "lpn": r.lpn or "",
+                "quantity": int(r.quantity),
+                "allocated_qty": int(r.allocated_qty),
+                "status": r.status,
+                "available_qty": int(r.quantity - r.allocated_qty),
+            }
+            for r in rows
+        ]
+
+    def adjust_location_quantity(
+        self,
+        warehouse_id: int,
+        position_id: int,
+        product_id: int,
+        quantity_delta: int,
+        allocated_delta: int = 0,
+        lpn: str = "",
+        status: str = "AVAILABLE",
+    ) -> dict:
+        lpn_clean = lpn or ""
+        row = self.session.execute(
+            select(InventoryLocationModel).where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.position_id == position_id,
+                InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.lpn == lpn_clean,
+                InventoryLocationModel.status == status,
+            )
+        ).scalar_one_or_none()
+
+        if row is None:
+            if quantity_delta < 0 or allocated_delta < 0:
+                raise InsufficientStockError(
+                    f"No inventory location found for warehouse={warehouse_id}, position={position_id}, product={product_id}, lpn={lpn_clean}"
+                )
+            new_qty = quantity_delta
+            new_allocated = allocated_delta
+            if new_allocated > new_qty:
+                raise InvalidQuantityError("allocated_qty cannot exceed quantity")
+            row = InventoryLocationModel(
+                warehouse_id=warehouse_id,
+                position_id=position_id,
+                product_id=product_id,
+                lpn=lpn_clean,
+                quantity=new_qty,
+                allocated_qty=new_allocated,
+                status=status,
+            )
+            self.session.add(row)
+        else:
+            next_qty = row.quantity + quantity_delta
+            next_allocated = row.allocated_qty + allocated_delta
+            if next_qty < 0:
+                raise InsufficientStockError(
+                    f"Insufficient location stock: current={row.quantity}, delta={quantity_delta}"
+                )
+            if next_allocated < 0:
+                raise InvalidQuantityError("allocated_qty cannot be negative")
+            if next_allocated > next_qty:
+                raise InvalidQuantityError("allocated_qty cannot exceed quantity")
+            row.quantity = next_qty
+            row.allocated_qty = next_allocated
+
+        self.session.flush()
+        # Sync warehouse_inventory summary Read-Model
+        self.sync_warehouse_inventory_summary(warehouse_id, product_id)
+        self._commit_if_auto()
+
+        return {
+            "id": int(row.id),
+            "warehouse_id": int(row.warehouse_id),
+            "position_id": int(row.position_id),
+            "product_id": int(row.product_id),
+            "lpn": row.lpn,
+            "quantity": int(row.quantity),
+            "allocated_qty": int(row.allocated_qty),
+            "status": row.status,
+            "available_qty": int(row.quantity - row.allocated_qty),
+        }
+
+    def sync_warehouse_inventory_summary(self, warehouse_id: int, product_id: int) -> None:
+        total_physical = self.session.execute(
+            select(func.coalesce(func.sum(InventoryLocationModel.quantity), 0)).where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+            )
+        ).scalar() or 0
+
+        total_allocated = self.session.execute(
+            select(func.coalesce(func.sum(InventoryLocationModel.allocated_qty), 0)).where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+            )
+        ).scalar() or 0
+
+        wh_inv = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+                WarehouseInventoryModel.product_id == product_id,
+            )
+        ).scalar_one_or_none()
+
+        if wh_inv is None:
+            wh_inv = WarehouseInventoryModel(
+                warehouse_id=warehouse_id,
+                product_id=product_id,
+                quantity=total_physical,
+                physical_qty=total_physical,
+                reserved_qty=total_allocated,
+                incoming_qty=0,
+                in_transit_qty=0,
+            )
+            self.session.add(wh_inv)
+        else:
+            wh_inv.quantity = total_physical
+            wh_inv.physical_qty = total_physical
+            wh_inv.reserved_qty = total_allocated
+        self.session.flush()
+
