@@ -10,11 +10,25 @@ service ProductService {
   rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse);
 }
 
+message ProductUOM {
+  string uom_code = 1;
+  double conversion_factor = 2;
+  string to_uom_code = 3;
+}
+
 message Product {
   int64 product_id = 1;
   string name = 2;
   double price = 3;
   string description = 4;
+  double length_cm = 5;
+  double width_cm = 6;
+  double height_cm = 7;
+  double gross_weight_kg = 8;
+  double net_weight_kg = 9;
+  double volume_cbm = 10;
+  string base_uom = 11;
+  repeated ProductUOM uoms = 12;
 }
 
 message ListProductsRequest {}
@@ -32,6 +46,13 @@ message CreateProductRequest {
   string name = 2;
   double price = 3;
   string description = 4;
+  double length_cm = 5;
+  double width_cm = 6;
+  double height_cm = 7;
+  double gross_weight_kg = 8;
+  double net_weight_kg = 9;
+  string base_uom = 10;
+  repeated ProductUOM uoms = 11;
 }
 
 message UpdateProductRequest {
@@ -39,6 +60,13 @@ message UpdateProductRequest {
   string name = 2;
   double price = 3;
   string description = 4;
+  double length_cm = 5;
+  double width_cm = 6;
+  double height_cm = 7;
+  double gross_weight_kg = 8;
+  double net_weight_kg = 9;
+  string base_uom = 10;
+  repeated ProductUOM uoms = 11;
 }
 
 message DeleteProductRequest {
@@ -48,4 +76,3 @@ message DeleteProductRequest {
 message DeleteProductResponse {
   string message = 1;
 }
-

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import grpc
 
 from shared_utils.events import get_publisher
@@ -26,19 +27,37 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
         db = next(session_gen)
         return ProductService(ProductRepo(db), session=db), db
 
+    def _to_proto_product(self, p) -> product_pb2.Product:
+        uom_protos = []
+        if hasattr(p, "uoms") and p.uoms:
+            for u in p.uoms:
+                uom_protos.append(
+                    product_pb2.ProductUOM(
+                        uom_code=u.uom_code,
+                        conversion_factor=float(u.conversion_factor),
+                        to_uom_code=u.to_uom_code,
+                    )
+                )
+        return product_pb2.Product(
+            product_id=int(p.product_id),
+            name=p.name or "",
+            price=float(p.price or 0),
+            description=p.description or "",
+            length_cm=float(getattr(p, "length_cm", 0.0)),
+            width_cm=float(getattr(p, "width_cm", 0.0)),
+            height_cm=float(getattr(p, "height_cm", 0.0)),
+            gross_weight_kg=float(getattr(p, "gross_weight_kg", 0.0)),
+            net_weight_kg=float(getattr(p, "net_weight_kg", 0.0)),
+            volume_cbm=float(getattr(p, "volume_cbm", 0.0)),
+            base_uom=getattr(p, "base_uom", "EACH"),
+            uoms=uom_protos,
+        )
+
     def ListProducts(self, request: product_pb2.ListProductsRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            products = service.get_all_products()
-            rows = [
-                product_pb2.Product(
-                    product_id=int(p.product_id),
-                    name=p.name or "",
-                    price=float(p.price or 0),
-                    description=p.description or "",
-                )
-                for p in products
-            ]
+            products = asyncio.run(service.get_all_products())
+            rows = [self._to_proto_product(p) for p in products]
             return product_pb2.ListProductsResponse(products=rows)
         finally:
             try:
@@ -49,13 +68,8 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
     def GetProduct(self, request: product_pb2.GetProductRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            p = service.get_product_details(int(request.product_id))
-            return product_pb2.Product(
-                product_id=int(p.product_id),
-                name=p.name or "",
-                price=float(p.price or 0),
-                description=p.description or "",
-            )
+            p = asyncio.run(service.get_product_details(int(request.product_id)))
+            return self._to_proto_product(p)
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("Product not found")
@@ -69,11 +83,19 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
     def CreateProduct(self, request: product_pb2.CreateProductRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            p = service.create_product(
-                product_id=int(request.product_id) if request.product_id else None,
-                name=request.name,
-                price=float(request.price),
-                description=request.description,
+            p = asyncio.run(
+                service.create_product(
+                    product_id=int(request.product_id) if request.product_id else None,
+                    name=request.name,
+                    price=float(request.price),
+                    description=request.description,
+                    length_cm=float(getattr(request, "length_cm", 0.0)),
+                    width_cm=float(getattr(request, "width_cm", 0.0)),
+                    height_cm=float(getattr(request, "height_cm", 0.0)),
+                    gross_weight_kg=float(getattr(request, "gross_weight_kg", 0.0)),
+                    net_weight_kg=float(getattr(request, "net_weight_kg", 0.0)),
+                    base_uom=getattr(request, "base_uom", "EACH"),
+                )
             )
             self._publisher.publish(
                 event_type="ProductCreated",
@@ -85,12 +107,7 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                     "name": p.name,
                 },
             )
-            return product_pb2.Product(
-                product_id=int(p.product_id),
-                name=p.name or "",
-                price=float(p.price or 0),
-                description=p.description or "",
-            )
+            return self._to_proto_product(p)
         finally:
             try:
                 db.close()
@@ -100,11 +117,19 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
     def UpdateProduct(self, request: product_pb2.UpdateProductRequest, context: grpc.ServicerContext):
         service, db = self._service()
         try:
-            p = service.update_product(
-                product_id=int(request.product_id),
-                name=request.name or None,
-                price=float(request.price) if request.price else None,
-                description=request.description or None,
+            p = asyncio.run(
+                service.update_product(
+                    product_id=int(request.product_id),
+                    name=request.name or None,
+                    price=float(request.price) if request.price else None,
+                    description=request.description or None,
+                    length_cm=float(request.length_cm) if getattr(request, "length_cm", None) else None,
+                    width_cm=float(request.width_cm) if getattr(request, "width_cm", None) else None,
+                    height_cm=float(request.height_cm) if getattr(request, "height_cm", None) else None,
+                    gross_weight_kg=float(request.gross_weight_kg) if getattr(request, "gross_weight_kg", None) else None,
+                    net_weight_kg=float(request.net_weight_kg) if getattr(request, "net_weight_kg", None) else None,
+                    base_uom=getattr(request, "base_uom", None) or None,
+                )
             )
             self._publisher.publish(
                 event_type="ProductUpdated",
@@ -116,12 +141,7 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                     "name": p.name,
                 },
             )
-            return product_pb2.Product(
-                product_id=int(p.product_id),
-                name=p.name or "",
-                price=float(p.price or 0),
-                description=p.description or "",
-            )
+            return self._to_proto_product(p)
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("Product not found")
@@ -136,7 +156,7 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
         service, db = self._service()
         try:
             product_id = int(request.product_id)
-            service.delete_product(product_id)
+            asyncio.run(service.delete_product(product_id))
             self._publisher.publish(
                 event_type="ProductDeleted",
                 payload={
