@@ -26,7 +26,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         super().__init__(session)
 
     def save(self, inventory_item: InventoryItem) -> None:
-        row = self.session.get(InventoryModel, inventory_item.product_id)
+        row = self.session.execute(
+            select(InventoryModel).where(InventoryModel.product_id == inventory_item.product_id).with_for_update()
+        ).scalar_one_or_none()
         if row:
             row.quantity = inventory_item.quantity
         else:
@@ -37,7 +39,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         self._commit_if_auto()
 
     def add_quantity(self, product_id: int, quantity: int) -> None:
-        row = self.session.get(InventoryModel, product_id)
+        row = self.session.execute(
+            select(InventoryModel).where(InventoryModel.product_id == product_id).with_for_update()
+        ).scalar_one_or_none()
 
         if quantity < 0:
             if row:
@@ -69,7 +73,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == product_id,
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if row is None:
@@ -103,7 +107,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == product_id,
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if row is None:
@@ -202,7 +206,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         }
 
     def delete(self, product_id: int) -> None:
-        row = self.session.get(InventoryModel, product_id)
+        row = self.session.execute(
+            select(InventoryModel).where(InventoryModel.product_id == product_id).with_for_update()
+        ).scalar_one_or_none()
         if not row:
             return
         if row.quantity != 0:
@@ -211,7 +217,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         self._commit_if_auto()
 
     def remove_quantity(self, product_id: int, quantity: int) -> None:
-        row = self.session.get(InventoryModel, product_id)
+        row = self.session.execute(
+            select(InventoryModel).where(InventoryModel.product_id == product_id).with_for_update()
+        ).scalar_one_or_none()
         if not row:
             raise KeyError(f"Product {product_id} not found in inventory")
         if quantity < 0:
@@ -317,7 +325,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
     def release_reservation(self, reservation_id: int, released_qty: int | None = None) -> None:
         from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
-        reservation = self.session.get(StockReservationModel, reservation_id)
+        reservation = self.session.execute(
+            select(StockReservationModel).where(StockReservationModel.id == reservation_id).with_for_update()
+        ).scalar_one_or_none()
         if not reservation:
             raise KeyError(f"Reservation {reservation_id} not found")
 
@@ -350,7 +360,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
     def consume_reservation(self, reservation_id: int, consumed_qty: int) -> None:
         from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
-        reservation = self.session.get(StockReservationModel, reservation_id)
+        reservation = self.session.execute(
+            select(StockReservationModel).where(StockReservationModel.id == reservation_id).with_for_update()
+        ).scalar_one_or_none()
         if not reservation:
             raise KeyError(f"Reservation {reservation_id} not found")
 
@@ -652,7 +664,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 InventoryLocationModel.lpn == lpn_clean,
                 InventoryLocationModel.lot_number == lot_clean,
                 InventoryLocationModel.status == status,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if row is None:
@@ -815,7 +827,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
                 WarehouseInventoryModel.product_id == product_id,
-            )
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if wh_inv is None:
