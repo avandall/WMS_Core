@@ -12,6 +12,9 @@ class InventoryLocationModel(Base):
     position_id = Column(Integer, nullable=False, index=True)
     product_id = Column(BigInteger, nullable=False, index=True)
     lpn = Column(String(100), nullable=False, default="", index=True)
+    lot_number = Column(String(100), nullable=False, default="", index=True)
+    mfg_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True, index=True)
     quantity = Column(Integer, nullable=False, default=0)
     allocated_qty = Column(Integer, nullable=False, default=0)
     status = Column(String(50), nullable=False, default="AVAILABLE", index=True)
@@ -25,7 +28,7 @@ class InventoryLocationModel(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "warehouse_id", "position_id", "product_id", "lpn", "status",
+            "warehouse_id", "position_id", "product_id", "lpn", "lot_number", "status",
             name="uq_inventory_location_unique_bin_item"
         ),
         CheckConstraint("quantity >= 0", name="check_inventory_location_quantity_positive"),
@@ -35,4 +38,6 @@ class InventoryLocationModel(Base):
         ),
         Index("ix_inv_loc_wh_prod_pos", "warehouse_id", "product_id", "position_id"),
         Index("ix_inv_loc_prod_lpn", "product_id", "lpn"),
+        Index("ix_inv_loc_prod_expiry", "warehouse_id", "product_id", "expiry_date"),
+        Index("ix_inv_loc_lot", "lot_number"),
     )

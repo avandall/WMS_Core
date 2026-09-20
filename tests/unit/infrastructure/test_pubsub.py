@@ -3,11 +3,10 @@
 import pytest
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 from app.shared.core.pubsub import (
-    PubSubManager, Event, EventType, EventPublisher, pubsub_manager
+    PubSubManager, Event, EventType, EventPublisher
 )
 
 

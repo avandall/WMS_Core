@@ -1,9 +1,7 @@
 """Tests for Redis distributed locking."""
 
 import pytest
-import asyncio
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from app.shared.core.locking import (
     DistributedLock, LockManager, Semaphore, distributed_lock
@@ -214,7 +212,7 @@ class TestLockManager:
         """Test inventory update lock."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_inventory_update(1, warehouse_id=2) as lock:
+        async with LockManager.lock_inventory_update(1, warehouse_id=2):
             pass
         
         # Check lock was created with correct key
@@ -228,7 +226,7 @@ class TestLockManager:
         """Test inventory update lock without warehouse."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_inventory_update(1) as lock:
+        async with LockManager.lock_inventory_update(1):
             pass
         
         call_args = mock_lock.call_args
@@ -239,7 +237,7 @@ class TestLockManager:
         """Test product update lock."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_product_update(123) as lock:
+        async with LockManager.lock_product_update(123):
             pass
         
         call_args = mock_lock.call_args
@@ -251,7 +249,7 @@ class TestLockManager:
         """Test user update lock."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_user_update(456) as lock:
+        async with LockManager.lock_user_update(456):
             pass
         
         call_args = mock_lock.call_args
@@ -263,7 +261,7 @@ class TestLockManager:
         """Test warehouse operation lock."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_warehouse_operation(789) as lock:
+        async with LockManager.lock_warehouse_operation(789):
             pass
         
         call_args = mock_lock.call_args
@@ -275,7 +273,7 @@ class TestLockManager:
         """Test document processing lock."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_document_processing(101) as lock:
+        async with LockManager.lock_document_processing(101):
             pass
         
         call_args = mock_lock.call_args
@@ -287,7 +285,7 @@ class TestLockManager:
         """Test bulk operation lock."""
         mock_lock = setup_lock_mock
         
-        async with LockManager.lock_bulk_operation("bulk_import_123", ttl=600) as lock:
+        async with LockManager.lock_bulk_operation("bulk_import_123", ttl=600):
             pass
         
         call_args = mock_lock.call_args

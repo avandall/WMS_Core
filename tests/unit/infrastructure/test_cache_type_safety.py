@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.shared.core.cache import cached, register_serializer, get_serializer
+from app.shared.core.cache import cached, get_serializer
 from app.modules.products.domain.entities.product import Product
 from app.modules.warehouses.domain.entities.warehouse import Warehouse
 from app.modules.inventory.domain.entities.inventory import InventoryItem

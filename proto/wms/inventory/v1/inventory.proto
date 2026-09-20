@@ -179,7 +179,7 @@ message ReserveStockResponse {
   string message = 3;
 }
 
-// TASK-002: Inventory location messages
+// TASK-002 & TASK-003: Inventory location messages
 message InventoryLocationRow {
   int64 id = 1;
   int64 warehouse_id = 2;
@@ -190,6 +190,9 @@ message InventoryLocationRow {
   int64 allocated_qty = 7;
   string status = 8;
   int64 available_qty = 9;
+  string lot_number = 10;
+  string mfg_date = 11;
+  string expiry_date = 12;
 }
 
 message GetInventoryLocationsRequest {
@@ -198,6 +201,7 @@ message GetInventoryLocationsRequest {
   int64 position_id = 3;
   string lpn = 4;
   string status = 5;
+  string lot_number = 6;
 }
 
 message GetInventoryLocationsResponse {
@@ -212,6 +216,9 @@ message UpdateInventoryLocationRequest {
   int64 quantity_delta = 5;
   int64 allocated_delta = 6;
   string status = 7;
+  string lot_number = 8;
+  string mfg_date = 9;
+  string expiry_date = 10;
 }
 
 message UpdateInventoryLocationResponse {

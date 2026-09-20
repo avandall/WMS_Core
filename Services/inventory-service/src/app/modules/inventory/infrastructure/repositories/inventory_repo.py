@@ -589,6 +589,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         position_id: Optional[int] = None,
         lpn: Optional[str] = None,
         status: Optional[str] = None,
+        lot_number: Optional[str] = None,
     ) -> List[dict]:
         query = select(InventoryLocationModel)
         if warehouse_id is not None:
@@ -601,6 +602,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             query = query.where(InventoryLocationModel.lpn == lpn)
         if status is not None:
             query = query.where(InventoryLocationModel.status == status)
+        if lot_number is not None:
+            query = query.where(InventoryLocationModel.lot_number == lot_number)
 
         query = query.order_by(
             InventoryLocationModel.warehouse_id,
@@ -615,6 +618,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "position_id": int(r.position_id),
                 "product_id": int(r.product_id),
                 "lpn": r.lpn or "",
+                "lot_number": r.lot_number or "",
+                "mfg_date": r.mfg_date.isoformat() if r.mfg_date else None,
+                "expiry_date": r.expiry_date.isoformat() if r.expiry_date else None,
                 "quantity": int(r.quantity),
                 "allocated_qty": int(r.allocated_qty),
                 "status": r.status,
@@ -632,14 +638,19 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         allocated_delta: int = 0,
         lpn: str = "",
         status: str = "AVAILABLE",
+        lot_number: str = "",
+        mfg_date: Optional[datetime] = None,
+        expiry_date: Optional[datetime] = None,
     ) -> dict:
         lpn_clean = lpn or ""
+        lot_clean = lot_number or ""
         row = self.session.execute(
             select(InventoryLocationModel).where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.position_id == position_id,
                 InventoryLocationModel.product_id == product_id,
                 InventoryLocationModel.lpn == lpn_clean,
+                InventoryLocationModel.lot_number == lot_clean,
                 InventoryLocationModel.status == status,
             )
         ).scalar_one_or_none()
@@ -647,7 +658,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if row is None:
             if quantity_delta < 0 or allocated_delta < 0:
                 raise InsufficientStockError(
-                    f"No inventory location found for warehouse={warehouse_id}, position={position_id}, product={product_id}, lpn={lpn_clean}"
+                    f"No inventory location found for warehouse={warehouse_id}, position={position_id}, product={product_id}, lpn={lpn_clean}, lot={lot_clean}"
                 )
             new_qty = quantity_delta
             new_allocated = allocated_delta
@@ -658,6 +669,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 position_id=position_id,
                 product_id=product_id,
                 lpn=lpn_clean,
+                lot_number=lot_clean,
+                mfg_date=mfg_date,
+                expiry_date=expiry_date,
                 quantity=new_qty,
                 allocated_qty=new_allocated,
                 status=status,
@@ -676,6 +690,10 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 raise InvalidQuantityError("allocated_qty cannot exceed quantity")
             row.quantity = next_qty
             row.allocated_qty = next_allocated
+            if mfg_date is not None:
+                row.mfg_date = mfg_date
+            if expiry_date is not None:
+                row.expiry_date = expiry_date
 
         self.session.flush()
         # Sync warehouse_inventory summary Read-Model
@@ -688,10 +706,94 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "position_id": int(row.position_id),
             "product_id": int(row.product_id),
             "lpn": row.lpn,
+            "lot_number": row.lot_number or "",
+            "mfg_date": row.mfg_date.isoformat() if row.mfg_date else None,
+            "expiry_date": row.expiry_date.isoformat() if row.expiry_date else None,
             "quantity": int(row.quantity),
             "allocated_qty": int(row.allocated_qty),
             "status": row.status,
             "available_qty": int(row.quantity - row.allocated_qty),
+        }
+
+    def recall_query(self, lot_number: str) -> dict:
+        """Recall Query: Get all location bins storing lot_number and customer orders receiving it."""
+        loc_rows = self.session.execute(
+            select(InventoryLocationModel).where(
+                InventoryLocationModel.lot_number == lot_number
+            )
+        ).scalars().all()
+        locations = [
+            {
+                "id": int(r.id),
+                "warehouse_id": int(r.warehouse_id),
+                "position_id": int(r.position_id),
+                "product_id": int(r.product_id),
+                "lpn": r.lpn or "",
+                "lot_number": r.lot_number or "",
+                "mfg_date": r.mfg_date.isoformat() if r.mfg_date else None,
+                "expiry_date": r.expiry_date.isoformat() if r.expiry_date else None,
+                "quantity": int(r.quantity),
+                "allocated_qty": int(r.allocated_qty),
+                "status": r.status,
+                "available_qty": int(r.quantity - r.allocated_qty),
+            }
+            for r in loc_rows
+        ]
+
+        customers = []
+        try:
+            try:
+                from app.modules.documents.infrastructure.models.document import DocumentModel
+                from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
+            except (ImportError, ModuleNotFoundError):
+                import sys
+                import importlib
+                from pathlib import Path
+                services_dir = Path(__file__).resolve().parents[7]
+                for s in services_dir.glob("*/src"):
+                    if str(s) not in sys.path:
+                        sys.path.insert(0, str(s))
+
+                if "app" in sys.modules and hasattr(sys.modules["app"], "__path__"):
+                    for s in services_dir.glob("*/src"):
+                        p = str(s / "app")
+                        if (s / "app").exists() and p not in sys.modules["app"].__path__:
+                            sys.modules["app"].__path__.append(p)
+
+                if "app.modules" in sys.modules and hasattr(sys.modules["app.modules"], "__path__"):
+                    for s in services_dir.glob("*/src"):
+                        p = str(s / "app" / "modules")
+                        if (s / "app" / "modules").exists() and p not in sys.modules["app.modules"].__path__:
+                            sys.modules["app.modules"].__path__.append(p)
+
+                importlib.invalidate_caches()
+                from app.modules.documents.infrastructure.models.document import DocumentModel
+                from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
+
+
+            doc_rows = self.session.execute(
+                select(DocumentItemModel, DocumentModel)
+                .join(DocumentModel, DocumentItemModel.document_id == DocumentModel.document_id)
+                .where(DocumentItemModel.lot_number == lot_number)
+            ).all()
+            for item_row, doc_row in doc_rows:
+                customers.append({
+                    "customer_id": doc_row.customer_id,
+                    "document_id": int(doc_row.document_id),
+                    "doc_type": str(doc_row.doc_type),
+                    "product_id": int(item_row.product_id),
+                    "quantity": int(item_row.quantity),
+                    "lot_number": item_row.lot_number or "",
+                })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Recall query customer lookup failed: %s", e)
+
+
+        return {
+            "lot_number": lot_number,
+            "locations": locations,
+            "customers": customers,
         }
 
     def sync_warehouse_inventory_summary(self, warehouse_id: int, product_id: int) -> None:

@@ -2,9 +2,7 @@
 
 import pytest
 import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.products.domain.entities.product import Product

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from app.modules.documents.domain.entities.document import Document, DocumentStatus, DocumentType
+from app.modules.documents.domain.entities.document import Document, DocumentType
 from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo

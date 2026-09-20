@@ -39,7 +39,15 @@ class DocumentStatus(str, Enum):
 class DocumentProduct:
     """Domain entity for document line items."""
 
-    def __init__(self, product_id: int, quantity: int, unit_price: float) -> None:
+    def __init__(
+        self,
+        product_id: int,
+        quantity: int,
+        unit_price: float,
+        lot_number: str = "",
+        mfg_date: Optional[datetime] = None,
+        expiry_date: Optional[datetime] = None,
+    ) -> None:
         self._validate_product_id(product_id)
         self._validate_quantity(quantity)
         self._validate_unit_price(unit_price)
@@ -47,6 +55,9 @@ class DocumentProduct:
         self.product_id = product_id
         self.quantity = quantity
         self.unit_price = float(unit_price)
+        self.lot_number = lot_number
+        self.mfg_date = mfg_date
+        self.expiry_date = expiry_date
 
         self.requested_qty: int = quantity
         self.reserved_qty: int = 0
@@ -282,6 +293,9 @@ class Document(DomainEntity):
                 "unit_price": item.unit_price,
                 "requested_qty": item.requested_qty,
                 "executed_qty": item.executed_qty,
+                "lot_number": getattr(item, "lot_number", ""),
+                "mfg_date": item.mfg_date.isoformat() if getattr(item, "mfg_date", None) else None,
+                "expiry_date": item.expiry_date.isoformat() if getattr(item, "expiry_date", None) else None,
             }
             for item in self.items
         ]

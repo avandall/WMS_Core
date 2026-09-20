@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.modules.customers.domain.interfaces.customer_repo import ICustomerRepo

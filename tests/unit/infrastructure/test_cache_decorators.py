@@ -1,16 +1,11 @@
 """Tests for cache decorators."""
 
 import pytest
-import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 from app.shared.core.cache import (
-    cached, invalidate_cache_pattern, invalidate_cache_key,
-    cache_key_builder, CacheHelper
+    cached
 )
-from app.shared.core.redis import redis_manager
 
 
 class TestCacheDecorators:

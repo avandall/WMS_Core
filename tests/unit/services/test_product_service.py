@@ -4,8 +4,7 @@ Covers all ProductService methods, validation, edge cases, and business logic
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, call, patch
-from typing import Dict, List
+from unittest.mock import Mock
 
 from app.modules.products.application.services.product_service import ProductService
 from app.modules.products.domain.entities.product import Product
@@ -607,7 +606,6 @@ class TestProductService:
         product_service._command_handler.handle_update = Mock(return_value=sample_product)
         
         special_name = "Product-123_@#$%"
-        special_description = "Special chars: !@#$%^&*(){}[]|\\:;\"'<>?,./"
         
         # Create with special characters
         result1 = await product_service.create_product(

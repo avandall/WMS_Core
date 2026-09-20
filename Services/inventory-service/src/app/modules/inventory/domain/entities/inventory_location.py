@@ -24,6 +24,9 @@ class InventoryLocation(DomainEntity):
     position_id: int = 0
     product_id: int = 0
     lpn: str = ""
+    lot_number: str = ""
+    mfg_date: Optional[datetime] = None
+    expiry_date: Optional[datetime] = None
     quantity: int = 0
     allocated_qty: int = 0
     status: str = "AVAILABLE"

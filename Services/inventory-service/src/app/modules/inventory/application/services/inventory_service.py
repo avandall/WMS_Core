@@ -691,6 +691,7 @@ class InventoryService:
         position_id: Optional[int] = None,
         lpn: Optional[str] = None,
         status: Optional[str] = None,
+        lot_number: Optional[str] = None,
     ) -> List[dict]:
         return self.inventory_repo.get_inventory_locations(
             warehouse_id=warehouse_id,
@@ -698,6 +699,7 @@ class InventoryService:
             position_id=position_id,
             lpn=lpn,
             status=status,
+            lot_number=lot_number,
         )
 
     def adjust_location_inventory(
@@ -710,6 +712,9 @@ class InventoryService:
         allocated_delta: int = 0,
         lpn: str = "",
         status: str = "AVAILABLE",
+        lot_number: str = "",
+        mfg_date: Optional[Any] = None,
+        expiry_date: Optional[Any] = None,
     ) -> dict:
         return self.inventory_repo.adjust_location_quantity(
             warehouse_id=warehouse_id,
@@ -719,7 +724,34 @@ class InventoryService:
             allocated_delta=allocated_delta,
             lpn=lpn,
             status=status,
+            lot_number=lot_number,
+            mfg_date=mfg_date,
+            expiry_date=expiry_date,
         )
+
+    def allocate_fefo(
+        self,
+        *,
+        warehouse_id: int,
+        product_id: int,
+        quantity: int,
+        status: str = "AVAILABLE",
+    ) -> List[dict]:
+        from app.modules.inventory.application.services.allocation_service import AllocationService
+
+        alloc_service = AllocationService(self.inventory_repo)
+        return alloc_service.allocate_fefo(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            quantity=quantity,
+            status=status,
+        )
+
+    def recall_query(self, lot_number: str) -> dict:
+        from app.modules.inventory.application.services.allocation_service import AllocationService
+
+        alloc_service = AllocationService(self.inventory_repo)
+        return alloc_service.recall_query(lot_number)
 
     def _commit_if_needed(self) -> None:
         session = getattr(self.inventory_repo, "session", None)

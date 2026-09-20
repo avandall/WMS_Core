@@ -1,7 +1,6 @@
 import asyncio
 import time
 import logging
-from typing import Any
 
 logger = logging.getLogger("api_gateway.ingest_buffer")
 

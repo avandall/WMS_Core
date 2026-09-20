@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import replace
 
-from shared_utils.events import EventEnvelope, RedisStreamClient
+from shared_utils.events import RedisStreamClient
 
 
 def _parse_args() -> argparse.Namespace:

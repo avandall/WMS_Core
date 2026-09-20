@@ -1,13 +1,10 @@
 """Tests for Redis session management."""
 
 import pytest
-import asyncio
 import json
-from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.shared.core.session import SessionManager, session_manager
-from app.shared.core.settings import settings
+from app.shared.core.session import SessionManager
 
 
 class TestSessionManager:
@@ -67,7 +64,6 @@ class TestSessionManager:
     async def test_create_session_success(self, setup_redis_mock, setup_settings_mock):
         """Test successful session creation."""
         mock_manager = setup_redis_mock
-        mock_settings = setup_settings_mock
         
         manager = SessionManager()
         user_data = {
@@ -124,7 +120,7 @@ class TestSessionManager:
         manager = SessionManager()
         user_data = {"email": "test@example.com"}
         
-        session_id = await manager.create_session(1, user_data, ttl=7200)
+        await manager.create_session(1, user_data, ttl=7200)
         
         pipeline = mock_manager.pipeline.return_value
         _, set_kwargs = pipeline.set.call_args
@@ -240,7 +236,6 @@ class TestSessionManager:
     async def test_update_session_success(self, setup_redis_mock):
         """Test successful session update."""
         mock_manager = setup_redis_mock
-        session_data = {"user_id": 1, "session_id": "test-session"}
         # Mock eval to return success for atomic update
         mock_manager.client.eval.return_value = 1  # Success indicator
         
@@ -507,7 +502,6 @@ class TestSessionManager:
     @pytest.mark.asyncio
     async def test_cleanup_expired_sessions(self, setup_redis_mock):
         """Test cleanup of expired sessions."""
-        mock_manager = setup_redis_mock
         
         manager = SessionManager()
         count = await manager.cleanup_expired_sessions()

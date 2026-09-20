@@ -4,8 +4,7 @@ Covers all UserService methods, validation, edge cases, and business logic
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 
 from app.modules.users.application.services.user_service import UserService
 from app.modules.users.domain.entities.user import User
@@ -211,7 +210,7 @@ class TestUserService:
         mock_user_repo.get.return_value = sample_user
         mock_user_repo.save.return_value = sample_user
 
-        result = await user_service.update_role(1, "admin")
+        await user_service.update_role(1, "admin")
 
         mock_user_repo.get.assert_called_once_with(1)
         mock_user_repo.save.assert_called_once()

@@ -3,9 +3,8 @@
 import functools
 import hashlib
 import json
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional
 import asyncio
-import inspect
 
 from app.shared.core.redis import redis_manager
 from app.shared.core.logging import get_logger

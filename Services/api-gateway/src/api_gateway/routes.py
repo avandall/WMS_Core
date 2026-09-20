@@ -196,7 +196,7 @@ def login_auth(payload: LoginPayload, request: Request):
                 request=request,
                 timeout=GRPC_TIMEOUT_DEFAULT,
             )
-        except Exception as exc:
+        except Exception:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not resp.success:
@@ -898,7 +898,7 @@ def confirm_document_execution(document_id: int, payload: ConfirmExecutionPayloa
                 request=request,
                 timeout=GRPC_TIMEOUT_DEFAULT,
             )
-        except Exception as exc:
+        except Exception:
             raise HTTPException(status_code=404, detail="Document not found")
 
     doc_type = (doc.doc_type or "").upper()
@@ -1382,7 +1382,7 @@ def ai_backend_query(request: Request, payload: dict):
     target = template.get("target", "unknown")
     filters = template.get("filters", {})
     limit = int(template.get("limit") or 20)
-    raw_question = template.get("raw_question", "")
+    template.get("raw_question", "")
 
     def _int(v):
         try:

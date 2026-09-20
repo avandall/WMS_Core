@@ -4,7 +4,7 @@ Covers all StockMovementService methods, validation, edge cases, and business lo
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 from app.modules.inventory.application.services.stock_movement_service import StockMovementService
 from app.shared.domain.business_exceptions import (

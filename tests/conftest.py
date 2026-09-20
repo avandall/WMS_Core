@@ -25,11 +25,19 @@ if services_dir.exists():
         if str(service_path) not in sys.path:
             sys.path.insert(0, str(service_path))
 
+try:
+    import app
+    app.__path__ = [str(s / "app") for s in services_dir.glob("*/src") if (s / "app").exists()]
+    import app.modules
+    app.modules.__path__ = [str(s / "app" / "modules") for s in services_dir.glob("*/src") if (s / "app" / "modules").exists()]
+except Exception:
+    pass
+
+
 
 import pytest
 from typing import Any
 import requests
-import asyncio
 
 # Enable asyncio mode for pytest
 pytest_plugins = ('pytest_asyncio',)
@@ -169,7 +177,6 @@ def reset_db_for_integration_tests(request):
         return
 
     # Import only when needed for integration tests
-    from app.shared.core.settings import settings
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.shared.core.database import Base, import_all_models
@@ -287,9 +294,9 @@ def sample_document():
 # ============================================================================
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from sqlalchemy.orm import Session
-from typing import Any, Dict
+from typing import Any
 
 # Commented out - modules don't exist yet
 # from app.modules.products.application.commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand

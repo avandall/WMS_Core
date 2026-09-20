@@ -6,7 +6,6 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 import sys
 import pytest
-import warnings
 from pathlib import Path
 from unittest.mock import Mock
 

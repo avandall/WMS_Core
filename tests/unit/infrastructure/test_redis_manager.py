@@ -1,8 +1,7 @@
 """Tests for Redis connection manager."""
 
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 import redis.asyncio as redis
 
 from app.shared.core.redis import RedisManager

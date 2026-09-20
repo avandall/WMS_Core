@@ -4,9 +4,7 @@ Covers all WarehouseService methods, validation, edge cases, and business logic
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, MagicMock, call, AsyncMock
-from typing import Dict, List, Any
+from unittest.mock import Mock, AsyncMock
 
 from app.modules.warehouses.application.services.warehouse_service import WarehouseService
 from app.modules.inventory.domain.entities.inventory import InventoryItem

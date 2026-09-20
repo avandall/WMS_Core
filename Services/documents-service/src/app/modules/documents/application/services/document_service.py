@@ -15,7 +15,7 @@ from app.modules.documents.domain.entities.document import (
 )
 from app.modules.documents.domain.exceptions import InvalidDocumentStatusError, DocumentNotFoundError
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
-from app.modules.documents.domain.transaction_types import REQUIRES_REASON_CODE, REQUIRES_RESERVATION
+from app.modules.documents.domain.transaction_types import REQUIRES_REASON_CODE
 from app.shared.domain.business_exceptions import InvalidQuantityError, ValidationError
 
 

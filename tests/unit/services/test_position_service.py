@@ -4,7 +4,7 @@ Covers all PositionService methods, validation, edge cases, and business logic
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from app.modules.positions.application.services.position_service import PositionService
 from app.modules.positions.domain.entities.position import Position, PositionInventoryItem

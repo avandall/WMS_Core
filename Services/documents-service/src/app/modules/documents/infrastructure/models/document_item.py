@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Float, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.shared.core.database import Base
@@ -20,5 +20,10 @@ class DocumentItemModel(Base):
     rejected_qty = Column(Integer, nullable=True, default=0)
     difference_qty = Column(Integer, nullable=True, default=0)
     execution_status = Column(String(50), nullable=True)
+
+    # TASK-003: Lot/Batch and Expiry management
+    lot_number = Column(String(100), nullable=True, default="", index=True)
+    mfg_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
 
     document = relationship("DocumentModel", back_populates="items")

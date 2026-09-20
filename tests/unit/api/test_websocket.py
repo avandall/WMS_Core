@@ -1,15 +1,11 @@
 """Tests for WebSocket endpoints."""
 
 import pytest
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
 from fastapi import WebSocket
 
-from app.api.v1.endpoints.websocket import ConnectionManager, manager
-from app.api.auth_deps import get_current_user
-from app.shared.core.pubsub import pubsub_manager, EventType
+from app.api.v1.endpoints.websocket import ConnectionManager
 
 
 class TestConnectionManager:
@@ -263,7 +259,6 @@ class TestWebSocketEndpoint:
     @pytest.mark.asyncio
     async def test_websocket_connection_success(self, mock_websocket, setup_pubsub_mock, setup_auth_mock):
         """Test successful WebSocket connection - simplified test."""
-        mock_pubsub = setup_pubsub_mock
         mock_user = setup_auth_mock
         
         # Test ConnectionManager directly instead of the full websocket endpoint
@@ -370,7 +365,6 @@ class TestWebSocketCallbacks:
         }
         
         # Import and call the callback function
-        from app.api.v1.endpoints.websocket import websocket_endpoint
         
         # Get the callback from pubsub subscription setup
         # This is a bit tricky since the callback is defined inside the function

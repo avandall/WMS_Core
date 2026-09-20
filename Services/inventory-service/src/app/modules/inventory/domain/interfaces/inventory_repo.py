@@ -142,7 +142,7 @@ class IInventoryRepo(ABC):
     ) -> list[dict[str, Any]]:
         pass
 
-    # TASK-002: Inventory location methods
+    # TASK-002 & TASK-003: Inventory location methods
     @abstractmethod
     def get_inventory_locations(
         self,
@@ -151,6 +151,7 @@ class IInventoryRepo(ABC):
         position_id: int | None = None,
         lpn: str | None = None,
         status: str | None = None,
+        lot_number: str | None = None,
     ) -> list[dict[str, Any]]:
         pass
 
@@ -164,7 +165,14 @@ class IInventoryRepo(ABC):
         allocated_delta: int = 0,
         lpn: str = "",
         status: str = "AVAILABLE",
+        lot_number: str = "",
+        mfg_date: datetime | None = None,
+        expiry_date: datetime | None = None,
     ) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def recall_query(self, lot_number: str) -> dict[str, Any]:
         pass
 
     @abstractmethod

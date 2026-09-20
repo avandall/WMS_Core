@@ -5,8 +5,7 @@ Focuses on user workflows and business rules rather than implementation details
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime
+from unittest.mock import Mock, AsyncMock
 
 from app.modules.warehouses.domain.entities.warehouse import Warehouse
 from app.modules.inventory.domain.entities.inventory import InventoryItem
@@ -352,7 +351,7 @@ class TestWarehouseOperationsFunctional:
         await mock_inventory_service.remove_from_total_inventory(1, 10)
         
         # 4. Check final inventory
-        final_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
+        await mock_warehouse_service.get_warehouse_inventory(1)
         
         # Verify workflow results
         assert initial_quantity == 100
@@ -467,7 +466,7 @@ class TestWarehouseOperationsFunctional:
             )
             
             # 5. Post adjustment document
-            posted_document = mock_document_service.post_document(document.document_id, "manager")
+            mock_document_service.post_document(document.document_id, "manager")
         
         # Verify workflow results
         assert len(adjustments) == 2

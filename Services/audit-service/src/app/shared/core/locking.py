@@ -3,7 +3,7 @@
 import asyncio
 import functools
 import uuid
-from typing import Optional, Any, Callable
+from typing import Optional, Callable
 from contextlib import asynccontextmanager
 
 from app.shared.core.redis import redis_manager

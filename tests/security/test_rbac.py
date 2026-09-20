@@ -5,7 +5,7 @@ Tests user permissions and access control mechanisms
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 # Make FastAPI imports conditional
 try:

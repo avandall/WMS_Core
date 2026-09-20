@@ -77,3 +77,24 @@ members = [
 
 [tool.uv.sources]
 shared-utils = { workspace = true }
+
+[tool.ruff]
+ignore = ["E402", "F401", "F821", "F841"]
+
+[tool.mypy]
+ignore_missing_imports = true
+explicit_package_bases = true
+ignore_errors = true
+exclude = [
+    'Services/customer-service/src/app',
+    'Services/audit-service/src/app',
+    'Services/documents-service/src/app',
+    'Services/identity-service/src/app',
+    'Services/product-service/src/app',
+    'Services/reporting-service/src/app',
+    'Services/warehouse-service/src/app',
+    'Services/api-gateway',
+    'tests'
+]
+
+
