@@ -28,7 +28,15 @@ dependencies = [
     "alembic>=1.18.4",
     "redis>=7.4.0",
     "ruff>=0.1.0",
+    "grpcio>=1.60.0",
     "grpcio-tools>=1.60.0",
+    "opentelemetry-api>=1.41.0",
+    "opentelemetry-sdk>=1.41.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.41.0",
+    "rich>=13.0.0",
+    "structlog>=23.0.0",
+    "typing-extensions>=4.5.0",
+    "mangum>=0.17.0",
 ]
 
 [project.optional-dependencies]
