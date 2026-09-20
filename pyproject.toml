@@ -90,11 +90,30 @@ exclude = [
     'Services/audit-service/src/app',
     'Services/documents-service/src/app',
     'Services/identity-service/src/app',
+    'Services/inventory-service/src/app',
+    'Services/ai-service/src/app',
     'Services/product-service/src/app',
     'Services/reporting-service/src/app',
     'Services/warehouse-service/src/app',
     'Services/api-gateway',
     'tests'
 ]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    ".",
+    "Services/product-service/src",
+    "Services/warehouse-service/src",
+    "Services/inventory-service/src",
+    "Services/documents-service/src",
+    "Services/user-service/src",
+    "Services/identity-service/src",
+    "Services/customer-service/src",
+    "Services/audit-service/src",
+    "Services/reporting-service/src",
+    "Services/api-gateway/src",
+    "Libraries/shared-utils/src"
+]
+
 
 

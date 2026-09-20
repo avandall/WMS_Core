@@ -25,14 +25,6 @@ if services_dir.exists():
         if str(service_path) not in sys.path:
             sys.path.insert(0, str(service_path))
 
-try:
-    import app
-    app.__path__ = [str(s / "app") for s in services_dir.glob("*/src") if (s / "app").exists()]
-    import app.modules
-    app.modules.__path__ = [str(s / "app" / "modules") for s in services_dir.glob("*/src") if (s / "app" / "modules").exists()]
-except Exception:
-    pass
-
 
 
 import pytest
