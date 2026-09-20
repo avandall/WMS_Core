@@ -25,3 +25,4 @@ rich>=13.0.0
 structlog>=23.0.0
 typing-extensions>=4.5.0
 mangum>=0.17.0
+requests>=2.32.0
