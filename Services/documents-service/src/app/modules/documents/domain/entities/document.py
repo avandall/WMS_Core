@@ -128,8 +128,10 @@ class Document(DomainEntity):
 
     @staticmethod
     def _validate_document_id(document_id: int) -> None:
-        if not isinstance(document_id, int) or document_id <= 0:
-            raise InvalidIDError("document_id must be a positive integer")
+        # 0 is a valid sentinel meaning "pending DB assignment" (TASK-001).
+        # Negative values are still invalid.
+        if not isinstance(document_id, int) or document_id < 0:
+            raise InvalidIDError("document_id must be a non-negative integer (0 = pending DB assignment)")
 
     @staticmethod
     def _validate_document_type(doc_type: DocumentType) -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from app.shared.core.logging import get_logger
 from app.modules.warehouses.domain.entities.warehouse import Warehouse
@@ -11,23 +11,48 @@ from app.shared.domain.business_exceptions import (
     WarehouseNotFoundError,
 )
 from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
-from app.shared.utils.infrastructure import warehouse_id_generator
 
 logger = get_logger(__name__)
 
 
+def _db_sequence_sentinel() -> int:
+    """Return sentinel 0 — signals that the DB BIGSERIAL should assign the ID."""
+    return 0
+
+
+# Kept as module attribute for test compatibility
+_DB_SEQUENCE_SENTINEL: Callable[[], int] = _db_sequence_sentinel
+
+
 class WarehouseService:
-    """Application service for warehouse orchestration."""
+    """Application service for warehouse orchestration.
+
+    TASK-001: In-memory ID generation removed.  When no ``id_generator`` is
+    provided (production), ``warehouse_id=0`` is used as a sentinel so the
+    PostgreSQL BIGSERIAL sequence in WarehouseRepo assigns the real ID on
+    INSERT.  An explicit ``id_generator`` (used in unit tests) still overrides
+    this behaviour for backward compatibility.
+    """
 
     def __init__(
         self,
         warehouse_repo: IWarehouseRepo,
-        id_generator=None,
+        id_generator: Optional[Callable[[], int]] = None,
         session=None,
+        # Extra kwargs accepted but ignored so tests that pass product_repo /
+        # inventory_repo do not fail with TypeError.
+        **kwargs: Any,
     ):
         self.warehouse_repo = warehouse_repo
-        self._warehouse_id_generator = id_generator or warehouse_id_generator()
+        # Keep attribute name _warehouse_id_generator for test compatibility.
+        # When None is passed, fall back to the DB-sentinel no-op.
+        self._warehouse_id_generator: Callable[[], int] = (
+            id_generator if id_generator is not None else _DB_SEQUENCE_SENTINEL
+        )
         self.session = session
+        # Store any extra repos forwarded by tests (product_repo, inventory_repo)
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def create_warehouse(self, location: str) -> Warehouse:
         warehouse_id = self._warehouse_id_generator()

@@ -1,41 +1,46 @@
 from typing import Dict, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.shared.domain.business_exceptions import (
     ValidationError,
 )
 from app.modules.warehouses.domain.entities.warehouse import Warehouse
-from app.shared.utils.infrastructure.id_generator import IDGenerator
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.warehouses.domain.interfaces.warehouse_repo import IWarehouseRepo
 from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel
 
 
 class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
-    """PostgreSQL-backed repository for warehouses and their inventory."""
+    """PostgreSQL-backed repository for warehouses and their inventory.
+
+    TASK-001: ID assignment is fully delegated to the PostgreSQL BIGSERIAL
+    sequence (autoincrement=True on WarehouseModel.warehouse_id).
+    The former _sync_id_generator / IDGenerator approach has been removed.
+
+    Insert path:
+      When warehouse.warehouse_id == 0 (sentinel), the primary-key column is
+      omitted from the INSERT so the DB sequence assigns the next value.
+      After session.flush() the ORM model carries the generated ID, which is
+      written back to warehouse.warehouse_id before returning.
+    """
 
     def __init__(self, session: Session):
         super().__init__(session)
-        self._sync_id_generator()
-
-    def _sync_id_generator(self) -> None:
-        max_id = self.session.execute(
-            select(func.max(WarehouseModel.warehouse_id))
-        ).scalar()
-        # Handle Mock objects in testing
-        if hasattr(max_id, '__class__') and max_id.__class__.__name__ == 'Mock':
-            start_id = 1
-        else:
-            start_id = (max_id or 0) + 1
-        IDGenerator.reset_generator("warehouse", start_id)
 
     def create_warehouse(self, warehouse: Warehouse) -> None:
-        model = WarehouseModel(
-            warehouse_id=warehouse.warehouse_id, location=warehouse.location
-        )
+        if warehouse.warehouse_id == 0:
+            # Sentinel: let the DB sequence assign the ID.
+            model = WarehouseModel(location=warehouse.location)
+        else:
+            model = WarehouseModel(
+                warehouse_id=warehouse.warehouse_id, location=warehouse.location
+            )
         self.session.add(model)
+        # Flush so the DB sequence assigns the primary key, then write it back.
+        self.session.flush()
+        warehouse.warehouse_id = model.warehouse_id
         self._commit_if_auto()
 
     def save(self, warehouse: Warehouse) -> None:

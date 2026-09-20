@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.documents.domain.exceptions import DocumentNotFoundError
@@ -10,7 +10,6 @@ from app.modules.documents.domain.entities.document import (
     DocumentStatus,
     DocumentType,
 )
-from app.shared.utils.infrastructure.id_generator import IDGenerator
 from app.shared.core.transaction import TransactionalRepository
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
 from app.modules.documents.infrastructure.models.document import DocumentModel
@@ -18,50 +17,68 @@ from app.modules.documents.infrastructure.models.document_item import DocumentIt
 
 
 class DocumentRepo(TransactionalRepository, IDocumentRepo):
-    """PostgreSQL-backed repository for documents and their items."""
+    """PostgreSQL-backed repository for documents and their items.
+
+    TASK-001: ID assignment is fully delegated to the PostgreSQL BIGSERIAL
+    sequence (autoincrement=True on DocumentModel.document_id).  The former
+    _sync_id_generator / IDGenerator approach has been removed.
+
+    Insert path:
+      When document.document_id == 0 (sentinel), the primary-key column is
+      omitted from the INSERT so the DB sequence assigns the next value.
+      After session.flush() the ORM model carries the generated ID, which is
+      written back to document.document_id before returning.
+    """
 
     def __init__(self, session: Session):
         super().__init__(session)
-        self._sync_id_generator()
-
-    def _sync_id_generator(self) -> None:
-        max_id = self.session.execute(
-            select(func.max(DocumentModel.document_id))
-        ).scalar()
-        # Handle Mock objects in testing
-        if hasattr(max_id, '__class__') and max_id.__class__.__name__ == 'Mock':
-            start_id = 1
-        else:
-            start_id = (max_id or 0) + 1
-        IDGenerator.reset_generator("document", start_id)
 
     def save(self, document: Document) -> None:
-        model = self.session.get(DocumentModel, document.document_id)
-        if not model:
-            model = DocumentModel(
-                document_id=document.document_id,
-                doc_type=document.doc_type.value,
-                status=document.status.value,
-                from_warehouse_id=document.from_warehouse_id,
-                to_warehouse_id=document.to_warehouse_id,
-                created_by=document.created_by,
-                approved_by=document.approved_by,
-                note=document.note,
-                customer_id=document.customer_id,
-                created_at=document.date,
-                posted_at=document.posted_at,
-                cancelled_at=document.cancelled_at,
-                cancellation_reason=document.cancellation_reason,
+        # --- Determine create vs. update -----------------------------------
+        is_new = document.document_id == 0
+
+        if not is_new:
+            model = self.session.get(DocumentModel, document.document_id)
+        else:
+            model = None
+
+        if model is None:
+            # New document: omit document_id so the DB sequence auto-assigns it.
+            model_kwargs: dict = {
+                "doc_type": document.doc_type.value,
+                "status": document.status.value,
+                "from_warehouse_id": document.from_warehouse_id,
+                "to_warehouse_id": document.to_warehouse_id,
+                "created_by": document.created_by,
+                "approved_by": document.approved_by,
+                "note": document.note,
+                "customer_id": document.customer_id,
+                "created_at": document.date,
+                "posted_at": document.posted_at,
+                "cancelled_at": document.cancelled_at,
+                "cancellation_reason": document.cancellation_reason,
                 # Phase 6: lifecycle fields (set on creation too)
-                transaction_type=getattr(document, "transaction_type", None),
-                reason_code=getattr(document, "reason_code", None),
-                requested_by=getattr(document, "requested_by", None),
-                approved_at=getattr(document, "approved_at", None),
-                execution_started_at=getattr(document, "execution_started_at", None),
-                completed_at=getattr(document, "completed_at", None),
-                assigned_to=getattr(document, "assigned_to", None),
-            )
+                "transaction_type": getattr(document, "transaction_type", None),
+                "reason_code": getattr(document, "reason_code", None),
+                "requested_by": getattr(document, "requested_by", None),
+                "approved_at": getattr(document, "approved_at", None),
+                "execution_started_at": getattr(document, "execution_started_at", None),
+                "completed_at": getattr(document, "completed_at", None),
+                "assigned_to": getattr(document, "assigned_to", None),
+            }
+            # Only pass document_id explicitly when it is already a real DB id
+            # (i.e., was loaded from DB or assigned by a test mock).
+            if not is_new:
+                model_kwargs["document_id"] = document.document_id
+
+            model = DocumentModel(**model_kwargs)
             self.session.add(model)
+
+            # Flush so the DB sequence assigns the primary key, then write it
+            # back to the domain entity so callers have the real ID.
+            self.session.flush()
+            document.document_id = model.document_id
+
         else:
             model.doc_type = document.doc_type.value
             model.status = document.status.value
@@ -183,4 +200,3 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
         document.completed_at = getattr(model, "completed_at", None)
         document.assigned_to = getattr(model, "assigned_to", None)
         return document
-

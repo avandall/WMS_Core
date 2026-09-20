@@ -17,7 +17,6 @@ from app.modules.documents.domain.exceptions import InvalidDocumentStatusError, 
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
 from app.modules.documents.domain.transaction_types import REQUIRES_REASON_CODE, REQUIRES_RESERVATION
 from app.shared.domain.business_exceptions import InvalidQuantityError, ValidationError
-from app.shared.utils.infrastructure import document_id_generator
 
 
 class DocumentService:
@@ -32,7 +31,8 @@ class DocumentService:
         self.document_repo = document_repo
         self.session = session
         self.event_publisher = event_publisher or NoopDocumentEventPublisher()
-        self._doc_id_generator = document_id_generator()
+        # TASK-001: _doc_id_generator removed. IDs are now assigned by the
+        # PostgreSQL BIGSERIAL sequence via DocumentRepo.save() + flush().
 
     def create_import_document(
         self,
@@ -44,8 +44,9 @@ class DocumentService:
         reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
+        # document_id=0 → sentinel; DB BIGSERIAL assigns the real ID on INSERT (TASK-001)
         document = Document(
-            document_id=self._doc_id_generator(),
+            document_id=0,
             doc_type=DocumentType.IMPORT,
             to_warehouse_id=to_warehouse_id,
             items=self._validate_and_convert_items(items),
@@ -69,8 +70,9 @@ class DocumentService:
         reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
+        # document_id=0 → sentinel; DB BIGSERIAL assigns the real ID on INSERT (TASK-001)
         document = Document(
-            document_id=self._doc_id_generator(),
+            document_id=0,
             doc_type=DocumentType.EXPORT,
             from_warehouse_id=from_warehouse_id,
             items=self._validate_and_convert_items(items),
@@ -95,8 +97,9 @@ class DocumentService:
         reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
+        # document_id=0 → sentinel; DB BIGSERIAL assigns the real ID on INSERT (TASK-001)
         document = Document(
-            document_id=self._doc_id_generator(),
+            document_id=0,
             doc_type=DocumentType.SALE,
             from_warehouse_id=from_warehouse_id,
             items=self._validate_and_convert_items(items),
@@ -122,8 +125,9 @@ class DocumentService:
         reason_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Document:
+        # document_id=0 → sentinel; DB BIGSERIAL assigns the real ID on INSERT (TASK-001)
         document = Document(
-            document_id=self._doc_id_generator(),
+            document_id=0,
             doc_type=DocumentType.TRANSFER,
             from_warehouse_id=from_warehouse_id,
             to_warehouse_id=to_warehouse_id,

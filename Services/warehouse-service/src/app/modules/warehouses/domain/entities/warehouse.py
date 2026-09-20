@@ -27,8 +27,10 @@ class Warehouse(DomainEntity):
 
     @staticmethod
     def _validate_warehouse_id(warehouse_id: int) -> None:
-        if not isinstance(warehouse_id, int) or warehouse_id <= 0:
-            raise InvalidIDError("warehouse_id must be a positive integer")
+        # 0 is a valid sentinel meaning "pending DB assignment" (TASK-001).
+        # Negative values are still invalid.
+        if not isinstance(warehouse_id, int) or warehouse_id < 0:
+            raise InvalidIDError("warehouse_id must be a non-negative integer (0 = pending DB assignment)")
 
     @staticmethod
     def _validate_location(location: str) -> None:
