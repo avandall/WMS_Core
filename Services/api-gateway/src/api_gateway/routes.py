@@ -1409,6 +1409,7 @@ def list_reservations(
     product_id: int | None = None,
     warehouse_id: int | None = None,
     status: str | None = None,
+    document_id: int | None = None,
     request: Request = None,
 ):
     with inventory_stub() as stub:
@@ -1419,6 +1420,8 @@ def list_reservations(
             req.warehouse_id = warehouse_id
         if status is not None:
             req.status = status
+        if document_id is not None:
+            req.document_id = document_id
         resp = _grpc_call(
             stub.ListReservations,
             req,

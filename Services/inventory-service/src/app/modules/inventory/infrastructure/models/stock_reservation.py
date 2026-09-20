@@ -11,7 +11,7 @@ class StockReservationModel(Base):
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     source_type = Column(String(50), nullable=False)  # e.g., "document", "manual", "order"
     source_id = Column(BigInteger, nullable=True)
-    document_id = Column(BigInteger, nullable=True)
+    document_id = Column(BigInteger, nullable=True, index=True)
     product_id = Column(BigInteger, nullable=False, index=True)
     warehouse_id = Column(Integer, nullable=False, index=True)
     requested_qty = Column(Integer, nullable=False)

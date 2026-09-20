@@ -142,14 +142,13 @@ class ConfirmExecutionSaga:
             with inventory_stub() as inv_stub:
                 try:
                     res_resp = inv_stub.ListReservations(
-                        inventory_pb2.ListReservationsRequest(status="RESERVED"),
+                        inventory_pb2.ListReservationsRequest(status="RESERVED", document_id=self.document_id),
                         timeout=GRPC_TIMEOUT_DEFAULT,
                         metadata=md,
                     )
                     reservations_by_product = {
                         r.product_id: r
                         for r in res_resp.reservations
-                        if r.document_id == self.document_id
                     }
                 except Exception as exc:
                     logger.warning("Failed to list reservations for doc %d: %s", self.document_id, exc)

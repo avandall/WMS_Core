@@ -160,11 +160,13 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             product_id = int(request.product_id) if request.product_id != 0 else None
             warehouse_id = int(request.warehouse_id) if request.warehouse_id != 0 else None
             status = request.status if request.status else None
+            document_id = int(request.document_id) if request.document_id != 0 else None
 
             reservations = service.inventory_repo.list_reservations(
                 product_id=product_id,
                 warehouse_id=warehouse_id,
                 status=status,
+                document_id=document_id,
             )
             self._publisher.publish(
                 event_type="ReservationsListed",

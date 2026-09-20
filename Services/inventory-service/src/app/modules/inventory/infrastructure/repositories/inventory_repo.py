@@ -412,7 +412,11 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         }
 
     def list_reservations(
-        self, product_id: int | None = None, warehouse_id: int | None = None, status: str | None = None
+        self,
+        product_id: int | None = None,
+        warehouse_id: int | None = None,
+        status: str | None = None,
+        document_id: int | None = None,
     ) -> list[dict]:
         from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
@@ -423,6 +427,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             query = query.where(StockReservationModel.warehouse_id == warehouse_id)
         if status:
             query = query.where(StockReservationModel.status == status)
+        if document_id:
+            query = query.where(StockReservationModel.document_id == document_id)
 
         rows = self.session.execute(query.order_by(StockReservationModel.created_at.desc())).scalars().all()
         return [

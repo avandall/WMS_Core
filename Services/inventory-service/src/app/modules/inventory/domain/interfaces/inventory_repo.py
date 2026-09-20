@@ -100,7 +100,11 @@ class IInventoryRepo(ABC):
 
     @abstractmethod
     def list_reservations(
-        self, product_id: int | None = None, warehouse_id: int | None = None, status: str | None = None
+        self,
+        product_id: int | None = None,
+        warehouse_id: int | None = None,
+        status: str | None = None,
+        document_id: int | None = None,
     ) -> list[dict[str, Any]]:
         pass
 
