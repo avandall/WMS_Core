@@ -65,10 +65,13 @@ class InventoryService:
             "user_id": kwargs.get("user_id") or "system",
         }
         self._record_outbox_event("InventoryTransactionRecorded", tx_payload)
-        self.event_publisher.publish(
-            event_type="InventoryTransactionRecorded",
-            payload=tx_payload,
-        )
+        try:
+            self.event_publisher.publish(
+                event_type="InventoryTransactionRecorded",
+                payload=tx_payload,
+            )
+        except Exception as exc:
+            logger.warning(f"Direct publish of InventoryTransactionRecorded failed (outbox will retry): {exc}")
         return tx
 
     def add_to_total_inventory(self, product_id: int, quantity: int) -> None:
@@ -639,6 +642,7 @@ class InventoryService:
                     "user_id": user_id,
                 }
                 self._record_outbox_event("TransferIssued", issue_payload)
+                self._commit_if_needed()
                 self.event_publisher.publish(
                     event_type="TransferIssued",
                     payload=issue_payload,
@@ -675,6 +679,7 @@ class InventoryService:
                     "user_id": user_id,
                 }
                 self._record_outbox_event("TransferReceived", rcpt_payload)
+                self._commit_if_needed()
                 self.event_publisher.publish(
                     event_type="TransferReceived",
                     payload=rcpt_payload,
