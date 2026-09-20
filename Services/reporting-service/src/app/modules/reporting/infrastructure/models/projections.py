@@ -16,6 +16,7 @@ class InventorySummary(Base):
     __tablename__ = "inventory_summary"
 
     product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(100), primary_key=True, default="DEFAULT_OWNER")
     total_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     warehouse_quantities: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     warehouse_matrix: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
@@ -29,6 +30,7 @@ class DocumentSummary(Base):
     doc_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     customer_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    owner_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True, default="DEFAULT_OWNER")
     from_warehouse_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     to_warehouse_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     total_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

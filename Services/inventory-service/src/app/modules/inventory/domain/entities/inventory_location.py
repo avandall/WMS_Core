@@ -21,6 +21,7 @@ class InventoryLocation(DomainEntity):
 
     id: int = 0
     warehouse_id: int = 0
+    owner_id: str = "DEFAULT_OWNER"
     position_id: int = 0
     product_id: int = 0
     lpn: str = ""

@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, CheckConstraint, Column, Integer, Index, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, Column, Index, Integer, String, UniqueConstraint
 
 from app.shared.core.database import Base
 
@@ -8,6 +8,7 @@ class WarehouseInventoryModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     warehouse_id = Column(Integer, nullable=False, index=True)
+    owner_id = Column(String(100), nullable=False, default="DEFAULT_OWNER", index=True)
     product_id = Column(BigInteger, nullable=False, index=True)
     quantity = Column(Integer, nullable=False, default=0)
 
@@ -18,12 +19,12 @@ class WarehouseInventoryModel(Base):
     in_transit_qty = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
-        UniqueConstraint("warehouse_id", "product_id", name="uq_warehouse_product"),
+        UniqueConstraint("warehouse_id", "owner_id", "product_id", name="uq_warehouse_owner_product"),
         CheckConstraint("quantity >= 0", name="check_warehouse_inventory_quantity_positive"),
         CheckConstraint("physical_qty >= 0", name="check_warehouse_inventory_physical_qty_positive"),
         CheckConstraint("reserved_qty >= 0", name="check_warehouse_inventory_reserved_qty_positive"),
         CheckConstraint("incoming_qty >= 0", name="check_warehouse_inventory_incoming_qty_positive"),
         CheckConstraint("in_transit_qty >= 0", name="check_warehouse_inventory_in_transit_qty_positive"),
-        Index("ix_warehouse_inventory_warehouse_product", "warehouse_id", "product_id"),
+        Index("ix_warehouse_inventory_warehouse_owner_product", "warehouse_id", "owner_id", "product_id"),
         Index("ix_warehouse_inventory_product_warehouse", "product_id", "warehouse_id"),
     )

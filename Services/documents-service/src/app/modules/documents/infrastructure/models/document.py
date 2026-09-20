@@ -24,6 +24,7 @@ class DocumentModel(Base):
     approved_by = Column(String(100))
     note = Column(String(500))
     customer_id = Column(Integer, nullable=True, index=True)
+    owner_id = Column(String(100), nullable=True, default="DEFAULT_OWNER", index=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     posted_at = Column(DateTime, index=True)
     cancelled_at = Column(DateTime)

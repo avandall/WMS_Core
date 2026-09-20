@@ -608,10 +608,13 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         lpn: Optional[str] = None,
         status: Optional[str] = None,
         lot_number: Optional[str] = None,
+        owner_id: Optional[str] = None,
     ) -> List[dict]:
         query = select(InventoryLocationModel)
         if warehouse_id is not None:
             query = query.where(InventoryLocationModel.warehouse_id == warehouse_id)
+        if owner_id is not None:
+            query = query.where(InventoryLocationModel.owner_id == owner_id)
         if product_id is not None:
             query = query.where(InventoryLocationModel.product_id == product_id)
         if position_id is not None:
@@ -633,6 +636,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             {
                 "id": int(r.id),
                 "warehouse_id": int(r.warehouse_id),
+                "owner_id": r.owner_id or "DEFAULT_OWNER",
                 "position_id": int(r.position_id),
                 "product_id": int(r.product_id),
                 "lpn": r.lpn or "",
@@ -659,12 +663,15 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         lot_number: str = "",
         mfg_date: Optional[datetime] = None,
         expiry_date: Optional[datetime] = None,
+        owner_id: str = "DEFAULT_OWNER",
     ) -> dict:
         lpn_clean = lpn or ""
         lot_clean = lot_number or ""
+        owner_clean = owner_id or "DEFAULT_OWNER"
         row = self.session.execute(
             select(InventoryLocationModel).where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.owner_id == owner_clean,
                 InventoryLocationModel.position_id == position_id,
                 InventoryLocationModel.product_id == product_id,
                 InventoryLocationModel.lpn == lpn_clean,
@@ -676,7 +683,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if row is None:
             if quantity_delta < 0 or allocated_delta < 0:
                 raise InsufficientStockError(
-                    f"No inventory location found for warehouse={warehouse_id}, position={position_id}, product={product_id}, lpn={lpn_clean}, lot={lot_clean}"
+                    f"No inventory location found for warehouse={warehouse_id}, owner={owner_clean}, position={position_id}, product={product_id}, lpn={lpn_clean}, lot={lot_clean}"
                 )
             new_qty = quantity_delta
             new_allocated = allocated_delta
@@ -684,6 +691,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 raise InvalidQuantityError("allocated_qty cannot exceed quantity")
             row = InventoryLocationModel(
                 warehouse_id=warehouse_id,
+                owner_id=owner_clean,
                 position_id=position_id,
                 product_id=product_id,
                 lpn=lpn_clean,
@@ -715,12 +723,13 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
 
         self.session.flush()
         # Sync warehouse_inventory summary Read-Model
-        self.sync_warehouse_inventory_summary(warehouse_id, product_id)
+        self.sync_warehouse_inventory_summary(warehouse_id, product_id, owner_clean)
         self._commit_if_auto()
 
         return {
             "id": int(row.id),
             "warehouse_id": int(row.warehouse_id),
+            "owner_id": row.owner_id,
             "position_id": int(row.position_id),
             "product_id": int(row.product_id),
             "lpn": row.lpn,
@@ -814,10 +823,12 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "customers": customers,
         }
 
-    def sync_warehouse_inventory_summary(self, warehouse_id: int, product_id: int) -> None:
+    def sync_warehouse_inventory_summary(self, warehouse_id: int, product_id: int, owner_id: str = "DEFAULT_OWNER") -> None:
+        owner_clean = owner_id or "DEFAULT_OWNER"
         total_physical = self.session.execute(
             select(func.coalesce(func.sum(InventoryLocationModel.quantity), 0)).where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.owner_id == owner_clean,
                 InventoryLocationModel.product_id == product_id,
             )
         ).scalar() or 0
@@ -825,6 +836,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         total_allocated = self.session.execute(
             select(func.coalesce(func.sum(InventoryLocationModel.allocated_qty), 0)).where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.owner_id == owner_clean,
                 InventoryLocationModel.product_id == product_id,
             )
         ).scalar() or 0
@@ -832,6 +844,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         wh_inv = self.session.execute(
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
+                WarehouseInventoryModel.owner_id == owner_clean,
                 WarehouseInventoryModel.product_id == product_id,
             ).with_for_update()
         ).scalar_one_or_none()
@@ -839,6 +852,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if wh_inv is None:
             wh_inv = WarehouseInventoryModel(
                 warehouse_id=warehouse_id,
+                owner_id=owner_clean,
                 product_id=product_id,
                 quantity=total_physical,
                 physical_qty=total_physical,

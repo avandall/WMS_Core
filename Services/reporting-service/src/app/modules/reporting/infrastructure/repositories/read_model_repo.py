@@ -43,8 +43,11 @@ class ReportingReadModelRepo:
         self._project(envelope)
         return True
 
-    def inventory_report(self, *, warehouse_id: int | None = None, low_stock_threshold: int = 10) -> dict:
-        rows = self.db.query(InventorySummary).order_by(InventorySummary.product_id).all()
+    def inventory_report(self, *, warehouse_id: int | None = None, owner_id: str | None = None, low_stock_threshold: int = 10) -> dict:
+        query = self.db.query(InventorySummary)
+        if owner_id is not None:
+            query = query.filter(InventorySummary.owner_id == owner_id)
+        rows = query.order_by(InventorySummary.product_id).all()
         items = []
         for row in rows:
             warehouse_quantities = dict(row.warehouse_quantities or {})
@@ -54,6 +57,7 @@ class ReportingReadModelRepo:
                 quantity = int(row.total_quantity)
             item = {
                 "product_id": int(row.product_id),
+                "owner_id": getattr(row, "owner_id", "DEFAULT_OWNER"),
                 "quantity": quantity,
                 "warehouse_quantities": warehouse_quantities,
                 "updated_at": row.updated_at,
@@ -64,6 +68,7 @@ class ReportingReadModelRepo:
             "report_type": "inventory",
             "source": "reporting_projection",
             "warehouse_id": warehouse_id,
+            "owner_id": owner_id,
             "low_stock_threshold": low_stock_threshold,
             "items": items,
             "low_stock_items": [item for item in items if item["quantity"] <= low_stock_threshold],
@@ -93,11 +98,15 @@ class ReportingReadModelRepo:
             ],
         }
 
-    def documents_report(self) -> dict:
-        rows = self.db.query(DocumentSummary).order_by(DocumentSummary.document_id).all()
+    def documents_report(self, *, owner_id: str | None = None) -> dict:
+        query = self.db.query(DocumentSummary)
+        if owner_id is not None:
+            query = query.filter(DocumentSummary.owner_id == owner_id)
+        rows = query.order_by(DocumentSummary.document_id).all()
         return {
             "report_type": "documents",
             "source": "reporting_projection",
+            "owner_id": owner_id,
             "documents": [self._document_row(row) for row in rows],
         }
 
@@ -294,6 +303,7 @@ class ReportingReadModelRepo:
         row.doc_type = str(payload.get("doc_type") or row.doc_type)
         row.status = status
         row.customer_id = payload.get("customer_id")
+        row.owner_id = payload.get("owner_id", "DEFAULT_OWNER")
         row.from_warehouse_id = payload.get("from_warehouse_id")
         row.to_warehouse_id = payload.get("to_warehouse_id")
         row.total_quantity = total_quantity
@@ -320,6 +330,8 @@ class ReportingReadModelRepo:
             )
             self.db.add(row)
         row.status = status
+        if payload.get("owner_id"):
+            row.owner_id = payload.get("owner_id")
         if posted_at:
             row.posted_at = posted_at
         row.updated_at = _now()
@@ -392,6 +404,7 @@ class ReportingReadModelRepo:
             "doc_type": row.doc_type,
             "status": row.status,
             "customer_id": row.customer_id,
+            "owner_id": getattr(row, "owner_id", None),
             "from_warehouse_id": row.from_warehouse_id,
             "to_warehouse_id": row.to_warehouse_id,
             "total_quantity": int(row.total_quantity),
