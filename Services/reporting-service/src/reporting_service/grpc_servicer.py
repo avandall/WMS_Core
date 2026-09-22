@@ -5,7 +5,7 @@ import json
 import grpc
 
 from app.modules.reporting.infrastructure.repositories.read_model_repo import ReportingReadModelRepo
-from app.shared.core.database import SessionLocal
+from app.shared.core.database import get_db_session
 
 from reporting_service.gen.wms.reporting.v1 import reporting_pb2, reporting_pb2_grpc
 
@@ -22,15 +22,13 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
     def _json(obj) -> str:  # type: ignore[no-untyped-def]
         return json.dumps(obj, ensure_ascii=False, default=str)
 
-    @staticmethod
-    def _repo() -> tuple[ReportingReadModelRepo, object]:
-        db = SessionLocal()
-        return ReportingReadModelRepo(db), db
+    def _repo(self, db: object) -> ReportingReadModelRepo:
+        return ReportingReadModelRepo(db)
 
     def InventoryReport(self, request: reporting_pb2.InventoryReportRequest, context: grpc.ServicerContext):
         _ = self._request_id(context)
-        repo, db = self._repo()
-        try:
+        with get_db_session() as db:
+            repo = self._repo(db)
             return reporting_pb2.JsonResponse(
                 json=self._json(
                     repo.inventory_report(
@@ -39,21 +37,17 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
                     )
                 )
             )
-        finally:
-            db.close()
 
     def InventoryList(self, request: reporting_pb2.InventoryListRequest, context: grpc.ServicerContext):
         _ = self._request_id(context)
-        repo, db = self._repo()
-        try:
+        with get_db_session() as db:
+            repo = self._repo(db)
             return reporting_pb2.JsonResponse(json=self._json(repo.inventory_list()))
-        finally:
-            db.close()
 
     def WarehouseReport(self, request: reporting_pb2.WarehouseReportRequest, context: grpc.ServicerContext):
         _ = self._request_id(context)
-        repo, db = self._repo()
-        try:
+        with get_db_session() as db:
+            repo = self._repo(db)
             return reporting_pb2.JsonResponse(
                 json=self._json(
                     repo.warehouse_report(
@@ -61,33 +55,27 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
                     )
                 )
             )
-        finally:
-            db.close()
 
     def DocumentsReport(self, request: reporting_pb2.DocumentsReportRequest, context: grpc.ServicerContext):
         _ = self._request_id(context)
-        repo, db = self._repo()
-        try:
+        with get_db_session() as db:
+            repo = self._repo(db)
             return reporting_pb2.JsonResponse(json=self._json(repo.documents_report()))
-        finally:
-            db.close()
 
     def ProductReport(self, request: reporting_pb2.ProductReportRequest, context: grpc.ServicerContext):
         _ = self._request_id(context)
-        repo, db = self._repo()
-        try:
+        with get_db_session() as db:
+            repo = self._repo(db)
             return reporting_pb2.JsonResponse(
                 json=self._json(
                     repo.product_report(product_id=int(request.product_id) if request.product_id else None)
                 )
             )
-        finally:
-            db.close()
 
     def SalesReport(self, request: reporting_pb2.SalesReportRequest, context: grpc.ServicerContext):
         _ = self._request_id(context)
-        repo, db = self._repo()
-        try:
+        with get_db_session() as db:
+            repo = self._repo(db)
             return reporting_pb2.JsonResponse(
                 json=self._json(
                     repo.sales_report(
@@ -96,8 +84,6 @@ class ReportingServiceServicer(reporting_pb2_grpc.ReportingServiceServicer):
                     )
                 )
             )
-        finally:
-            db.close()
 
 
 add_ReportingServiceServicer_to_server = reporting_pb2_grpc.add_ReportingServiceServicer_to_server

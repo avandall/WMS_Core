@@ -8,7 +8,7 @@ from typing import Any
 from shared_utils.events import DurableRedisStreamConsumer, EventEnvelope, RedisStreamClient
 
 from app.modules.audit.infrastructure.repositories.audit_event_repo import AuditEventRepo
-from app.shared.core.database import SessionLocal, init_db
+from app.shared.core.database import get_db_session, init_db
 from app.shared.core.logging import get_logger
 
 
@@ -106,8 +106,7 @@ class AuditEventConsumer:
         payload.setdefault("event_schema_version", envelope.schema_version)
         payload.setdefault("event_occurred_at", envelope.occurred_at)
 
-        db = SessionLocal()
-        try:
+        with get_db_session() as db:
             repo = AuditEventRepo(db)
             repo.create_event(
                 action=envelope.type,
@@ -118,12 +117,6 @@ class AuditEventConsumer:
                 user_id=_int_or_none(payload.get("user_id")),
                 payload=payload,
             )
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
 
 
 def start_audit_event_consumer_thread() -> threading.Thread | None:

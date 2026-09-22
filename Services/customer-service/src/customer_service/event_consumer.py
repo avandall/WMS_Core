@@ -8,7 +8,7 @@ from shared_utils.events import DurableRedisStreamConsumer, EventEnvelope, Redis
 
 from app.modules.customers.application.services.customer_service import CustomerService
 from app.modules.customers.infrastructure.repositories.customer_repo import CustomerRepo
-from app.shared.core.database import get_session
+from app.shared.core.database import get_db_session
 from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,30 +35,24 @@ class CustomerPurchaseConsumer:
             for i in items
         )
 
-        session_gen = get_session()
-        db = next(session_gen)
         try:
-            service = CustomerService(customer_repo=CustomerRepo(db))
-            # Avoid duplicate records for the same document
-            existing = service.purchases(int(customer_id))
-            if any(p.get("document_id") == int(document_id) for p in existing):
-                return
-            service.record_purchase(
-                customer_id=int(customer_id),
-                document_id=int(document_id),
-                total_value=total_value,
-            )
-            logger.info(
-                "Recorded purchase customer=%s document=%s value=%.2f",
-                customer_id, document_id, total_value,
-            )
+            with get_db_session() as db:
+                service = CustomerService(customer_repo=CustomerRepo(db))
+                # Avoid duplicate records for the same document
+                existing = service.purchases(int(customer_id))
+                if any(p.get("document_id") == int(document_id) for p in existing):
+                    return
+                service.record_purchase(
+                    customer_id=int(customer_id),
+                    document_id=int(document_id),
+                    total_value=total_value,
+                )
+                logger.info(
+                    "Recorded purchase customer=%s document=%s value=%.2f",
+                    customer_id, document_id, total_value,
+                )
         except Exception as exc:
             logger.error("Failed to record purchase: %s", exc)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
 
 def start_customer_purchase_consumer_thread() -> threading.Thread | None:

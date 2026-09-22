@@ -6,7 +6,7 @@ from shared_utils.events import get_publisher
 
 from app.modules.documents.application.services.document_service import DocumentService
 from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
-from app.shared.core.database import get_session
+from app.shared.core.database import get_db_session
 
 from documents_service.gen.wms.documents.v1 import documents_pb2, documents_pb2_grpc
 
@@ -28,15 +28,12 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 return v
         return "system"
 
-    def _service(self) -> tuple[DocumentService, object]:
-        session_gen = get_session()
-        db = next(session_gen)
-        service = DocumentService(
+    def _service(self, db: object) -> DocumentService:
+        return DocumentService(
             document_repo=DocumentRepo(db),
             session=db,
             event_publisher=self._publisher,
         )
-        return service, db
 
     @staticmethod
     def _to_proto(doc) -> documents_pb2.Document:  # type: ignore[no-untyped-def]
@@ -70,8 +67,8 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
         return documents_pb2.Document(**proto_kwargs)
 
     def CreateImport(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             doc = service.create_import_document(
                 to_warehouse_id=int(request.to_warehouse_id),
                 items=[
@@ -85,15 +82,10 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def CreateExport(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             doc = service.create_export_document(
                 from_warehouse_id=int(request.from_warehouse_id),
                 items=[
@@ -107,15 +99,10 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def CreateSale(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             doc = service.create_sale_document(
                 from_warehouse_id=int(request.from_warehouse_id),
                 items=[
@@ -130,15 +117,10 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def CreateTransfer(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             doc = service.create_transfer_document(
                 from_warehouse_id=int(request.from_warehouse_id),
                 to_warehouse_id=int(request.to_warehouse_id),
@@ -153,211 +135,164 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 request_id=self._request_id(context),
             )
             return self._to_proto(doc)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def PostDocument(self, request: documents_pb2.PostDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.post_document(
-                int(request.document_id),
-                request.approved_by or "system",
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.PostDocumentResponse(
-                message=f"Document {int(request.document_id)} posted successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.post_document(
+                    int(request.document_id),
+                    request.approved_by or "system",
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.PostDocumentResponse(
+                    message=f"Document {int(request.document_id)} posted successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.PostDocumentResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 7: Approve without stock movement
     def ApproveRequest(self, request: documents_pb2.ApproveRequestRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.approve_request(
-                int(request.document_id),
-                request.approved_by or "system",
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.ApproveRequestResponse(
-                message=f"Document {int(request.document_id)} approved successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.approve_request(
+                    int(request.document_id),
+                    request.approved_by or "system",
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.ApproveRequestResponse(
+                    message=f"Document {int(request.document_id)} approved successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.ApproveRequestResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 8: Sales reservation workflow
     def ReserveRequest(self, request: documents_pb2.ReserveRequestRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.reserve_request_stock(
-                int(request.document_id),
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.ReserveRequestResponse(
-                message=f"Document {int(request.document_id)} stock reserved successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.reserve_request_stock(
+                    int(request.document_id),
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.ReserveRequestResponse(
+                    message=f"Document {int(request.document_id)} stock reserved successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.ReserveRequestResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ReleaseReservation(self, request: documents_pb2.ReleaseReservationRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.release_request_reservation(
-                int(request.document_id),
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.ReleaseReservationResponse(
-                message=f"Document {int(request.document_id)} reservation released successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.release_request_reservation(
+                    int(request.document_id),
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.ReleaseReservationResponse(
+                    message=f"Document {int(request.document_id)} reservation released successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.ReleaseReservationResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def GetDocument(self, request: documents_pb2.GetDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            doc = service.get_document(int(request.document_id))
-            return self._to_proto(doc)
+            with get_db_session() as db:
+                service = self._service(db)
+                doc = service.get_document(int(request.document_id))
+                return self._to_proto(doc)
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("Document not found")
             return documents_pb2.Document()
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ListDocuments(self, request: documents_pb2.ListDocumentsRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             docs = service.get_documents(
                 doc_type=request.doc_type or None,
                 page=int(request.page or 1),
                 page_size=int(request.page_size or 20),
             )
             return documents_pb2.ListDocumentsResponse(documents=[self._to_proto(d) for d in docs])
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def DeleteDocument(self, request: documents_pb2.DeleteDocumentRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.delete_document(int(request.document_id))
-            return documents_pb2.DeleteDocumentResponse(
-                message=f"Document {int(request.document_id)} deleted successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.delete_document(int(request.document_id))
+                return documents_pb2.DeleteDocumentResponse(
+                    message=f"Document {int(request.document_id)} deleted successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.DeleteDocumentResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 10: Start execution
     def StartExecution(self, request: documents_pb2.StartExecutionRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.start_execution(
-                int(request.document_id),
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.StartExecutionResponse(
-                message=f"Document {int(request.document_id)} execution started successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.start_execution(
+                    int(request.document_id),
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.StartExecutionResponse(
+                    message=f"Document {int(request.document_id)} execution started successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.StartExecutionResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 10: Confirm execution
     def ConfirmExecution(self, request: documents_pb2.ConfirmExecutionRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.confirm_execution(
-                int(request.document_id),
-                items=[
-                    {"product_id": int(i.product_id), "quantity": int(i.quantity)}
-                    for i in request.items
-                ],
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.ConfirmExecutionResponse(
-                message=f"Document {int(request.document_id)} execution confirmed successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.confirm_execution(
+                    int(request.document_id),
+                    items=[
+                        {"product_id": int(i.product_id), "quantity": int(i.quantity)}
+                        for i in request.items
+                    ],
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.ConfirmExecutionResponse(
+                    message=f"Document {int(request.document_id)} execution confirmed successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.ConfirmExecutionResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 10: Complete request
     def CompleteRequest(self, request: documents_pb2.CompleteRequestRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            service.complete_request(
-                int(request.document_id),
-                completed_by=self._user_id(context),
-                request_id=self._request_id(context),
-            )
-            return documents_pb2.CompleteRequestResponse(
-                message=f"Document {int(request.document_id)} completed successfully"
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                service.complete_request(
+                    int(request.document_id),
+                    completed_by=self._user_id(context),
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.CompleteRequestResponse(
+                    message=f"Document {int(request.document_id)} completed successfully"
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return documents_pb2.CompleteRequestResponse(message=str(exc))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
 
 add_DocumentsServiceServicer_to_server = documents_pb2_grpc.add_DocumentsServiceServicer_to_server
-

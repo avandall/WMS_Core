@@ -8,7 +8,7 @@ from shared_utils.events import DurableRedisStreamConsumer, EventEnvelope, Redis
 
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
-from app.shared.core.database import get_session
+from app.shared.core.database import get_db_session
 from app.shared.core.logging import get_logger
 
 
@@ -28,21 +28,17 @@ class InventoryMovementConsumer:
         )
         logger.warning("Handling deprecated event type: InventoryMovementRequested")
 
-        session_gen = get_session()
-        db = next(session_gen)
         try:
-            service = InventoryService(
-                inventory_repo=InventoryRepo(db),
-                event_publisher=get_publisher("inventory-service"),
-            )
-            payload = dict(envelope.payload)
-            payload.setdefault("event_id", envelope.event_id)
-            service.apply_document_movement(payload)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                logger.debug("Failed to close inventory consumer DB session", exc_info=True)
+            with get_db_session() as db:
+                service = InventoryService(
+                    inventory_repo=InventoryRepo(db),
+                    event_publisher=get_publisher("inventory-service"),
+                )
+                payload = dict(envelope.payload)
+                payload.setdefault("event_id", envelope.event_id)
+                service.apply_document_movement(payload)
+        except Exception:
+            logger.error("Failed to process inventory movement event", exc_info=True)
 
 
 def start_inventory_movement_consumer_thread() -> threading.Thread | None:

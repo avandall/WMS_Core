@@ -7,7 +7,7 @@ from shared_utils.events import get_publisher
 
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
-from app.shared.core.database import get_session
+from app.shared.core.database import get_db_session
 
 from inventory_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_grpc
 
@@ -22,18 +22,15 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 return v
         return None
 
-    def _service(self) -> tuple[InventoryService, object]:
-        session_gen = get_session()
-        db = next(session_gen)
-        service = InventoryService(
+    def _service(self, db: object) -> InventoryService:
+        return InventoryService(
             inventory_repo=InventoryRepo(db),
             event_publisher=self._publisher,
         )
-        return service, db
 
     def ListInventoryItems(self, request: inventory_pb2.ListInventoryItemsRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             items = service.get_all_inventory_items()
             return inventory_pb2.ListInventoryItemsResponse(
                 items=[
@@ -41,17 +38,12 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     for i in items
                 ]
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def GetInventoryByWarehouse(
         self, request: inventory_pb2.GetInventoryByWarehouseRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             rows = service.get_inventory_by_warehouse_rows()
             self._publisher.publish(
                 event_type="InventoryByWarehouseListed",
@@ -78,45 +70,36 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     for r in rows
                 ]
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def GetProductQuantity(
         self, request: inventory_pb2.GetProductQuantityRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
         try:
-            qty = service.get_total_quantity(int(request.product_id))
-            self._publisher.publish(
-                event_type="InventoryQuantityRead",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "inventory",
-                    "entity_id": int(request.product_id),
-                    "product_id": int(request.product_id),
-                    "quantity": int(qty),
-                },
-            )
-            return inventory_pb2.GetProductQuantityResponse(product_id=int(request.product_id), quantity=int(qty))
+            with get_db_session() as db:
+                service = self._service(db)
+                qty = service.get_total_quantity(int(request.product_id))
+                self._publisher.publish(
+                    event_type="InventoryQuantityRead",
+                    payload={
+                        "request_id": self._request_id(context),
+                        "entity_type": "inventory",
+                        "entity_id": int(request.product_id),
+                        "product_id": int(request.product_id),
+                        "quantity": int(qty),
+                    },
+                )
+                return inventory_pb2.GetProductQuantityResponse(product_id=int(request.product_id), quantity=int(qty))
         except Exception:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("Product not found")
             return inventory_pb2.GetProductQuantityResponse(product_id=int(request.product_id), quantity=0)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 5: Availability and reservations
     def GetAvailability(
         self, request: inventory_pb2.GetAvailabilityRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             availability = service.inventory_repo.calculate_available_stock(
                 product_id=int(request.product_id), warehouse_id=int(request.warehouse_id)
             )
@@ -136,17 +119,12 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 reserved_qty=availability["reserved_qty"],
                 available_qty=availability["available_qty"],
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ListReservations(
         self, request: inventory_pb2.ListReservationsRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             # In proto3, HasField() only works on message/oneof fields, not scalars.
             # Use the default zero-value as the sentinel for "not set".
             product_id = int(request.product_id) if request.product_id != 0 else None
@@ -189,140 +167,124 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     for r in reservations
                 ]
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ReleaseReservation(
         self, request: inventory_pb2.ReleaseReservationRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
         try:
-            # In proto3, 0 is the default for int64; treat 0 as "release all".
-            released_qty = int(request.released_qty) if request.released_qty != 0 else None
-            service.release_reservation(reservation_id=int(request.reservation_id), released_qty=released_qty)
-            self._publisher.publish(
-                event_type="ReservationReleased",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "inventory",
-                    "reservation_id": int(request.reservation_id),
-                    "released_qty": released_qty,
-                },
-            )
-            return inventory_pb2.ReleaseReservationResponse(success=True)
+            with get_db_session() as db:
+                service = self._service(db)
+                # In proto3, 0 is the default for int64; treat 0 as "release all".
+                released_qty = int(request.released_qty) if request.released_qty != 0 else None
+                service.release_reservation(reservation_id=int(request.reservation_id), released_qty=released_qty)
+                self._publisher.publish(
+                    event_type="ReservationReleased",
+                    payload={
+                        "request_id": self._request_id(context),
+                        "entity_type": "inventory",
+                        "reservation_id": int(request.reservation_id),
+                        "released_qty": released_qty,
+                    },
+                )
+                return inventory_pb2.ReleaseReservationResponse(success=True)
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return inventory_pb2.ReleaseReservationResponse(success=False)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     # Phase 9: Inventory transaction ledger
     def ListTransactions(
         self, request: inventory_pb2.ListTransactionsRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
         try:
-            # In proto3, HasField() raises ValueError on scalar fields.
-            # Use zero-value convention: 0 means "no filter", "" means "no filter".
-            transactions = service.inventory_repo.list_transactions(
-                document_id=int(request.document_id) if request.document_id != 0 else None,
-                product_id=int(request.product_id) if request.product_id != 0 else None,
-                warehouse_id=int(request.warehouse_id) if request.warehouse_id != 0 else None,
-                transaction_type=request.transaction_type if request.transaction_type else None,
-                limit=int(request.limit) if request.limit != 0 else 100,
-                offset=int(request.offset) if request.offset != 0 else 0,
-            )
-
-            transaction_rows = []
-            for tx in transactions:
-                transaction_rows.append(
-                    inventory_pb2.TransactionRow(
-                        id=int(tx.get("id")),
-                        transaction_type=tx.get("transaction_type"),
-                        document_id=int(tx.get("document_id")) if tx.get("document_id") else 0,
-                        document_line_id=int(tx.get("document_line_id")) if tx.get("document_line_id") else 0,
-                        product_id=int(tx.get("product_id")),
-                        warehouse_id=int(tx.get("warehouse_id")),
-                        quantity=int(tx.get("quantity")),
-                        physical_qty_before=int(tx.get("physical_qty_before")) if tx.get("physical_qty_before") is not None else 0,
-                        physical_qty_after=int(tx.get("physical_qty_after")) if tx.get("physical_qty_after") is not None else 0,
-                        reserved_qty_before=int(tx.get("reserved_qty_before")) if tx.get("reserved_qty_before") is not None else 0,
-                        reserved_qty_after=int(tx.get("reserved_qty_after")) if tx.get("reserved_qty_after") is not None else 0,
-                        available_qty_before=int(tx.get("available_qty_before")) if tx.get("available_qty_before") is not None else 0,
-                        available_qty_after=int(tx.get("available_qty_after")) if tx.get("available_qty_after") is not None else 0,
-                        user_id=tx.get("user_id") or "",
-                        created_at=tx.get("created_at") or "",
-                        payload=json.dumps(tx.get("payload")) if tx.get("payload") else "",
-                        idempotency_key=tx.get("idempotency_key") or "",
-                    )
+            with get_db_session() as db:
+                service = self._service(db)
+                # In proto3, HasField() raises ValueError on scalar fields.
+                # Use zero-value convention: 0 means "no filter", "" means "no filter".
+                transactions = service.inventory_repo.list_transactions(
+                    document_id=int(request.document_id) if request.document_id != 0 else None,
+                    product_id=int(request.product_id) if request.product_id != 0 else None,
+                    warehouse_id=int(request.warehouse_id) if request.warehouse_id != 0 else None,
+                    transaction_type=request.transaction_type if request.transaction_type else None,
+                    limit=int(request.limit) if request.limit != 0 else 100,
+                    offset=int(request.offset) if request.offset != 0 else 0,
                 )
-            
-            return inventory_pb2.ListTransactionsResponse(transactions=transaction_rows)
+
+                transaction_rows = []
+                for tx in transactions:
+                    transaction_rows.append(
+                        inventory_pb2.TransactionRow(
+                            id=int(tx.get("id")),
+                            transaction_type=tx.get("transaction_type"),
+                            document_id=int(tx.get("document_id")) if tx.get("document_id") else 0,
+                            document_line_id=int(tx.get("document_line_id")) if tx.get("document_line_id") else 0,
+                            product_id=int(tx.get("product_id")),
+                            warehouse_id=int(tx.get("warehouse_id")),
+                            quantity=int(tx.get("quantity")),
+                            physical_qty_before=int(tx.get("physical_qty_before")) if tx.get("physical_qty_before") is not None else 0,
+                            physical_qty_after=int(tx.get("physical_qty_after")) if tx.get("physical_qty_after") is not None else 0,
+                            reserved_qty_before=int(tx.get("reserved_qty_before")) if tx.get("reserved_qty_before") is not None else 0,
+                            reserved_qty_after=int(tx.get("reserved_qty_after")) if tx.get("reserved_qty_after") is not None else 0,
+                            available_qty_before=int(tx.get("available_qty_before")) if tx.get("available_qty_before") is not None else 0,
+                            available_qty_after=int(tx.get("available_qty_after")) if tx.get("available_qty_after") is not None else 0,
+                            user_id=tx.get("user_id") or "",
+                            created_at=tx.get("created_at") or "",
+                            payload=json.dumps(tx.get("payload")) if tx.get("payload") else "",
+                            idempotency_key=tx.get("idempotency_key") or "",
+                        )
+                    )
+                
+                return inventory_pb2.ListTransactionsResponse(transactions=transaction_rows)
         except Exception as exc:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(exc))
             return inventory_pb2.ListTransactionsResponse(transactions=[])
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ConfirmInventoryTransaction(
         self, request: inventory_pb2.ConfirmInventoryTransactionRequest, context: grpc.ServicerContext
     ):
-        service, db = self._service()
         try:
-            tx_id = service.confirm_inventory_transaction(
-                transaction_type=request.transaction_type,
-                product_id=int(request.product_id),
-                warehouse_id=int(request.warehouse_id),
-                quantity=int(request.quantity),
-                reservation_id=int(request.reservation_id),
-                user_id=request.user_id or "system",
-                idempotency_key=request.idempotency_key or None,
-                source_warehouse_id=int(request.source_warehouse_id) if request.source_warehouse_id else 0,
-            )
-            return inventory_pb2.ConfirmInventoryTransactionResponse(
-                success=True,
-                transaction_id=tx_id,
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                tx_id = service.confirm_inventory_transaction(
+                    transaction_type=request.transaction_type,
+                    product_id=int(request.product_id),
+                    warehouse_id=int(request.warehouse_id),
+                    quantity=int(request.quantity),
+                    reservation_id=int(request.reservation_id),
+                    user_id=request.user_id or "system",
+                    idempotency_key=request.idempotency_key or None,
+                    source_warehouse_id=int(request.source_warehouse_id) if request.source_warehouse_id else 0,
+                )
+                return inventory_pb2.ConfirmInventoryTransactionResponse(
+                    success=True,
+                    transaction_id=tx_id,
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
             return inventory_pb2.ConfirmInventoryTransactionResponse(success=False, transaction_id=0)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ReserveStock(self, request: inventory_pb2.ReserveStockRequest, context: grpc.ServicerContext):
-        service, db = self._service()
         try:
-            res_id = service.reserve_stock(
-                product_id=int(request.product_id),
-                quantity=int(request.quantity),
-                warehouse_id=int(request.warehouse_id) if request.warehouse_id else None,
-                event_id=request.event_id or None,
-                source_type=request.source_type or "manual",
-                source_id=int(request.source_id) if request.source_id else None,
-                document_id=int(request.document_id) if request.document_id else None,
-                created_by=request.created_by or None,
-                expires_at=request.expires_at or None,
-            )
-            return inventory_pb2.ReserveStockResponse(
-                success=True,
-                reservation_id=res_id,
-                message="Stock reserved successfully",
-            )
+            with get_db_session() as db:
+                service = self._service(db)
+                res_id = service.reserve_stock(
+                    product_id=int(request.product_id),
+                    quantity=int(request.quantity),
+                    warehouse_id=int(request.warehouse_id) if request.warehouse_id else None,
+                    event_id=request.event_id or None,
+                    source_type=request.source_type or "manual",
+                    source_id=int(request.source_id) if request.source_id else None,
+                    document_id=int(request.document_id) if request.document_id else None,
+                    created_by=request.created_by or None,
+                    expires_at=request.expires_at or None,
+                )
+                return inventory_pb2.ReserveStockResponse(
+                    success=True,
+                    reservation_id=res_id,
+                    message="Stock reserved successfully",
+                )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(str(exc))
@@ -331,12 +293,6 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 reservation_id=0,
                 message=str(exc)
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server
-

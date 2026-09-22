@@ -2,6 +2,7 @@
 
 import os
 import time
+from contextlib import contextmanager
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
@@ -82,6 +83,9 @@ def get_session():
     finally:
         db.expunge_all()
         db.close()
+
+
+get_db_session = contextmanager(get_session)
 
 
 def import_all_models():

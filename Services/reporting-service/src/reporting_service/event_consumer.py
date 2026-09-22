@@ -7,7 +7,7 @@ import time
 from shared_utils.events import DurableRedisStreamConsumer, EventEnvelope, RedisStreamClient
 
 from app.modules.reporting.infrastructure.repositories.read_model_repo import ReportingReadModelRepo
-from app.shared.core.database import SessionLocal, init_db
+from app.shared.core.database import get_db_session, init_db
 from app.shared.core.logging import get_logger
 
 
@@ -65,16 +65,9 @@ class ReportingReadModelConsumer:
                 time.sleep(2)
 
     def _ingest(self, message_id: str, envelope: EventEnvelope) -> None:
-        db = SessionLocal()
-        try:
+        with get_db_session() as db:
             repo = ReportingReadModelRepo(db)
             repo.record_event(stream_id=message_id, envelope=envelope)
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
 
 
 def start_reporting_read_model_consumer_thread() -> threading.Thread | None:

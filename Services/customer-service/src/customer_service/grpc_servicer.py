@@ -4,20 +4,18 @@ import grpc
 
 from app.modules.customers.application.services.customer_service import CustomerService
 from app.modules.customers.infrastructure.repositories.customer_repo import CustomerRepo
-from app.shared.core.database import get_session
+from app.shared.core.database import get_db_session
 
 from customer_service.gen.wms.customer.v1 import customer_pb2, customer_pb2_grpc
 
 
 class CustomerServiceServicer(customer_pb2_grpc.CustomerServiceServicer):
-    def _service(self) -> tuple[CustomerService, object]:
-        session_gen = get_session()
-        db = next(session_gen)
-        return CustomerService(customer_repo=CustomerRepo(db)), db
+    def _service(self, db: object) -> CustomerService:
+        return CustomerService(customer_repo=CustomerRepo(db))
 
     def CreateCustomer(self, request: customer_pb2.CreateCustomerRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             model = service.create(
                 {
                     "name": request.name,
@@ -35,15 +33,10 @@ class CustomerServiceServicer(customer_pb2_grpc.CustomerServiceServicer):
                 debt_balance=float(model.debt_balance or 0),
                 created_at=str(getattr(model, "created_at", "") or ""),
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ListCustomers(self, request: customer_pb2.ListCustomersRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             data = service.list()
             customers = []
             for c in data:
@@ -59,15 +52,10 @@ class CustomerServiceServicer(customer_pb2_grpc.CustomerServiceServicer):
                     )
                 )
             return customer_pb2.ListCustomersResponse(customers=customers)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def GetCustomer(self, request: customer_pb2.GetCustomerRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             c = service.get(int(request.customer_id))
             if not c:
                 context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -82,15 +70,10 @@ class CustomerServiceServicer(customer_pb2_grpc.CustomerServiceServicer):
                 debt_balance=float(c.get("debt_balance") or 0),
                 created_at=str(c.get("created_at") or ""),
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def UpdateCustomer(self, request: customer_pb2.UpdateCustomerRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             customer_id = int(request.customer_id)
             existing = service.get(customer_id)
             if not existing:
@@ -119,26 +102,16 @@ class CustomerServiceServicer(customer_pb2_grpc.CustomerServiceServicer):
                 debt_balance=float(updated.get("debt_balance") or 0),
                 created_at=str(updated.get("created_at") or ""),
             )
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def UpdateDebt(self, request: customer_pb2.UpdateDebtRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             service.update_debt(int(request.customer_id), float(request.amount))
             return customer_pb2.UpdateDebtResponse(message="Debt updated", delta=float(request.amount))
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
     def ListPurchases(self, request: customer_pb2.ListPurchasesRequest, context: grpc.ServicerContext):
-        service, db = self._service()
-        try:
+        with get_db_session() as db:
+            service = self._service(db)
             purchases = service.purchases(int(request.customer_id))
             rows = []
             for p in purchases:
@@ -151,11 +124,6 @@ class CustomerServiceServicer(customer_pb2_grpc.CustomerServiceServicer):
                     )
                 )
             return customer_pb2.ListPurchasesResponse(purchases=rows)
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
 
 
 add_CustomerServiceServicer_to_server = customer_pb2_grpc.add_CustomerServiceServicer_to_server

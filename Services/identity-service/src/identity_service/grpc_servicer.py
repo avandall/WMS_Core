@@ -11,7 +11,7 @@ import grpc
 from app.modules.users.application.services.user_service import UserService
 from app.modules.users.infrastructure.repositories.user_repo import UserRepo
 from app.shared.core.auth import decode_token
-from app.shared.core.database import get_session
+from app.shared.core.database import get_db_session
 
 from identity_service.gen.wms.identity.v1 import identity_pb2, identity_pb2_grpc
 
@@ -72,17 +72,10 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             return identity_pb2.ValidateTokenResponse(valid=False)
 
         async def _action():
-            session_gen = get_session()
-            db = next(session_gen)
-            try:
+            with get_db_session() as db:
                 service = UserService(UserRepo(db))
                 user = await service.get_user(user_id)
                 return user
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
 
         # Resolve current user from the identity datastore.
         try:
@@ -108,18 +101,11 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             return identity_pb2.CreateUserResponse(success=False, message="Email and password are required")
 
         async def _action():
-            session_gen = get_session()
-            db = next(session_gen)
-            try:
+            with get_db_session() as db:
                 service = UserService(UserRepo(db))
                 # Create user using the service
                 user = await service.create_user(email, password, role, full_name)
                 return user
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
 
         try:
             user = _run_async(_action())
@@ -137,16 +123,9 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             return identity_pb2.DeleteUserResponse(success=False, message="User ID is required")
 
         async def _action():
-            session_gen = get_session()
-            db = next(session_gen)
-            try:
+            with get_db_session() as db:
                 service = UserService(UserRepo(db))
                 await service.delete_user(user_id)
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
 
         try:
             _run_async(_action())
@@ -156,17 +135,10 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
 
     def ListUsers(self, request: identity_pb2.ListUsersRequest, context: grpc.ServicerContext):
         async def _action():
-            session_gen = get_session()
-            db = next(session_gen)
-            try:
+            with get_db_session() as db:
                 service = UserService(UserRepo(db))
                 users = await service.list_users()
                 return users
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
 
         try:
             users = _run_async(_action())
@@ -193,17 +165,10 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             return identity_pb2.LoginResponse(success=False, message="Email and password are required")
 
         async def _action():
-            session_gen = get_session()
-            db = next(session_gen)
-            try:
+            with get_db_session() as db:
                 service = UserService(UserRepo(db))
                 tokens = await service.authenticate(email, password)
                 return tokens
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
 
         try:
             tokens = _run_async(_action())
