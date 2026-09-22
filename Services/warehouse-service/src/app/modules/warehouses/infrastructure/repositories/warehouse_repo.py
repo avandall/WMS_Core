@@ -30,13 +30,17 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         super().__init__(session)
 
     def create_warehouse(self, warehouse: Warehouse) -> None:
-        if warehouse.warehouse_id == 0:
-            # Sentinel: let the DB sequence assign the ID.
-            model = WarehouseModel(location=warehouse.location)
-        else:
-            model = WarehouseModel(
-                warehouse_id=warehouse.warehouse_id, location=warehouse.location
-            )
+        kwargs = {
+            "location": warehouse.location,
+            "warehouse_type": warehouse.warehouse_type,
+            "capacity_sqm": warehouse.capacity_sqm,
+            "is_active": 1 if warehouse.is_active else 0,
+            "manager_id": warehouse.manager_id,
+            "timezone": warehouse.timezone,
+        }
+        if warehouse.warehouse_id != 0:
+            kwargs["warehouse_id"] = warehouse.warehouse_id
+        model = WarehouseModel(**kwargs)
         self.session.add(model)
         # Flush so the DB sequence assigns the primary key, then write it back.
         self.session.flush()
@@ -47,6 +51,11 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         existing = self.session.get(WarehouseModel, warehouse.warehouse_id)
         if existing:
             existing.location = warehouse.location
+            existing.warehouse_type = warehouse.warehouse_type
+            existing.capacity_sqm = warehouse.capacity_sqm
+            existing.is_active = 1 if warehouse.is_active else 0
+            existing.manager_id = warehouse.manager_id
+            existing.timezone = warehouse.timezone
         else:
             self.create_warehouse(warehouse)
             existing = self.session.get(WarehouseModel, warehouse.warehouse_id)
@@ -85,4 +94,9 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         return Warehouse(
             warehouse_id=model.warehouse_id,
             location=model.location,
+            warehouse_type=getattr(model, "warehouse_type", "ambient") or "ambient",
+            capacity_sqm=getattr(model, "capacity_sqm", None),
+            is_active=bool(getattr(model, "is_active", 1)),
+            manager_id=getattr(model, "manager_id", None),
+            timezone=getattr(model, "timezone", "UTC") or "UTC",
         )

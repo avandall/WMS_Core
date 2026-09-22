@@ -8,6 +8,8 @@ service WarehouseService {
   rpc CreateWarehouse(CreateWarehouseRequest) returns (Warehouse);
   rpc DeleteWarehouse(DeleteWarehouseRequest) returns (DeleteWarehouseResponse);
   rpc TransferAllInventory(TransferAllInventoryRequest) returns (TransferAllInventoryResponse);
+  rpc GetPosition(GetPositionRequest) returns (Position);
+  rpc ListPositions(ListPositionsRequest) returns (ListPositionsResponse);
 }
 
 service WarehouseOperationsService {
@@ -27,6 +29,43 @@ message Warehouse {
   string name = 2;
   string location = 3;
   repeated InventoryItem inventory = 4;
+  string warehouse_type = 5;
+  optional double capacity_sqm = 6;
+  bool is_active = 7;
+  optional string manager_id = 8;
+  string timezone = 9;
+}
+
+message Position {
+  int64 id = 1;
+  int64 warehouse_id = 2;
+  string code = 3;
+  string type = 4;
+  string description = 5;
+  bool is_active = 6;
+  string aisle = 7;
+  string bay = 8;
+  string level = 9;
+  string bin = 10;
+  optional double max_weight_kg = 11;
+  string temperature_zone = 12;
+  int32 pick_sequence = 13;
+  optional string hazmat_class = 14;
+  string full_address = 15;
+}
+
+message GetPositionRequest {
+  int64 warehouse_id = 1;
+  string code = 2;
+}
+
+message ListPositionsRequest {
+  int64 warehouse_id = 1;
+  bool include_inactive = 2;
+}
+
+message ListPositionsResponse {
+  repeated Position positions = 1;
 }
 
 message ListWarehousesRequest {}

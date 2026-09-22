@@ -1,29 +1,50 @@
-from __future__ import annotations
-
 from typing import Dict, List
 
 from app.shared.domain.business_exceptions import (
     EntityAlreadyExistsError,
     InvalidIDError,
+    ValidationError,
     WarehouseNotFoundError,
 )
 from app.shared.domain.entity import DomainEntity
-from app.modules.warehouses.domain.value_objects import WarehouseLocation
+from app.modules.warehouses.domain.value_objects import WarehouseLocation, WarehouseType
 
 
 class Warehouse(DomainEntity):
     """Domain entity for warehouses."""
 
+    warehouse_id: int
+    location: str
+    warehouse_type: str
+    capacity_sqm: float | None
+    is_active: bool
+    manager_id: str | None
+    timezone: str
+
     def __init__(
         self,
         warehouse_id: int,
         location: str,
+        warehouse_type: str = "ambient",
+        capacity_sqm: float | None = None,
+        is_active: bool = True,
+        manager_id: str | None = None,
+        timezone: str = "UTC",
     ) -> None:
         self._validate_warehouse_id(warehouse_id)
         self._validate_location(location)
+        warehouse_type_obj = WarehouseType(warehouse_type)
+        if capacity_sqm is not None and capacity_sqm < 0:
+            raise ValidationError("capacity_sqm must be non-negative")
 
         self.warehouse_id = warehouse_id
         self.location = location
+        self.warehouse_type = warehouse_type_obj.value
+        self.capacity_sqm = capacity_sqm
+        self.is_active = is_active
+        self.manager_id = manager_id
+        self.timezone = timezone or "UTC"
+
 
     @staticmethod
     def _validate_warehouse_id(warehouse_id: int) -> None:

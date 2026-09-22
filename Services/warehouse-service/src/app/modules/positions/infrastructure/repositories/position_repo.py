@@ -79,6 +79,14 @@ class PositionRepo(TransactionalRepository):
         code: str,
         type: str = "STORAGE",
         description: Optional[str] = None,
+        aisle: Optional[str] = None,
+        bay: Optional[str] = None,
+        level: Optional[str] = None,
+        bin: Optional[str] = None,
+        max_weight_kg: Optional[float] = None,
+        temperature_zone: str = "ambient",
+        pick_sequence: int = 0,
+        hazmat_class: Optional[str] = None,
     ) -> Position:
         warehouse = self.session.get(WarehouseModel, warehouse_id)
         if not warehouse:
@@ -102,6 +110,14 @@ class PositionRepo(TransactionalRepository):
             type=type.strip().upper(),
             description=description,
             is_active=1,
+            aisle=aisle,
+            bay=bay,
+            level=level,
+            bin=bin,
+            max_weight_kg=max_weight_kg,
+            temperature_zone=temperature_zone,
+            pick_sequence=pick_sequence,
+            hazmat_class=hazmat_class,
         )
         self.session.add(model)
         self.session.flush()
@@ -114,7 +130,9 @@ class PositionRepo(TransactionalRepository):
         stmt = select(PositionModel).where(PositionModel.warehouse_id == warehouse_id)
         if not include_inactive:
             stmt = stmt.where(PositionModel.is_active == 1)
-        rows = self.session.execute(stmt.order_by(PositionModel.code.asc())).scalars().all()
+        rows = self.session.execute(
+            stmt.order_by(PositionModel.pick_sequence.asc(), PositionModel.code.asc())
+        ).scalars().all()
         return [self._to_domain(row) for row in rows]
 
     def get_position(self, warehouse_id: int, code: str) -> Position:
@@ -159,10 +177,19 @@ class PositionRepo(TransactionalRepository):
     @staticmethod
     def _to_domain(model: PositionModel) -> Position:
         return Position(
-            id=model.id,
-            warehouse_id=model.warehouse_id,
-            code=model.code,
-            type=model.type,
-            description=model.description,
+            id=int(model.id) if model.id is not None else None,
+            warehouse_id=int(model.warehouse_id),
+            code=str(model.code),
+            type=str(model.type),
+            description=str(model.description) if model.description is not None else None,
             is_active=bool(model.is_active),
+            aisle=str(model.aisle) if model.aisle is not None else None,
+            bay=str(model.bay) if model.bay is not None else None,
+            level=str(model.level) if model.level is not None else None,
+            bin=str(model.bin) if model.bin is not None else None,
+            max_weight_kg=float(model.max_weight_kg) if model.max_weight_kg is not None else None,
+            temperature_zone=str(model.temperature_zone or "ambient"),
+            pick_sequence=int(model.pick_sequence) if model.pick_sequence is not None else 0,
+            hazmat_class=str(model.hazmat_class) if model.hazmat_class is not None else None,
         )
+

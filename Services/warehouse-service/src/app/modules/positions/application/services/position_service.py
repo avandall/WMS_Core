@@ -34,6 +34,14 @@ class PositionService:
         capacity: Optional[int] = None,
         zone: Optional[str] = None,
         user_id: Optional[int] = None,
+        aisle: Optional[str] = None,
+        bay: Optional[str] = None,
+        level: Optional[str] = None,
+        bin: Optional[str] = None,
+        max_weight_kg: Optional[float] = None,
+        temperature_zone: str = "ambient",
+        pick_sequence: int = 0,
+        hazmat_class: Optional[str] = None,
     ) -> Position:
         self.position_repo.ensure_default_positions(warehouse_id)
         position = self.position_repo.create_position(
@@ -41,6 +49,16 @@ class PositionService:
             code=code,
             type=type,
             description=description,
+            capacity=capacity,
+            zone=zone,
+            aisle=aisle,
+            bay=bay,
+            level=level,
+            bin=bin,
+            max_weight_kg=max_weight_kg,
+            temperature_zone=temperature_zone,
+            pick_sequence=pick_sequence,
+            hazmat_class=hazmat_class,
         )
         self._commit_if_needed()
         logger.info(

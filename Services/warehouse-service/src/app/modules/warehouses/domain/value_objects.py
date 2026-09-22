@@ -31,11 +31,14 @@ class BinCode:
         object.__setattr__(self, "value", normalized)
 
 
+from typing import ClassVar
+
+
 @dataclass(frozen=True)
 class PositionType:
     value: str
 
-    ALLOWED = {"RECEIVING", "STORAGE", "SHIPPING", "SYSTEM", "PICKING", "RETURN"}
+    ALLOWED: ClassVar[set[str]] = {"RECEIVING", "STORAGE", "SHIPPING", "SYSTEM", "PICKING", "RETURN"}
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, str) or not self.value.strip():
@@ -44,3 +47,35 @@ class PositionType:
         if normalized not in self.ALLOWED:
             raise ValidationError(f"position type must be one of {sorted(self.ALLOWED)}")
         object.__setattr__(self, "value", normalized)
+
+
+@dataclass(frozen=True)
+class WarehouseType:
+    value: str
+
+    ALLOWED: ClassVar[set[str]] = {"ambient", "cold", "frozen", "hazmat"}
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise ValidationError("warehouse_type must be a non-empty string")
+        normalized = self.value.strip().lower()
+        if normalized not in self.ALLOWED:
+            raise ValidationError(f"warehouse_type must be one of {sorted(self.ALLOWED)}")
+        object.__setattr__(self, "value", normalized)
+
+
+@dataclass(frozen=True)
+class TemperatureZone:
+    value: str
+
+    ALLOWED: ClassVar[set[str]] = {"ambient", "chilled", "frozen"}
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise ValidationError("temperature_zone must be a non-empty string")
+        normalized = self.value.strip().lower()
+        if normalized not in self.ALLOWED:
+            raise ValidationError(f"temperature_zone must be one of {sorted(self.ALLOWED)}")
+        object.__setattr__(self, "value", normalized)
+
+

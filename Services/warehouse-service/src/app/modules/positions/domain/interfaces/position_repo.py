@@ -20,6 +20,14 @@ class IPositionRepo(ABC):
         description: Optional[str] = None,
         capacity: Optional[int] = None,
         zone: Optional[str] = None,
+        aisle: Optional[str] = None,
+        bay: Optional[str] = None,
+        level: Optional[str] = None,
+        bin: Optional[str] = None,
+        max_weight_kg: Optional[float] = None,
+        temperature_zone: str = "ambient",
+        pick_sequence: int = 0,
+        hazmat_class: Optional[str] = None,
     ) -> "Position":
         pass
 

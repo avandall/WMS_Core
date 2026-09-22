@@ -54,12 +54,29 @@ class WarehouseService:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def create_warehouse(self, location: str) -> Warehouse:
+    def create_warehouse(
+        self,
+        location: str,
+        *,
+        warehouse_type: str = "ambient",
+        capacity_sqm: Optional[float] = None,
+        is_active: bool = True,
+        manager_id: Optional[str] = None,
+        timezone: str = "UTC",
+    ) -> Warehouse:
         warehouse_id = self._warehouse_id_generator()
         normalized_location = WarehouseLocation(location).value
         if self.warehouse_repo.location_exists(normalized_location):
             raise EntityAlreadyExistsError(f"Warehouse location '{normalized_location}' already exists")
-        warehouse = Warehouse(warehouse_id=warehouse_id, location=normalized_location)
+        warehouse = Warehouse(
+            warehouse_id=warehouse_id,
+            location=normalized_location,
+            warehouse_type=warehouse_type,
+            capacity_sqm=capacity_sqm,
+            is_active=is_active,
+            manager_id=manager_id,
+            timezone=timezone,
+        )
         self.warehouse_repo.create_warehouse(warehouse)
         self._commit_if_needed()
         return warehouse
