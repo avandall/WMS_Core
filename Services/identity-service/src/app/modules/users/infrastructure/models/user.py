@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String
 
@@ -14,4 +14,4 @@ class UserModel(Base):
     role = Column(String(50), nullable=False, default="user", index=True)
     full_name = Column(String(255))
     is_active = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)

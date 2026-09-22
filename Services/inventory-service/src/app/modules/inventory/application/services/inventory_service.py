@@ -276,10 +276,19 @@ class InventoryService:
         reservation = self.inventory_repo.get_reservation(reservation_id)
         if not reservation:
             raise KeyError(f"Reservation {reservation_id} not found")
+
+        status = reservation.get("status")
+        reserved_qty = reservation.get("reserved_qty", 0)
+        already_released = reservation.get("released_qty", 0)
+        remaining = reserved_qty - already_released
+        qty = released_qty if released_qty is not None else remaining
+
+        if status in ("RELEASED", "CONSUMED") or remaining <= 0 or qty <= 0:
+            return True
+
         prod_id = reservation["product_id"]
         wh_id = reservation["warehouse_id"]
         doc_id = reservation["document_id"]
-        qty = released_qty or (reservation["reserved_qty"] - reservation["released_qty"])
 
         # Phase 4: Use persistent reservation release
         self.inventory_repo.release_reservation(reservation_id, released_qty)

@@ -35,14 +35,6 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         service, db = self._service()
         try:
             items = service.get_all_inventory_items()
-            self._publisher.publish(
-                event_type="InventoryListed",
-                payload={
-                    "request_id": self._request_id(context),
-                    "entity_type": "inventory",
-                    "count": len(items),
-                },
-            )
             return inventory_pb2.ListInventoryItemsResponse(
                 items=[
                     inventory_pb2.InventoryItem(product_id=int(i.product_id), quantity=int(i.quantity))

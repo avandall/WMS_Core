@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from app.shared.core.logging import get_logger
@@ -28,23 +28,22 @@ class AllocationService:
         Allocates requested quantity of product_id in warehouse_id using FEFO rules.
 
         Sorting logic:
-        - Locations with an expiry_date are prioritized over locations without expiry_date (nulls last).
-        - Locations with expiry_date are sorted ascending (soonest expiry first).
-        - Secondary tie-breakers: position_id, id.
+        - Expiry date ASC (earliest expiring first)
+        - Locations with NO expiry date placed AFTER locations WITH expiry date
+        - Tie-breaking by position_id ASC, location id ASC
         """
         if quantity <= 0:
-            raise InvalidQuantityError("Allocation quantity must be a positive integer")
+            raise InvalidQuantityError("Allocation quantity must be greater than zero")
 
-        # 1. Fetch available inventory locations
+        # 1. Fetch candidate locations
         locations = self.inventory_repo.get_inventory_locations(
             warehouse_id=warehouse_id,
             product_id=product_id,
             status=status,
         )
 
-        # 2. Filter locations that have available_qty > 0
+        # 2. Filter available_qty > 0
         candidate_locations = [loc for loc in locations if loc.get("available_qty", 0) > 0]
-
         if not candidate_locations:
             raise InsufficientStockError(
                 f"No available stock to allocate for product {product_id} in warehouse {warehouse_id}"
@@ -58,11 +57,14 @@ class AllocationService:
                 try:
                     expiry_dt = datetime.fromisoformat(expiry_val)
                 except (ValueError, TypeError):
-                    expiry_dt = datetime.max
+                    expiry_dt = datetime.max.replace(tzinfo=timezone.utc)
             elif has_expiry and isinstance(expiry_val, datetime):
                 expiry_dt = expiry_val
             else:
-                expiry_dt = datetime.max
+                expiry_dt = datetime.max.replace(tzinfo=timezone.utc)
+
+            if expiry_dt.tzinfo is None:
+                expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
 
             return (not has_expiry, expiry_dt, loc.get("position_id", 0), loc.get("id", 0))
 

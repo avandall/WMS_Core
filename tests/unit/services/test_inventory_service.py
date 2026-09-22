@@ -300,3 +300,89 @@ class TestInventoryLocationRepositoryIntegration:
         assert status["total_quantity"] == 80
 
 
+class TestTask039AcceptanceCriteria:
+    """Acceptance criteria unit tests for TASK-039:
+    - Timezone UTC consistency
+    - Suppress READ events on ListInventoryItems
+    - Guard release_reservation when reserved_qty == 0
+    """
+
+    @pytest.fixture
+    def db_session(self):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        yield session
+        session.close()
+
+    @pytest.fixture
+    def inventory_repo(self, db_session):
+        return InventoryRepo(db_session)
+
+    @pytest.fixture
+    def inventory_service(self, inventory_repo):
+        return InventoryService(inventory_repo)
+
+    def test_timezone_consistency(self):
+        from datetime import datetime, timezone
+        from app.shared.utils.domain import DateUtils
+
+        now_utc = DateUtils.get_current_datetime()
+        assert now_utc.tzinfo is not None
+        assert now_utc.tzinfo == timezone.utc
+
+    def test_list_inventory_no_event(self):
+        from unittest.mock import MagicMock
+        from inventory_service.grpc_servicer import InventoryServiceServicer
+
+        servicer = InventoryServiceServicer()
+        publisher = MagicMock()
+        servicer._publisher = publisher
+
+        # Mock service return
+        mock_item = MagicMock()
+        mock_item.product_id = 1
+        mock_item.quantity = 100
+        mock_service = MagicMock()
+        mock_service.get_all_inventory_items.return_value = [mock_item]
+
+        servicer._service = MagicMock(return_value=(mock_service, MagicMock()))
+
+        ctx = MagicMock()
+        request = MagicMock()
+
+        response = servicer.ListInventoryItems(request, ctx)
+        assert len(response.items) == 1
+        assert publisher.publish.call_count == 0
+
+    def test_release_reservation_zero_guard(self, inventory_service, inventory_repo):
+        """Verify release_reservation returns early without error when reserved_qty is 0 or status is RELEASED."""
+        inventory_service.adjust_inventory(
+            product_id=10,
+            quantity_delta=10,
+            warehouse_id=1,
+        )
+
+        res_id = inventory_service.reserve_stock(
+            source_type="test",
+            source_id=1,
+            document_id=1,
+            product_id=10,
+            warehouse_id=1,
+            quantity=5,
+        )
+
+        # Release first time
+        result1 = inventory_service.release_reservation(reservation_id=res_id)
+        assert result1 is True
+
+        res = inventory_repo.get_reservation(res_id)
+        assert res["status"] == "RELEASED"
+
+        # Release second time (reserved_qty is now 0 and status is RELEASED)
+        result2 = inventory_service.release_reservation(reservation_id=res_id)
+        assert result2 is True
+
+
+

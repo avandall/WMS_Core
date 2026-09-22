@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app.modules.documents.domain.entities.document import Document, DocumentType
@@ -114,7 +114,7 @@ class ReportOrchestrator:
             return {
                 "report_type": "business_overview",
                 "period": {"start_date": start_date, "end_date": end_date},
-                "generated_at": datetime.now(),
+                "generated_at": datetime.now(timezone.utc),
                 "inventory_summary": inventory_data,
                 "operations_summary": document_metrics,
                 "warehouse_summary": warehouse_metrics,
@@ -163,7 +163,7 @@ class ReportOrchestrator:
                     "customer_id": getattr(doc, "customer_id", None),
                 }
             )
-        results.sort(key=lambda r: r["created_at"] or datetime.min, reverse=True)
+        results.sort(key=lambda r: r["created_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
         return results
 
     def generate_sales_report(
@@ -211,7 +211,7 @@ class ReportOrchestrator:
                 if salesperson_lc in (getattr(d, "created_by", "") or "").lower()
             ]
 
-        documents.sort(key=lambda d: getattr(d, "created_at", datetime.min), reverse=True)
+        documents.sort(key=lambda d: getattr(d, "created_at", None) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
         sales_data: List[Dict[str, Any]] = []
         total_sales = 0.0
@@ -289,7 +289,7 @@ class ReportOrchestrator:
         return {
             "report_type": "warehouse_inventory",
             "warehouse": {"id": warehouse.warehouse_id, "location": warehouse.location},
-            "generated_at": datetime.now(),
+            "generated_at": datetime.now(timezone.utc),
             "total_items": len(report_items),
             "total_value": total_value,
             "inventory_items": report_items,
@@ -349,7 +349,7 @@ class ReportOrchestrator:
 
         return {
             "report_type": "total_inventory",
-            "generated_at": datetime.now(),
+            "generated_at": datetime.now(timezone.utc),
             "total_products": len(report_items),
             "total_value": total_value,
             "products": report_items,
@@ -387,7 +387,7 @@ class ReportOrchestrator:
             "report_type": "product_movement",
             "product": {"id": product.product_id, "name": product.name},
             "period": {"start_date": start_date, "end_date": end_date},
-            "generated_at": datetime.now(),
+            "generated_at": datetime.now(timezone.utc),
             "imported": imported,
             "exported": exported,
             "sold": sold,
@@ -435,7 +435,7 @@ class ReportOrchestrator:
         return {
             "report_type": "product_movement",
             "period": {"start_date": start_date, "end_date": end_date},
-            "generated_at": datetime.now(),
+            "generated_at": datetime.now(timezone.utc),
             "items": items,
         }
 
@@ -454,7 +454,7 @@ class ReportOrchestrator:
             "report_type": "warehouse_performance",
             "warehouse": {"id": warehouse_id, "location": warehouse.location},
             "period": {"start_date": start_date, "end_date": end_date},
-            "generated_at": datetime.now(),
+            "generated_at": datetime.now(timezone.utc),
             "total_documents": len(relevant_docs),
         }
 
@@ -479,7 +479,7 @@ class ReportOrchestrator:
         return {
             "report_type": "warehouse_performance",
             "period": {"start_date": start_date, "end_date": end_date},
-            "generated_at": datetime.now(),
+            "generated_at": datetime.now(timezone.utc),
             "items": items,
         }
 

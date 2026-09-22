@@ -23,7 +23,7 @@ class DocumentItemModel(Base):
 
     # TASK-003: Lot/Batch and Expiry management
     lot_number = Column(String(100), nullable=True, default="", index=True)
-    mfg_date = Column(DateTime, nullable=True)
-    expiry_date = Column(DateTime, nullable=True)
+    mfg_date = Column(DateTime(timezone=True), nullable=True)
+    expiry_date = Column(DateTime(timezone=True), nullable=True)
 
     document = relationship("DocumentModel", back_populates="items")

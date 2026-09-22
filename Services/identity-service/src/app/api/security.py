@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 from fastapi import HTTPException, status
@@ -75,7 +75,7 @@ class RateLimiter:
     async def _memory_rate_limit(self, client_ip: str, limit: int) -> bool:
         """In-memory rate limiting as fallback."""
         async with self.lock:
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             cutoff = now - timedelta(minutes=1)
             self.requests[client_ip] = [
                 t for t in self.requests[client_ip] if t > cutoff

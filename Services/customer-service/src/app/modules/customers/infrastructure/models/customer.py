@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import relationship
@@ -15,6 +15,6 @@ class CustomerModel(Base):
     phone = Column(String(50))
     address = Column(String(255))
     debt_balance = Column(Float, nullable=False, default=0.0)
-    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     purchases = relationship("CustomerPurchaseModel", back_populates="customer")

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer
 from sqlalchemy.orm import relationship
@@ -16,6 +16,6 @@ class CustomerPurchaseModel(Base):
     # independent service bootstrap and local testing.
     document_id = Column(Integer, nullable=False, index=True)
     total_value = Column(Float, nullable=False, default=0.0)
-    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     customer = relationship("CustomerModel", back_populates="purchases")

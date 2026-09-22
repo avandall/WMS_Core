@@ -9,7 +9,7 @@ from app.shared.core.database import Base
 
 
 def utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(timezone.utc)
 
 
 class InventorySummary(Base):

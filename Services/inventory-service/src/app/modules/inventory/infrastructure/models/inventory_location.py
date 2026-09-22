@@ -14,14 +14,14 @@ class InventoryLocationModel(Base):
     product_id = Column(BigInteger, nullable=False, index=True)
     lpn = Column(String(100), nullable=False, default="", index=True)
     lot_number = Column(String(100), nullable=False, default="", index=True)
-    mfg_date = Column(DateTime, nullable=True)
-    expiry_date = Column(DateTime, nullable=True, index=True)
+    mfg_date = Column(DateTime(timezone=True), nullable=True)
+    expiry_date = Column(DateTime(timezone=True), nullable=True, index=True)
     quantity = Column(Integer, nullable=False, default=0)
     allocated_qty = Column(Integer, nullable=False, default=0)
     status = Column(String(50), nullable=False, default="AVAILABLE", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -28,7 +28,7 @@ class PositionModel(Base):
     capacity = Column(Integer)
     zone = Column(String(50))
     is_active = Column(Integer, nullable=False, default=1, index=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     # Physical WMS address & attributes (TASK-029)
     aisle = Column(String(50), nullable=True)

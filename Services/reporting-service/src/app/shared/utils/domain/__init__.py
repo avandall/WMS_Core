@@ -6,7 +6,7 @@ Prefer placing new validation/business-rule logic directly on domain entities.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from app.shared.domain.business_exceptions import BusinessRuleViolationError, ValidationError
@@ -39,7 +39,7 @@ class BusinessRulesUtils:
 class DateUtils:
     @staticmethod
     def get_current_datetime() -> datetime:
-        return datetime.now()
+        return datetime.now(timezone.utc)
 
     @staticmethod
     def format_date_for_display(dt: datetime) -> str:

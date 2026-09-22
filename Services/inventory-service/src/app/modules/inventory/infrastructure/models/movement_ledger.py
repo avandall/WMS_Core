@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
 
@@ -12,4 +12,4 @@ class InventoryMovementLedgerModel(Base):
     movement_type = Column(String(50), nullable=False)
     document_id = Column(Integer, nullable=True, index=True)
     payload_json = Column(Text, nullable=False)
-    applied_at = Column(DateTime, default=datetime.now, nullable=False)
+    applied_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

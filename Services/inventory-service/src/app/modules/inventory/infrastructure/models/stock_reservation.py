@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import BigInteger, Column, DateTime, Integer, String, UniqueConstraint
 
@@ -19,10 +19,10 @@ class StockReservationModel(Base):
     released_qty = Column(Integer, nullable=False, default=0)
     consumed_qty = Column(Integer, nullable=False, default=0)
     status = Column(String(50), nullable=False, default="PENDING")  # PENDING, RESERVED, RELEASED, CONSUMED, EXPIRED
-    expires_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(String(255), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Phase 4: Idempotency key to prevent duplicate reservations
     # NOTE: unique=True is intentionally NOT set here; the named constraint in

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -25,18 +25,18 @@ class DocumentModel(Base):
     note = Column(String(500))
     customer_id = Column(Integer, nullable=True, index=True)
     owner_id = Column(String(100), nullable=True, default="DEFAULT_OWNER", index=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-    posted_at = Column(DateTime, index=True)
-    cancelled_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    posted_at = Column(DateTime(timezone=True), index=True)
+    cancelled_at = Column(DateTime(timezone=True))
     cancellation_reason = Column(String(500))
 
     # Phase 6: Document lifecycle fields
     transaction_type = Column(String(50), nullable=True)
     reason_code = Column(String(50), nullable=True)
     requested_by = Column(String(100), nullable=True)
-    approved_at = Column(DateTime, nullable=True)
-    execution_started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    execution_started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     assigned_to = Column(String(100), nullable=True)
 
     __table_args__ = (

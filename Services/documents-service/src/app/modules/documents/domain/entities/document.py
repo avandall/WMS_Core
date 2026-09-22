@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
@@ -115,7 +115,7 @@ class Document(DomainEntity):
         self.document_id = document_id
         self.doc_type = doc_type
         self.status = DocumentStatus.DRAFT
-        self.date = datetime.now()
+        self.date = datetime.now(timezone.utc)
         self.created_at = self.date
         self.posted_at = None
         self.cancelled_at = None
@@ -213,7 +213,7 @@ class Document(DomainEntity):
 
         self.status = DocumentStatus.POSTED
         self.approved_by = approved_by
-        self.posted_at = datetime.now()
+        self.posted_at = datetime.now(timezone.utc)
 
     def cancel(self, cancelled_by: str, reason: Optional[str] = None) -> None:
         if self.status == DocumentStatus.POSTED:
@@ -226,7 +226,7 @@ class Document(DomainEntity):
             raise ValidationError("cancelled_by must be a non-empty string")
 
         self.status = DocumentStatus.CANCELLED
-        self.cancelled_at = datetime.now()
+        self.cancelled_at = datetime.now(timezone.utc)
         self.cancelled_by = cancelled_by
         self.cancellation_reason = reason
 

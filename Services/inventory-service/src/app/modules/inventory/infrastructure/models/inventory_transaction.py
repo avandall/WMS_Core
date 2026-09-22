@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String, Text, UniqueConstraint
 
@@ -22,7 +22,7 @@ class InventoryTransactionModel(Base):
     available_qty_before = Column(Integer, nullable=True)
     available_qty_after = Column(Integer, nullable=True)
     user_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     payload = Column(Text, nullable=True)
     
     # Phase 9: Idempotency key to prevent duplicate transactions

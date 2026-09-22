@@ -2,7 +2,7 @@
 
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
@@ -134,7 +134,7 @@ def _seed_dev_users(conn) -> int:
                     "role": user["role"],
                     "full_name": user["full_name"],
                     "is_active": user["is_active"],
-                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 },
             )
             inserted += 1

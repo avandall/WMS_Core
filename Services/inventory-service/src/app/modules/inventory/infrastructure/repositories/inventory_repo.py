@@ -327,8 +327,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if not reservation:
             raise KeyError(f"Reservation {reservation_id} not found")
 
-        if reservation.status in ("RELEASED", "CONSUMED"):
-            return  # Already released or consumed
+        if reservation.status in ("RELEASED", "CONSUMED") or reservation.reserved_qty == 0:
+            return  # Already released, consumed, or zero reserved quantity
 
         qty_to_release = released_qty or reservation.reserved_qty - reservation.released_qty
         if qty_to_release <= 0:

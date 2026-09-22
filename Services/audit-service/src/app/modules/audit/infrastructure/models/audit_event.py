@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Column, DateTime, Index, Integer, String
 
@@ -21,7 +21,7 @@ class AuditEventModel(Base):
     entity_id = Column(String(100), nullable=True, index=True)
     warehouse_id = Column(Integer, nullable=True, index=True)
     payload = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     __table_args__ = (
         Index("ix_audit_events_action_created", "action", "created_at"),
