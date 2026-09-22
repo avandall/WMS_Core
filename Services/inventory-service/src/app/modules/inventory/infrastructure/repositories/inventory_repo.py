@@ -825,6 +825,16 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "customers": customers,
         }
 
+    def _get_active_reserved_qty(self, warehouse_id: int, product_id: int) -> int:
+        reserved_sum = self.session.execute(
+            select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
+                StockReservationModel.warehouse_id == warehouse_id,
+                StockReservationModel.product_id == product_id,
+                StockReservationModel.status == "RESERVED",
+            )
+        ).scalar()
+        return int(reserved_sum or 0)
+
     def sync_warehouse_inventory_summary(self, warehouse_id: int, product_id: int, owner_id: str = "DEFAULT_OWNER") -> None:
         owner_clean = owner_id or "DEFAULT_OWNER"
         total_physical = self.session.execute(
@@ -835,13 +845,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             )
         ).scalar() or 0
 
-        total_allocated = self.session.execute(
-            select(func.coalesce(func.sum(InventoryLocationModel.allocated_qty), 0)).where(
-                InventoryLocationModel.warehouse_id == warehouse_id,
-                InventoryLocationModel.owner_id == owner_clean,
-                InventoryLocationModel.product_id == product_id,
-            )
-        ).scalar() or 0
+        active_reserved = self._get_active_reserved_qty(warehouse_id, product_id)
 
         wh_inv = self.session.execute(
             select(WarehouseInventoryModel).where(
@@ -858,7 +862,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 product_id=product_id,
                 quantity=total_physical,
                 physical_qty=total_physical,
-                reserved_qty=total_allocated,
+                reserved_qty=active_reserved,
                 incoming_qty=0,
                 in_transit_qty=0,
             )
@@ -866,6 +870,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         else:
             wh_inv.quantity = total_physical
             wh_inv.physical_qty = total_physical
-            wh_inv.reserved_qty = total_allocated
+            wh_inv.reserved_qty = active_reserved
         self.session.flush()
+
 
