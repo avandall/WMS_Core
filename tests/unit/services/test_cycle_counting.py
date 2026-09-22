@@ -279,3 +279,30 @@ class TestCycleCounting:
         # Cannot generate adjustments for DRAFT sheet
         with pytest.raises(BusinessRuleViolationError):
             service.generate_inventory_adjustments("CC-STATE-001")
+
+    def test_cycle_count_survives_service_restart(
+        self, test_session, sample_items: list[CycleCountItem]
+    ) -> None:
+        """Test cycle count sheet state persists in DB across service restarts."""
+        service1 = CycleCountService(session=test_session)
+        service1.create_cycle_count_sheet(
+            cycle_count_id="CC-RS-001",
+            warehouse_id=1,
+            title="Restart Audit Test",
+            items=sample_items,
+            discrepancy_qty_threshold=5,
+        )
+        service1.start_cycle_count("CC-RS-001", assigned_to="staff_alex")
+        service1.record_counts("CC-RS-001", {"ITEM-001": 110, "ITEM-002": 50})
+        service1.submit_counts("CC-RS-001")
+
+        # Simulate service restart: instantiate NEW CycleCountService instance
+        service2 = CycleCountService(session=test_session)
+        sheet2 = service2.get_cycle_count_sheet("CC-RS-001")
+        assert sheet2.cycle_count_id == "CC-RS-001"
+        assert sheet2.assigned_to == "staff_alex"
+        assert sheet2.status == CycleCountStatus.PENDING_SUPERVISOR_APPROVAL
+        assert len(sheet2.items) == 2
+        assert sheet2.items[0].counted_qty == 110
+        assert sheet2.items[0].discrepancy_qty == 10
+

@@ -95,6 +95,9 @@ def import_all_models():
     model_modules = [
         "app.modules.documents.infrastructure.models.document",
         "app.modules.documents.infrastructure.models.document_item",
+        "app.modules.documents.infrastructure.models.picking_wave",
+        "app.modules.documents.infrastructure.models.cycle_count_sheet",
+        "app.modules.documents.infrastructure.models.carton_package",
     ]
     for module in model_modules:
         try:

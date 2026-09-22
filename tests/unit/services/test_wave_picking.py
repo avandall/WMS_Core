@@ -295,3 +295,56 @@ def test_invalid_measured_weight_validation(packing_service: PackingService) -> 
 
     with pytest.raises(ValidationError, match="must be positive"):
         packing_service.verify_check_weigher("CTN-004", measured_weight_g=0.0)
+
+
+def test_wave_survives_service_restart(test_session) -> None:
+    """Verify PickingWave state persists in database across service restarts."""
+    service1 = WaveService(session=test_session)
+    cutoff = datetime.now(timezone.utc)
+    wave1 = service1.create_wave(
+        wave_id="WAVE-RESTART-01",
+        carrier="SHOPEE_EXPRESS",
+        dispatch_cutoff=cutoff,
+    )
+    order = OutboundOrder(
+        order_id="ORD-RS-1",
+        carrier="SHOPEE_EXPRESS",
+        dispatch_cutoff=cutoff,
+        items=[OrderItem(product_id="P1", sku="SKU-1", quantity=5, unit_weight_g=100.0)],
+    )
+    wave1.add_order(order)
+    service1.release_wave("WAVE-RESTART-01")
+
+    # Simulate service restart: instantiate NEW WaveService instance
+    service2 = WaveService(session=test_session)
+    wave2 = service2.get_wave("WAVE-RESTART-01")
+    assert wave2.wave_id == "WAVE-RESTART-01"
+    assert wave2.carrier == "SHOPEE_EXPRESS"
+    assert wave2.status == WaveStatus.RELEASED
+    assert len(wave2.orders) == 1
+    assert wave2.orders[0].order_id == "ORD-RS-1"
+    assert len(wave2.picking_tasks) == 1
+    assert wave2.picking_tasks[0].total_quantity == 5
+
+
+def test_packing_survives_service_restart(test_session) -> None:
+    """Verify CartonPackage state persists in database across service restarts."""
+    service1 = PackingService(session=test_session)
+    service1.create_carton(
+        carton_id="CTN-RESTART-01",
+        order_id="ORD-RS-01",
+        items=[PackItem(product_id="P1", sku="SKU-1", quantity=2, unit_weight_g=500.0)],
+        packaging_tare_weight_g=100.0,
+    )
+    service1.verify_check_weigher("CTN-RESTART-01", measured_weight_g=1100.0)
+
+    # Simulate service restart: instantiate NEW PackingService instance
+    service2 = PackingService(session=test_session)
+    carton2 = service2.get_carton("CTN-RESTART-01")
+    assert carton2.carton_id == "CTN-RESTART-01"
+    assert carton2.order_id == "ORD-RS-01"
+    assert carton2.status == PackingStatus.WEIGHT_VERIFIED
+    assert carton2.measured_weight_g == 1100.0
+    assert carton2.verification_result is not None
+    assert carton2.verification_result.is_valid is True
+

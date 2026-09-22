@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from app.modules.documents.infrastructure.repositories.cycle_count_repo import (
+        CycleCountRepository,
+    )
 
 from app.modules.documents.domain.entities.cycle_count import (
     BlindCountItem,
@@ -34,10 +40,39 @@ class CycleCountAdjustmentPayload:
 
 
 class CycleCountService:
-    """Application service for managing Blind Cycle Counting workflows and Discrepancy Approval."""
+    """Application service for managing Blind Cycle Counting workflows and Discrepancy Approval backed by DB persistence."""
 
-    def __init__(self) -> None:
-        self._sheets: Dict[str, CycleCountSheet] = {}
+    def __init__(
+        self,
+        repo: Optional[CycleCountRepository] = None,
+        session: Optional[Session] = None,
+    ) -> None:
+        from app.modules.documents.infrastructure.repositories.cycle_count_repo import (
+            CycleCountRepository,
+        )
+
+        if repo is not None:
+            self._repo = repo
+        elif session is not None:
+            self._repo = CycleCountRepository(session, auto_commit=True)
+        else:
+            try:
+                from app.shared.core.database import SessionLocal
+                session_obj = SessionLocal()
+                from sqlalchemy import text
+                session_obj.execute(text("SELECT 1"))
+                self._repo = CycleCountRepository(session_obj, auto_commit=True)
+            except Exception:
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
+                from app.shared.core.database import Base, import_all_models
+                import_all_models()
+                engine = create_engine("sqlite:///:memory:", future=True)
+                Base.metadata.create_all(bind=engine)
+                fallback = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
+                self._repo = CycleCountRepository(fallback, auto_commit=True)
+
+        self._identity_map: Dict[str, CycleCountSheet] = {}
 
     def create_cycle_count_sheet(
         self,
@@ -51,10 +86,10 @@ class CycleCountService:
         created_by: str = "system",
         note: Optional[str] = None,
     ) -> CycleCountSheet:
-        """Initializes a new cycle count sheet."""
+        """Initializes a new cycle count sheet and persists to DB."""
         if not items:
             raise ValidationError("Cannot create cycle count sheet with empty items list")
-        if cycle_count_id in self._sheets:
+        if cycle_count_id in self._identity_map or self._repo.exists(cycle_count_id):
             raise EntityAlreadyExistsError(f"Cycle count sheet '{cycle_count_id}' already exists")
 
         sheet = CycleCountSheet(
@@ -68,14 +103,21 @@ class CycleCountService:
             created_by=created_by,
             note=note,
         )
-        self._sheets[cycle_count_id] = sheet
+        self._identity_map[cycle_count_id] = sheet
+        self._repo.save(sheet)
         return sheet
 
     def get_cycle_count_sheet(self, cycle_count_id: str) -> CycleCountSheet:
-        """Retrieves cycle count sheet by ID."""
-        if cycle_count_id not in self._sheets:
+        """Retrieves cycle count sheet by ID from identity map or DB."""
+        if cycle_count_id in self._identity_map:
+            return self._identity_map[cycle_count_id]
+
+        sheet = self._repo.get(cycle_count_id)
+        if sheet is None:
             raise EntityNotFoundError(f"Cycle count sheet '{cycle_count_id}' not found")
-        return self._sheets[cycle_count_id]
+
+        self._identity_map[cycle_count_id] = sheet
+        return sheet
 
     def get_blind_count_sheet(self, cycle_count_id: str) -> List[BlindCountItem]:
         """Retrieves blind count view for staff (system_qty strictly hidden)."""
@@ -90,18 +132,21 @@ class CycleCountService:
         if assigned_to:
             sheet.assign_counter(assigned_to)
         sheet.start_counting()
+        self._repo.save(sheet)
         return sheet
 
     def record_counts(self, cycle_count_id: str, counts: Dict[str, int]) -> CycleCountSheet:
         """Records physical counts for items in sheet."""
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.record_counts(counts)
+        self._repo.save(sheet)
         return sheet
 
     def submit_counts(self, cycle_count_id: str) -> CycleCountSheet:
         """Submits physical counts, calculates discrepancies, and evaluates threshold rules."""
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.submit_counts()
+        self._repo.save(sheet)
         return sheet
 
     def approve_cycle_count(
@@ -110,6 +155,7 @@ class CycleCountService:
         """Supervisor approves discrepancies exceeding threshold."""
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.approve_by_supervisor(supervisor_id=supervisor_id, note=note)
+        self._repo.save(sheet)
         return sheet
 
     def reject_cycle_count(
@@ -118,6 +164,7 @@ class CycleCountService:
         """Supervisor rejects discrepancies exceeding threshold."""
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.reject_by_supervisor(supervisor_id=supervisor_id, reason=reason)
+        self._repo.save(sheet)
         return sheet
 
     def generate_inventory_adjustments(

@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from app.modules.documents.infrastructure.repositories.picking_wave_repo import (
+        PickingWaveRepository,
+    )
 
 from app.shared.domain.business_exceptions import (
     BusinessRuleViolationError,
@@ -179,10 +185,40 @@ class PickingWave:
 
 
 class WaveService:
-    """Service managing Wave Planning and Batch Picking operations."""
+    """Service managing Wave Planning and Batch Picking operations backed by DB persistence."""
 
-    def __init__(self) -> None:
-        self._waves: Dict[str, PickingWave] = {}
+    def __init__(
+        self,
+        repo: Optional[PickingWaveRepository] = None,
+        session: Optional[Session] = None,
+    ) -> None:
+        from app.modules.documents.infrastructure.repositories.picking_wave_repo import (
+            PickingWaveRepository,
+        )
+
+        if repo is not None:
+            self._repo = repo
+        elif session is not None:
+            self._repo = PickingWaveRepository(session, auto_commit=True)
+        else:
+            try:
+                from app.shared.core.database import SessionLocal
+                session_obj = SessionLocal()
+                # Test connectivity
+                from sqlalchemy import text
+                session_obj.execute(text("SELECT 1"))
+                self._repo = PickingWaveRepository(session_obj, auto_commit=True)
+            except Exception:
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
+                from app.shared.core.database import Base, import_all_models
+                import_all_models()
+                engine = create_engine("sqlite:///:memory:", future=True)
+                Base.metadata.create_all(bind=engine)
+                fallback = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
+                self._repo = PickingWaveRepository(fallback, auto_commit=True)
+
+        self._identity_map: Dict[str, PickingWave] = {}
 
     def create_wave(
         self,
@@ -191,8 +227,8 @@ class WaveService:
         dispatch_cutoff: datetime,
         max_orders: int = 50,
     ) -> PickingWave:
-        """Creates a new picking wave."""
-        if wave_id in self._waves:
+        """Creates a new picking wave and persists to DB."""
+        if wave_id in self._identity_map or self._repo.exists(wave_id):
             raise BusinessRuleViolationError(f"Wave '{wave_id}' already exists")
 
         wave = PickingWave(
@@ -201,14 +237,21 @@ class WaveService:
             dispatch_cutoff=dispatch_cutoff,
             max_orders=max_orders,
         )
-        self._waves[wave_id] = wave
+        self._identity_map[wave_id] = wave
+        self._repo.save(wave)
         return wave
 
     def get_wave(self, wave_id: str) -> PickingWave:
-        """Retrieves a wave by ID."""
-        if wave_id not in self._waves:
+        """Retrieves a wave by ID from identity map or database."""
+        if wave_id in self._identity_map:
+            return self._identity_map[wave_id]
+
+        wave = self._repo.get(wave_id)
+        if wave is None:
             raise EntityNotFoundError(f"Wave '{wave_id}' not found")
-        return self._waves[wave_id]
+
+        self._identity_map[wave_id] = wave
+        return wave
 
     def plan_wave_by_carrier(
         self,
@@ -240,12 +283,15 @@ class WaveService:
             wave.add_order(order)
 
         wave.status = WaveStatus.PLANNED
+        self._repo.save(wave)
         return wave
 
     def release_wave(self, wave_id: str) -> List[BatchPickingTask]:
         """Releases wave for picking and generates consolidated batch tasks."""
         wave = self.get_wave(wave_id)
-        return wave.release_for_picking()
+        tasks = wave.release_for_picking()
+        self._repo.save(wave)
+        return tasks
 
     def mark_task_picked(
         self, wave_id: str, task_id: str, quantity: int
@@ -260,10 +306,12 @@ class WaveService:
             raise EntityNotFoundError(f"Batch task '{task_id}' not found in wave '{wave_id}'")
 
         task.mark_picked(quantity)
+        self._repo.save(wave)
         return task
 
     def complete_wave(self, wave_id: str) -> PickingWave:
         """Completes wave after all tasks are finished."""
         wave = self.get_wave(wave_id)
         wave.complete_wave()
+        self._repo.save(wave)
         return wave

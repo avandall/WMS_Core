@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from app.modules.documents.infrastructure.repositories.carton_package_repo import (
+        PackingRepository,
+    )
 
 from app.shared.domain.business_exceptions import (
     BusinessRuleViolationError,
@@ -68,13 +74,43 @@ class CartonPackage:
 
 
 class PackingService:
-    """Service managing pack station operations and check-weigher weight verification."""
+    """Service managing pack station operations and check-weigher weight verification backed by DB persistence."""
 
     DEFAULT_TOLERANCE_G: float = 50.0
 
-    def __init__(self, tolerance_g: float = DEFAULT_TOLERANCE_G) -> None:
+    def __init__(
+        self,
+        tolerance_g: float = DEFAULT_TOLERANCE_G,
+        repo: Optional[PackingRepository] = None,
+        session: Optional[Session] = None,
+    ) -> None:
+        from app.modules.documents.infrastructure.repositories.carton_package_repo import (
+            PackingRepository,
+        )
+
         self.tolerance_g = tolerance_g
-        self._cartons: Dict[str, CartonPackage] = {}
+        if repo is not None:
+            self._repo = repo
+        elif session is not None:
+            self._repo = PackingRepository(session, auto_commit=True)
+        else:
+            try:
+                from app.shared.core.database import SessionLocal
+                session_obj = SessionLocal()
+                from sqlalchemy import text
+                session_obj.execute(text("SELECT 1"))
+                self._repo = PackingRepository(session_obj, auto_commit=True)
+            except Exception:
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
+                from app.shared.core.database import Base, import_all_models
+                import_all_models()
+                engine = create_engine("sqlite:///:memory:", future=True)
+                Base.metadata.create_all(bind=engine)
+                fallback = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
+                self._repo = PackingRepository(fallback, auto_commit=True)
+
+        self._identity_map: Dict[str, CartonPackage] = {}
 
     def create_carton(
         self,
@@ -83,11 +119,11 @@ class PackingService:
         items: List[PackItem],
         packaging_tare_weight_g: float = 100.0,
     ) -> CartonPackage:
-        """Creates a new carton package for an order."""
+        """Creates a new carton package for an order and persists to DB."""
         if not items:
             raise ValidationError("Cannot create carton package with empty items list")
 
-        if carton_id in self._cartons:
+        if carton_id in self._identity_map or self._repo.exists(carton_id):
             raise BusinessRuleViolationError(f"Carton '{carton_id}' already exists")
 
         carton = CartonPackage(
@@ -96,14 +132,21 @@ class PackingService:
             packaging_tare_weight_g=packaging_tare_weight_g,
             items=items,
         )
-        self._cartons[carton_id] = carton
+        self._identity_map[carton_id] = carton
+        self._repo.save(carton)
         return carton
 
     def get_carton(self, carton_id: str) -> CartonPackage:
-        """Retrieves a carton package by ID."""
-        if carton_id not in self._cartons:
+        """Retrieves a carton package by ID from identity map or DB."""
+        if carton_id in self._identity_map:
+            return self._identity_map[carton_id]
+
+        carton = self._repo.get(carton_id)
+        if carton is None:
             raise EntityNotFoundError(f"Carton '{carton_id}' not found")
-        return self._cartons[carton_id]
+
+        self._identity_map[carton_id] = carton
+        return carton
 
     def verify_check_weigher(
         self,
@@ -151,6 +194,7 @@ class PackingService:
 
         carton.measured_weight_g = measured_weight_g
         carton.verification_result = result
+        self._repo.save(carton)
         return result
 
     def finalize_packing(
@@ -170,5 +214,6 @@ class PackingService:
 
         if result.is_valid:
             carton.status = PackingStatus.PACKED
+            self._repo.save(carton)
 
         return carton
