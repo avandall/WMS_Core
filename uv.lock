@@ -1603,7 +1603,6 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "pydantic" },
     { name = "pyjwt" },
-    { name = "rich" },
 ]
 
 [package.metadata]
@@ -1613,7 +1612,6 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.41.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyjwt", specifier = ">=2.8.0" },
-    { name = "rich", specifier = ">=13.0.0" },
 ]
 
 [[package]]
