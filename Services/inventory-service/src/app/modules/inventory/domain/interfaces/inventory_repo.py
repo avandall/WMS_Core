@@ -44,10 +44,6 @@ class IInventoryRepo(ABC):
         pass
 
     @abstractmethod
-    def adjust_quantity(self, product_id: int, quantity_delta: int) -> None:
-        pass
-
-    @abstractmethod
     def adjust_warehouse_quantity(
         self, product_id: int, warehouse_id: int, quantity_delta: int
     ) -> None:

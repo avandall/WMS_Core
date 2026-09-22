@@ -16,6 +16,7 @@ from app.modules.inventory.infrastructure.models.inventory import InventoryModel
 from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
 from app.modules.inventory.infrastructure.models.inventory_transaction import InventoryTransactionModel
 from app.modules.inventory.infrastructure.models.movement_ledger import InventoryMovementLedgerModel
+from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
 
 
@@ -27,44 +28,28 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
 
     def save(self, inventory_item: InventoryItem) -> None:
         row = self.session.execute(
-            select(InventoryModel).where(InventoryModel.product_id == inventory_item.product_id).with_for_update()
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == inventory_item.product_id,
+                WarehouseInventoryModel.warehouse_id == 1,
+            ).with_for_update()
         ).scalar_one_or_none()
         if row:
             row.quantity = inventory_item.quantity
+            row.physical_qty = inventory_item.quantity
         else:
-            row = InventoryModel(
-                product_id=inventory_item.product_id, quantity=inventory_item.quantity
+            row = WarehouseInventoryModel(
+                product_id=inventory_item.product_id,
+                warehouse_id=1,
+                quantity=inventory_item.quantity,
+                physical_qty=inventory_item.quantity,
             )
             self.session.add(row)
         self._commit_if_auto()
 
     def add_quantity(self, product_id: int, quantity: int) -> None:
-        row = self.session.execute(
-            select(InventoryModel).where(InventoryModel.product_id == product_id).with_for_update()
-        ).scalar_one_or_none()
-
         if quantity < 0:
-            if row:
-                # Adding negative to existing product
-                raise InvalidQuantityError("Cannot add negative quantity")
-            else:
-                # Starting with negative inventory
-                raise InvalidQuantityError(
-                    f"Cannot start with negative inventory for {product_id}"
-                )
-
-        if row:
-            row.quantity += quantity
-        else:
-            row = InventoryModel(product_id=product_id, quantity=quantity)
-            self.session.add(row)
-        self._commit_if_auto()
-
-    def adjust_quantity(self, product_id: int, quantity_delta: int) -> None:
-        if quantity_delta >= 0:
-            self.add_quantity(product_id, quantity_delta)
-            return
-        self.remove_quantity(product_id, abs(quantity_delta))
+            raise InvalidQuantityError("Cannot add negative quantity")
+        self.adjust_warehouse_quantity(product_id, 1, quantity)
 
     def adjust_warehouse_quantity(
         self, product_id: int, warehouse_id: int, quantity_delta: int
@@ -133,17 +118,31 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         self._commit_if_auto()
 
     def get_quantity(self, product_id: int) -> int:
-        row = self.session.get(InventoryModel, product_id)
-        return row.quantity if row else 0
+        result = self.session.execute(
+            select(func.coalesce(func.sum(WarehouseInventoryModel.physical_qty), 0)).where(
+                WarehouseInventoryModel.product_id == product_id
+            )
+        ).scalar()
+        return int(result or 0)
 
     def get_all(self, limit: int = 0, offset: int = 0) -> List[InventoryItem]:
-        query = select(InventoryModel).order_by(InventoryModel.product_id)
+        query = (
+            select(
+                WarehouseInventoryModel.product_id,
+                func.coalesce(func.sum(WarehouseInventoryModel.physical_qty), 0).label("total_qty"),
+            )
+            .group_by(WarehouseInventoryModel.product_id)
+            .order_by(WarehouseInventoryModel.product_id)
+        )
         if offset:
             query = query.offset(offset)
         if limit:
             query = query.limit(limit)
-        rows = self.session.execute(query).scalars().all()
-        return [self._to_domain(row) for row in rows]
+        rows = self.session.execute(query).all()
+        return [
+            InventoryItem(product_id=int(product_id), quantity=int(total_qty))
+            for product_id, total_qty in rows
+        ]
 
     def get_inventory_by_warehouse_rows(self) -> list[dict]:
         rows = self.session.execute(
@@ -206,30 +205,29 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         }
 
     def delete(self, product_id: int) -> None:
-        row = self.session.execute(
-            select(InventoryModel).where(InventoryModel.product_id == product_id).with_for_update()
-        ).scalar_one_or_none()
-        if not row:
-            return
-        if row.quantity != 0:
+        total_qty = self.get_quantity(product_id)
+        if total_qty != 0:
             raise InvalidQuantityError("Cannot delete item with non-zero quantity")
-        self.session.delete(row)
+        rows = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == product_id
+            ).with_for_update()
+        ).scalars().all()
+        for row in rows:
+            self.session.delete(row)
         self._commit_if_auto()
 
     def remove_quantity(self, product_id: int, quantity: int) -> None:
-        row = self.session.execute(
-            select(InventoryModel).where(InventoryModel.product_id == product_id).with_for_update()
-        ).scalar_one_or_none()
-        if not row:
-            raise KeyError(f"Product {product_id} not found in inventory")
         if quantity < 0:
             raise InvalidQuantityError("Cannot remove negative quantity")
-        if quantity > row.quantity:
+        total_qty = self.get_quantity(product_id)
+        if total_qty == 0:
+            raise KeyError(f"Product {product_id} not found in inventory")
+        if quantity > total_qty:
             raise InsufficientStockError(
-                f"Insufficient stock. Available: {row.quantity}, Requested: {quantity}"
+                f"Insufficient stock. Available: {total_qty}, Requested: {quantity}"
             )
-        row.quantity -= quantity
-        self._commit_if_auto()
+        self.adjust_warehouse_quantity(product_id, 1, -quantity)
 
     def has_movement_event(self, event_id: str) -> bool:
         return self.session.get(InventoryMovementLedgerModel, event_id) is not None
@@ -272,7 +270,6 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         idempotency_key: str | None,
         expires_at: datetime | None,
     ) -> int:
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
         # Check for idempotency
         if idempotency_key:
@@ -323,7 +320,6 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         return reservation.id
 
     def release_reservation(self, reservation_id: int, released_qty: int | None = None) -> None:
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
         reservation = self.session.execute(
             select(StockReservationModel).where(StockReservationModel.id == reservation_id).with_for_update()
@@ -358,7 +354,6 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         self._commit_if_auto()
 
     def consume_reservation(self, reservation_id: int, consumed_qty: int) -> None:
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
         reservation = self.session.execute(
             select(StockReservationModel).where(StockReservationModel.id == reservation_id).with_for_update()
@@ -396,7 +391,6 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
 
     def get_reservation(self, reservation_id: int) -> dict | None:
         """Return reservation details as a plain dict, or None if not found."""
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
         row = self.session.get(StockReservationModel, reservation_id)
         if not row:
             return None
@@ -418,7 +412,6 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         status: str | None = None,
         document_id: int | None = None,
     ) -> list[dict]:
-        from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 
         query = select(StockReservationModel)
         if product_id:

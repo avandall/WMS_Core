@@ -276,3 +276,27 @@ class TestInventoryLocationRepositoryIntegration:
             db_session.flush()
         db_session.rollback()
 
+    def test_total_quantity_equals_sum_of_warehouses(self, inventory_service, inventory_repo):
+        """TASK-030 Acceptance Criteria:
+        Adjust 2 warehouse quantities separately, total quantity must equal the sum of warehouse physical quantities.
+        """
+        product_id = 999
+        # Adjust 50 units in Warehouse 1
+        inventory_service.adjust_inventory(
+            product_id=product_id, quantity_delta=50, warehouse_id=1
+        )
+        # Adjust 30 units in Warehouse 2
+        inventory_service.adjust_inventory(
+            product_id=product_id, quantity_delta=30, warehouse_id=2
+        )
+
+        total_qty = inventory_service.get_total_quantity(product_id)
+        assert total_qty == 80  # 50 + 30
+
+        repo_qty = inventory_repo.get_quantity(product_id)
+        assert repo_qty == 80
+
+        status = inventory_service.get_inventory_status(product_id)
+        assert status["total_quantity"] == 80
+
+

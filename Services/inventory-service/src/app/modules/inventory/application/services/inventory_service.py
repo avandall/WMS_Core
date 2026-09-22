@@ -100,38 +100,36 @@ class InventoryService:
         if event_id and self.inventory_repo.has_movement_event(event_id):
             return False
 
-        if warehouse_id is not None:
-            WarehouseLocation(warehouse_id)
-            self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, quantity_delta)
-        self.inventory_repo.adjust_quantity(product_id, quantity_delta)
+        target_warehouse_id = warehouse_id if warehouse_id is not None else 1
+        WarehouseLocation(target_warehouse_id)
+        self.inventory_repo.adjust_warehouse_quantity(product_id, target_warehouse_id, quantity_delta)
         self._record_movement(
             event_id=event_id,
             movement_type="InventoryAdjusted",
             document_id=None,
             payload={
                 "product_id": product_id,
-                "warehouse_id": warehouse_id,
+                "warehouse_id": target_warehouse_id,
                 "quantity_delta": quantity_delta,
                 "reason": reason,
             },
         )
         # Phase 9: Write immutable ledger entry for every adjustment
-        if warehouse_id is not None:
-            tx_type = transaction_type or ("ADJUSTMENT_IN" if quantity_delta > 0 else "ADJUSTMENT_OUT")
-            self._write_transaction(
-                transaction_type=tx_type,
-                product_id=product_id,
-                warehouse_id=warehouse_id,
-                quantity=abs(quantity_delta),
-                idempotency_key=f"{event_id}:adjustment" if event_id else None,
-                payload={"reason": reason, "quantity_delta": quantity_delta},
-            )
+        tx_type = transaction_type or ("ADJUSTMENT_IN" if quantity_delta > 0 else "ADJUSTMENT_OUT")
+        self._write_transaction(
+            transaction_type=tx_type,
+            product_id=product_id,
+            warehouse_id=target_warehouse_id,
+            quantity=abs(quantity_delta),
+            idempotency_key=f"{event_id}:adjustment" if event_id else None,
+            payload={"reason": reason, "quantity_delta": quantity_delta},
+        )
         event_payload = {
             "event_id": event_id,
             "entity_type": "inventory",
             "entity_id": product_id,
             "product_id": product_id,
-            "warehouse_id": warehouse_id,
+            "warehouse_id": target_warehouse_id,
             "quantity_delta": quantity_delta,
             "reason": reason,
         }
@@ -492,13 +490,11 @@ class InventoryService:
         Sku(product_id)
         WarehouseLocation(warehouse_id)
         self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, quantity)
-        self.inventory_repo.adjust_quantity(product_id, quantity if total_delta is None else total_delta)
 
     def _apply_outbound(self, product_id: int, warehouse_id: int, quantity: int) -> None:
         Sku(product_id)
         WarehouseLocation(warehouse_id)
         self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, -quantity)
-        self.inventory_repo.adjust_quantity(product_id, -quantity)
 
     def _record_movement(
         self,
