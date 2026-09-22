@@ -347,7 +347,7 @@ class TestTask039AcceptanceCriteria:
         mock_service = MagicMock()
         mock_service.get_all_inventory_items.return_value = [mock_item]
 
-        servicer._service = MagicMock(return_value=(mock_service, MagicMock()))
+        servicer._service = MagicMock(return_value=mock_service)
 
         ctx = MagicMock()
         request = MagicMock()
