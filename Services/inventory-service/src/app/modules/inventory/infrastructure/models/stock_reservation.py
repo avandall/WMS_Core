@@ -32,5 +32,4 @@ class StockReservationModel(Base):
 
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_stock_reservation_idempotency"),
-        UniqueConstraint("source_type", "source_id", name="uq_stock_reservation_source"),
     )

@@ -31,6 +31,7 @@ from app.shared.domain.business_exceptions import (  # noqa: E402
     InvalidQuantityError,
 )
 from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel  # noqa: E402
+from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel  # noqa: E402
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo  # noqa: E402
 from app.modules.inventory.application.services.inventory_service import InventoryService  # noqa: E402
 
@@ -190,3 +191,88 @@ class TestInventoryLocationRepositoryIntegration:
             warehouse_id=1, product_id=100
         )
         assert len(all_sku100_locs) == 2
+
+    def test_reservation_multi_product_same_document(self, db_session, inventory_repo):
+        """TASK-017 Acceptance Criteria:
+        - Reserving 5 different products for the same sale document (same source_type & source_id)
+          must succeed without IntegrityError.
+        - 5 reservation rows must be created in StockReservationModel.
+        - Idempotency key uniqueness remains enforced.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        warehouse_id = 1
+        doc_id = 9999
+        products = [101, 102, 103, 104, 105]
+
+        # 1. Seed stock for 5 products in warehouse 1 so ATP check passes
+        for pid in products:
+            inventory_repo.adjust_location_quantity(
+                warehouse_id=warehouse_id,
+                position_id=1,
+                product_id=pid,
+                quantity_delta=100,
+                allocated_delta=0,
+                lpn=f"PALLET-{pid}",
+                status="AVAILABLE",
+            )
+
+        # 2. Call create_reservation for each product under the same document
+        reservation_ids = []
+        for pid in products:
+            event_id = f"doc_{doc_id}_product_{pid}"
+            res_id = inventory_repo.create_reservation(
+                source_type="sale_document",
+                source_id=doc_id,
+                document_id=doc_id,
+                product_id=pid,
+                warehouse_id=warehouse_id,
+                requested_qty=10,
+                created_by="test_user",
+                idempotency_key=event_id,
+                expires_at=None,
+            )
+            reservation_ids.append(res_id)
+
+        # 3. Verify 5 distinct reservation rows were created
+        assert len(reservation_ids) == 5
+        assert len(set(reservation_ids)) == 5
+
+        reservations = db_session.query(StockReservationModel).filter(
+            StockReservationModel.source_type == "sale_document",
+            StockReservationModel.source_id == doc_id,
+        ).all()
+        assert len(reservations) == 5
+
+        # 4. Verify idempotency protection: reusing existing idempotency_key returns existing reservation ID
+        first_pid = products[0]
+        duplicate_res_id = inventory_repo.create_reservation(
+            source_type="sale_document",
+            source_id=doc_id,
+            document_id=doc_id,
+            product_id=first_pid,
+            warehouse_id=warehouse_id,
+            requested_qty=10,
+            created_by="test_user",
+            idempotency_key=f"doc_{doc_id}_product_{first_pid}",
+            expires_at=None,
+        )
+        assert duplicate_res_id == reservation_ids[0]
+
+        # 5. Verify direct insertion of duplicate idempotency_key triggers IntegrityError
+        dup_model = StockReservationModel(
+            source_type="sale_document",
+            source_id=doc_id,
+            document_id=doc_id,
+            product_id=999,
+            warehouse_id=warehouse_id,
+            requested_qty=5,
+            reserved_qty=5,
+            status="RESERVED",
+            idempotency_key=f"doc_{doc_id}_product_{first_pid}",
+        )
+        db_session.add(dup_model)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+        db_session.rollback()
+
