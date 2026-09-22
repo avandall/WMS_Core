@@ -17,7 +17,7 @@ TARGETS = {
     "Services/customer-service": ("src/customer_service/gen", ["wms/customer", "wms/identity"]),
     "Services/product-service": ("src/product_service/gen", ["wms/product", "wms/identity"]),
     "Services/warehouse-service": ("src/warehouse_service/gen", ["wms/warehouse", "wms/identity"]),
-    "Services/inventory-service": ("src/inventory_service/gen", ["wms/inventory"]),
+    "Services/inventory-service": ("src/inventory_service/gen", ["wms/inventory", "wms/documents"]),
     "Services/documents-service": ("src/documents_service/gen", ["wms/documents", "wms/inventory"]),
     "Services/audit-service": ("src/audit_service/gen", ["wms/audit"]),
     "Services/reporting-service": ("src/reporting_service/gen", ["wms/reporting"]),

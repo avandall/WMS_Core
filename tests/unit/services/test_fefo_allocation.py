@@ -8,9 +8,7 @@ from app.shared.domain.business_exceptions import InsufficientStockError, Invali
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
 from app.modules.inventory.application.services.allocation_service import AllocationService
 from app.modules.inventory.application.services.inventory_service import InventoryService
-from app.modules.documents.infrastructure.models.document import DocumentModel
-from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
-from app.modules.documents.domain.entities.document import DocumentType, DocumentStatus
+
 
 
 @pytest.fixture
@@ -144,6 +142,9 @@ def test_fefo_allocation_invalid_quantity(db_session):
 
 
 def test_product_recall_query(db_session):
+    from unittest.mock import MagicMock, patch
+    from inventory_service.gen.wms.documents.v1 import documents_pb2
+
     repo = InventoryRepo(db_session)
     inv_service = InventoryService(repo)
 
@@ -153,29 +154,30 @@ def test_product_recall_query(db_session):
         lot_number="LOT-RECALL-99",
     )
 
-    # Add document item received by customer 777
-    doc = DocumentModel(
+    mock_doc = documents_pb2.Document(
         document_id=501,
-        doc_type=DocumentType.SALE.value,
-        status=DocumentStatus.COMPLETED.value,
+        doc_type="SALE",
+        status="COMPLETED",
         customer_id=777,
         from_warehouse_id=1,
         created_by="Admin",
+        items=[
+            documents_pb2.DocumentItem(
+                product_id=999,
+                quantity=25,
+                unit_price=10.0,
+                lot_number="LOT-RECALL-99",
+            )
+        ],
     )
-    db_session.add(doc)
-    db_session.flush()
 
-    doc_item = DocumentItemModel(
-        document_id=501,
-        product_id=999,
-        quantity=25,
-        unit_price=10.0,
-        lot_number="LOT-RECALL-99",
-    )
-    db_session.add(doc_item)
-    db_session.flush()
+    mock_stub = MagicMock()
+    mock_stub.GetDocument.return_value = mock_doc
+    mock_stub.ListDocuments.return_value = documents_pb2.ListDocumentsResponse(documents=[mock_doc])
 
-    recall_res = inv_service.recall_query("LOT-RECALL-99")
+    with patch("inventory_service.grpc_client.get_documents_stub") as mock_get_stub:
+        mock_get_stub.return_value.__enter__.return_value = mock_stub
+        recall_res = inv_service.recall_query("LOT-RECALL-99")
 
     assert recall_res["lot_number"] == "LOT-RECALL-99"
     assert len(recall_res["locations"]) == 1

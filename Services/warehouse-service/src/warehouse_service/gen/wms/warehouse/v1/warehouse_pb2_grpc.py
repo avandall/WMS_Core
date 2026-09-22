@@ -59,6 +59,16 @@ class WarehouseServiceStub(object):
                 request_serializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.TransferAllInventoryRequest.SerializeToString,
                 response_deserializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.TransferAllInventoryResponse.FromString,
                 _registered_method=True)
+        self.GetPosition = channel.unary_unary(
+                '/wms.warehouse.v1.WarehouseService/GetPosition',
+                request_serializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.GetPositionRequest.SerializeToString,
+                response_deserializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.Position.FromString,
+                _registered_method=True)
+        self.ListPositions = channel.unary_unary(
+                '/wms.warehouse.v1.WarehouseService/ListPositions',
+                request_serializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.ListPositionsRequest.SerializeToString,
+                response_deserializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.ListPositionsResponse.FromString,
+                _registered_method=True)
 
 
 class WarehouseServiceServicer(object):
@@ -94,6 +104,18 @@ class WarehouseServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetPosition(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListPositions(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_WarehouseServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -121,6 +143,16 @@ def add_WarehouseServiceServicer_to_server(servicer, server):
                     servicer.TransferAllInventory,
                     request_deserializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.TransferAllInventoryRequest.FromString,
                     response_serializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.TransferAllInventoryResponse.SerializeToString,
+            ),
+            'GetPosition': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPosition,
+                    request_deserializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.GetPositionRequest.FromString,
+                    response_serializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.Position.SerializeToString,
+            ),
+            'ListPositions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListPositions,
+                    request_deserializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.ListPositionsRequest.FromString,
+                    response_serializer=wms_dot_warehouse_dot_v1_dot_warehouse__pb2.ListPositionsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -258,6 +290,60 @@ class WarehouseService(object):
             '/wms.warehouse.v1.WarehouseService/TransferAllInventory',
             wms_dot_warehouse_dot_v1_dot_warehouse__pb2.TransferAllInventoryRequest.SerializeToString,
             wms_dot_warehouse_dot_v1_dot_warehouse__pb2.TransferAllInventoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPosition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.warehouse.v1.WarehouseService/GetPosition',
+            wms_dot_warehouse_dot_v1_dot_warehouse__pb2.GetPositionRequest.SerializeToString,
+            wms_dot_warehouse_dot_v1_dot_warehouse__pb2.Position.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListPositions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.warehouse.v1.WarehouseService/ListPositions',
+            wms_dot_warehouse_dot_v1_dot_warehouse__pb2.ListPositionsRequest.SerializeToString,
+            wms_dot_warehouse_dot_v1_dot_warehouse__pb2.ListPositionsResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -762,52 +762,61 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
 
         customers = []
         try:
-            try:
-                from app.modules.documents.infrastructure.models.document import DocumentModel
-                from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
-            except (ImportError, ModuleNotFoundError):
-                import sys
-                import importlib
-                from pathlib import Path
-                services_dir = Path(__file__).resolve().parents[7]
-                for s in services_dir.glob("*/src"):
-                    if str(s) not in sys.path:
-                        sys.path.insert(0, str(s))
+            candidate_doc_ids: set[int] = set()
 
-                if "app" in sys.modules and hasattr(sys.modules["app"], "__path__"):
-                    for s in services_dir.glob("*/src"):
-                        p = str(s / "app")
-                        if (s / "app").exists() and p not in sys.modules["app"].__path__:
-                            sys.modules["app"].__path__.append(p)
+            tx_doc_ids = self.session.execute(
+                select(InventoryTransactionModel.document_id).where(
+                    InventoryTransactionModel.document_id.isnot(None)
+                )
+            ).scalars().all()
+            candidate_doc_ids.update(int(d) for d in tx_doc_ids if d)
 
-                if "app.modules" in sys.modules and hasattr(sys.modules["app.modules"], "__path__"):
-                    for s in services_dir.glob("*/src"):
-                        p = str(s / "app" / "modules")
-                        if (s / "app" / "modules").exists() and p not in sys.modules["app.modules"].__path__:
-                            sys.modules["app.modules"].__path__.append(p)
+            res_doc_ids = self.session.execute(
+                select(StockReservationModel.document_id).where(
+                    StockReservationModel.document_id.isnot(None)
+                )
+            ).scalars().all()
+            candidate_doc_ids.update(int(d) for d in res_doc_ids if d)
 
-                importlib.invalidate_caches()
-                from app.modules.documents.infrastructure.models.document import DocumentModel
-                from app.modules.documents.infrastructure.models.document_item import DocumentItemModel
+            ledger_doc_ids = self.session.execute(
+                select(InventoryMovementLedgerModel.document_id).where(
+                    InventoryMovementLedgerModel.document_id.isnot(None)
+                )
+            ).scalars().all()
+            candidate_doc_ids.update(int(d) for d in ledger_doc_ids if d)
 
+            from inventory_service.grpc_client import get_documents_stub
+            from inventory_service.gen.wms.documents.v1 import documents_pb2
 
-            doc_rows = self.session.execute(
-                select(DocumentItemModel, DocumentModel)
-                .join(DocumentModel, DocumentItemModel.document_id == DocumentModel.document_id)
-                .where(DocumentItemModel.lot_number == lot_number)
-            ).all()
-            for item_row, doc_row in doc_rows:
-                customers.append({
-                    "customer_id": doc_row.customer_id,
-                    "document_id": int(doc_row.document_id),
-                    "doc_type": str(doc_row.doc_type),
-                    "product_id": int(item_row.product_id),
-                    "quantity": int(item_row.quantity),
-                    "lot_number": item_row.lot_number or "",
-                })
+            with get_documents_stub() as stub:
+                try:
+                    list_resp = stub.ListDocuments(documents_pb2.ListDocumentsRequest(page=1, page_size=100))
+                    for doc in list_resp.documents:
+                        if doc.document_id:
+                            candidate_doc_ids.add(int(doc.document_id))
+                except Exception:
+                    pass
+
+                for doc_id in sorted(candidate_doc_ids):
+                    try:
+                        doc = stub.GetDocument(documents_pb2.GetDocumentRequest(document_id=doc_id))
+                        if not doc or not doc.document_id:
+                            continue
+                        for item in doc.items:
+                            if getattr(item, "lot_number", "") == lot_number:
+                                customers.append({
+                                    "customer_id": int(doc.customer_id),
+                                    "document_id": int(doc.document_id),
+                                    "doc_type": str(doc.doc_type),
+                                    "product_id": int(item.product_id),
+                                    "quantity": int(item.quantity),
+                                    "lot_number": str(item.lot_number or ""),
+                                })
+                    except Exception:
+                        continue
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning("Recall query customer lookup failed: %s", e)
+            logging.getLogger(__name__).warning("Recall query customer lookup via gRPC failed: %s", e)
 
 
         return {

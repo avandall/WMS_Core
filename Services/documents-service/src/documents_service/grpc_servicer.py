@@ -49,6 +49,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                     product_id=int(i.product_id),
                     quantity=int(i.quantity),
                     unit_price=float(getattr(i, "unit_price", 0) or 0),
+                    lot_number=str(getattr(i, "lot_number", "") or ""),
                 )
                 for i in (getattr(doc, "items", []) or [])
             ],
