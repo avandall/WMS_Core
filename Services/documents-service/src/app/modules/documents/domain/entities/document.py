@@ -174,10 +174,12 @@ class Document(DomainEntity):
 
     def add_item(self, item: DocumentProduct) -> None:
         self._ensure_draft_status()
+        item_lot = getattr(item, "lot_number", "") or ""
         for existing_item in self.items:
-            if existing_item.product_id == item.product_id:
+            existing_lot = getattr(existing_item, "lot_number", "") or ""
+            if existing_item.product_id == item.product_id and existing_lot == item_lot:
                 raise BusinessRuleViolationError(
-                    f"Product {item.product_id} already exists in document"
+                    f"Product {item.product_id} with lot '{item_lot}' already exists in document"
                 )
         self.items.append(item)
 
