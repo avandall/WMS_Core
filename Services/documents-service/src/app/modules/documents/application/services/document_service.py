@@ -239,6 +239,16 @@ class DocumentService:
         request_id: Optional[str] = None,
     ) -> Document:
         document = self.get_document(document_id)  # raises DocumentNotFoundError if missing
+
+        # TASK-019 [BIZ-03]: Auto-release reservation if document is in RESERVED/IN_PROGRESS status
+        # or has active reserved stock
+        if (
+            document.status in (DocumentStatus.RESERVED, DocumentStatus.PARTIALLY_RESERVED, DocumentStatus.IN_PROGRESS)
+            or any(item.reserved_qty > 0 for item in document.items)
+        ):
+            self.release_request_reservation(document_id, request_id)
+            document = self.get_document(document_id)
+
         document.cancel(cancelled_by, reason)
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -378,13 +388,14 @@ class DocumentService:
         with configured_grpc_channel(inventory_addr) as channel:
             stub = inventory_pb2_grpc.InventoryServiceStub(channel)
             for item in document.items:
-                if item.reserved_qty > 0:
+                if item.reserved_qty > 0 or document.status in (DocumentStatus.RESERVED, DocumentStatus.PARTIALLY_RESERVED, DocumentStatus.IN_PROGRESS):
                     try:
                         list_resp = stub.ListReservations(
                             inventory_pb2.ListReservationsRequest(
                                 product_id=int(item.product_id),
-                                warehouse_id=int(document.from_warehouse_id),
+                                warehouse_id=int(document.from_warehouse_id) if document.from_warehouse_id else 0,
                                 status="RESERVED",
+                                document_id=int(document_id),
                             ),
                             timeout=10,
                         )
