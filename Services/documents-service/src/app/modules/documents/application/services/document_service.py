@@ -592,7 +592,32 @@ class DocumentService:
         )
         return document
 
-    def _commit_if_needed(self) -> None:
+    def revert_to_in_progress(
+        self,
+        document_id: int,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Reverts document status back to IN_PROGRESS after saga failure/compensation."""
+        document = self.get_document(document_id)
+        document.status = DocumentStatus.IN_PROGRESS
+
+        self.document_repo.save(document)
+        self._commit_if_needed()
+
+        self.event_publisher.publish(
+            event_type="DocumentRevertedToInProgress",
+            payload={
+                "event_id": f"documents:{document_id}:reverted-in-progress",
+                "request_id": request_id,
+                "document_id": document_id,
+                "status": document.status.value,
+                "entity_type": "document",
+                "entity_id": document_id,
+            },
+        )
+        return document
+
+    def _commit_if_needed( self) -> None:
 
         if self.session:
             self.session.commit()

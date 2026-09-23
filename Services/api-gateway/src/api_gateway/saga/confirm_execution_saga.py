@@ -79,6 +79,7 @@ class ConfirmExecutionSaga:
         self.document_id: int = document_id
         self.state: SagaState = SagaState.PENDING
         self.executed_steps: list[ExecutedInventoryStep] = []
+        self.dlq_retry_stack: list[dict[str, Any]] = []
         self.error_message: str | None = None
 
     def execute(self, payload: ConfirmExecutionPayload, request: Request) -> dict[str, Any]:
@@ -283,7 +284,11 @@ class ConfirmExecutionSaga:
         return {"message": confirm_resp.message}
 
     def compensate(self, request: Request) -> None:
-        """Executes compensating actions for all previously executed inventory steps in reverse order."""
+        """Executes compensating actions for all previously executed inventory steps in reverse order,
+
+        then reverts document status to IN_PROGRESS.
+        Pushes failed compensation steps into dlq_retry_stack and logs CRITICAL errors.
+        """
         self.state = SagaState.COMPENSATING
         md = _extract_md(request)
 
@@ -294,8 +299,7 @@ class ConfirmExecutionSaga:
         )
 
         with inventory_stub() as inv_stub:
-            while self.executed_steps:
-                step = self.executed_steps.pop()
+            for step in reversed(self.executed_steps):
                 try:
                     # Inverse action selection:
                     # Outbound forward steps subtract stock -> Compensate with ADJUSTMENT_IN (adds stock back)
@@ -332,10 +336,43 @@ class ConfirmExecutionSaga:
                         compensating_tx_type,
                     )
                 except Exception as comp_exc:
-                    logger.error(
-                        "Failed compensating step for product_id=%d: %s",
+                    logger.critical(
+                        "Failed compensating step for product_id=%d on doc %d: %s",
                         step.product_id,
+                        self.document_id,
                         comp_exc,
                     )
+                    self.dlq_retry_stack.append({
+                        "action": "inventory_compensation",
+                        "document_id": self.document_id,
+                        "product_id": step.product_id,
+                        "transaction_type": step.transaction_type,
+                        "warehouse_id": step.warehouse_id,
+                        "quantity": step.quantity,
+                        "error": str(comp_exc),
+                    })
+
+        with documents_stub() as doc_stub:
+            try:
+                doc_stub.RevertToInProgress(
+                    documents_pb2.RevertToInProgressRequest(document_id=self.document_id),
+                    timeout=GRPC_TIMEOUT_SLOW,
+                    metadata=md,
+                )
+                logger.info(
+                    "Reverted document %d status to IN_PROGRESS after compensation",
+                    self.document_id,
+                )
+            except Exception as doc_exc:
+                logger.critical(
+                    "Failed to revert document %d status to IN_PROGRESS during saga compensation: %s",
+                    self.document_id,
+                    doc_exc,
+                )
+                self.dlq_retry_stack.append({
+                    "action": "revert_document_status",
+                    "document_id": self.document_id,
+                    "error": str(doc_exc),
+                })
 
         self.state = SagaState.FAILED

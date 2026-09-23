@@ -295,5 +295,21 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             context.set_details(str(exc))
             return documents_pb2.CompleteRequestResponse(message=str(exc))
 
+    def RevertToInProgress(self, request: documents_pb2.RevertToInProgressRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                service.revert_to_in_progress(
+                    int(request.document_id),
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.RevertToInProgressResponse(
+                    message=f"Document {int(request.document_id)} reverted to IN_PROGRESS successfully"
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(exc))
+            return documents_pb2.RevertToInProgressResponse(message=str(exc))
+
 
 add_DocumentsServiceServicer_to_server = documents_pb2_grpc.add_DocumentsServiceServicer_to_server

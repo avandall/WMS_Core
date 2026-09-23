@@ -20,6 +20,7 @@ service DocumentsService {
   rpc StartExecution(StartExecutionRequest) returns (StartExecutionResponse);
   rpc ConfirmExecution(ConfirmExecutionRequest) returns (ConfirmExecutionResponse);
   rpc CompleteRequest(CompleteRequestRequest) returns (CompleteRequestResponse);
+  rpc RevertToInProgress(RevertToInProgressRequest) returns (RevertToInProgressResponse);
 }
 
 message DocumentItem {
@@ -141,6 +142,14 @@ message CompleteRequestRequest {
 }
 
 message CompleteRequestResponse {
+  string message = 1;
+}
+
+message RevertToInProgressRequest {
+  int64 document_id = 1;
+}
+
+message RevertToInProgressResponse {
   string message = 1;
 }
 

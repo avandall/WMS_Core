@@ -104,6 +104,11 @@ class DocumentsServiceStub(object):
                 request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestRequest.SerializeToString,
                 response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestResponse.FromString,
                 _registered_method=True)
+        self.RevertToInProgress = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/RevertToInProgress',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressResponse.FromString,
+                _registered_method=True)
 
 
 class DocumentsServiceServicer(object):
@@ -196,6 +201,12 @@ class DocumentsServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RevertToInProgress(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DocumentsServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -268,6 +279,11 @@ def add_DocumentsServiceServicer_to_server(servicer, server):
                     servicer.CompleteRequest,
                     request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestRequest.FromString,
                     response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestResponse.SerializeToString,
+            ),
+            'RevertToInProgress': grpc.unary_unary_rpc_method_handler(
+                    servicer.RevertToInProgress,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -648,6 +664,33 @@ class DocumentsService(object):
             '/wms.documents.v1.DocumentsService/CompleteRequest',
             wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestRequest.SerializeToString,
             wms_dot_documents_dot_v1_dot_documents__pb2.CompleteRequestResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RevertToInProgress(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/RevertToInProgress',
+            wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressResponse.FromString,
             options,
             channel_credentials,
             insecure,
