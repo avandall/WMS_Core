@@ -15,6 +15,7 @@ from app.modules.warehouses.infrastructure.repositories.warehouse_repo import Wa
 from app.shared.core.database import get_db_session
 from app.shared.core.logging import get_logger
 from shared_utils.events import get_publisher
+from shared_utils.security import sanitize_grpc_error
 
 from warehouse_service.gen.wms.warehouse.v1 import warehouse_pb2, warehouse_pb2_grpc
 
@@ -58,9 +59,9 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
                     name=w.location or "",
                     location=w.location or "",
                 )
-        except Exception:
+        except Exception as exc:
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details("Warehouse not found")
+            context.set_details(sanitize_grpc_error(exc, default_code="WMS_ERR_NOT_FOUND"))
             return warehouse_pb2.Warehouse()
 
     def CreateWarehouse(self, request: warehouse_pb2.CreateWarehouseRequest, context: grpc.ServicerContext):
@@ -101,9 +102,9 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
                 return warehouse_pb2.DeleteWarehouseResponse(
                     message=f"Warehouse {warehouse_id} deleted successfully"
                 )
-        except Exception:
+        except Exception as exc:
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details("Warehouse not found")
+            context.set_details(sanitize_grpc_error(exc, default_code="WMS_ERR_NOT_FOUND"))
             return warehouse_pb2.DeleteWarehouseResponse(message="Warehouse not found")
 
     def TransferAllInventory(

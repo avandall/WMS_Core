@@ -8,6 +8,9 @@ from typing import TypeVar, Awaitable
 
 import grpc
 
+from shared_utils.security import sanitize_grpc_error
+
+
 from app.modules.users.application.services.user_service import UserService
 from app.modules.users.infrastructure.repositories.user_repo import UserRepo
 from app.shared.core.auth import decode_token
@@ -154,7 +157,7 @@ class IdentityServiceServicer(identity_pb2_grpc.IdentityServiceServicer):
             return identity_pb2.ListUsersResponse(users=entries)
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(e))
+            context.set_details(sanitize_grpc_error(e))
             return identity_pb2.ListUsersResponse()
 
     def Login(self, request: identity_pb2.LoginRequest, context: grpc.ServicerContext):

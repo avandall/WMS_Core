@@ -63,9 +63,28 @@ def _extract_md(request: Request) -> list[tuple[str, str]] | None:
 
     user = getattr(request.state, "user", None)
     if user:
-        metadata.append(("user-id", str(user.user_id)))
-        metadata.append(("user-email", str(getattr(user, "email", ""))))
+        user_id_val = getattr(user, "user_id", None) or (user.get("user_id") if isinstance(user, dict) else None)
+        if user_id_val is not None:
+            metadata.append(("user-id", str(user_id_val)))
+        metadata.append(("user-email", str(getattr(user, "email", "") or (user.get("email", "") if isinstance(user, dict) else ""))))
     return metadata or None
+
+
+def _extract_user_id(request: Request | None) -> str:
+    if not request or not hasattr(request, "state"):
+        return "system"
+    user = getattr(request.state, "user", None)
+    if user:
+        user_id = getattr(user, "user_id", None)
+        if user_id is not None:
+            return str(user_id)
+        if isinstance(user, dict) and "user_id" in user and user["user_id"] is not None:
+            return str(user["user_id"])
+    user_id_attr = getattr(request.state, "user_id", None)
+    if user_id_attr is not None:
+        return str(user_id_attr)
+    return "system"
+
 
 
 class ConfirmExecutionSaga:
@@ -154,6 +173,8 @@ class ConfirmExecutionSaga:
                 except Exception as exc:
                     logger.warning("Failed to list reservations for doc %d: %s", self.document_id, exc)
 
+        user_id_val = _extract_user_id(request)
+
         # ---------------------------------------------------------------------
         # 2. Inventory Transactions Forward Execution
         # ---------------------------------------------------------------------
@@ -195,7 +216,7 @@ class ConfirmExecutionSaga:
                             warehouse_id=item_wh_id,
                             quantity=item.quantity,
                             reservation_id=res_id,
-                            user_id="system",
+                            user_id=user_id_val,
                             idempotency_key=idempotency_key,
                             source_warehouse_id=src_wh_id,
                         ),
@@ -291,6 +312,8 @@ class ConfirmExecutionSaga:
         """
         self.state = SagaState.COMPENSATING
         md = _extract_md(request)
+        user_id_val = _extract_user_id(request)
+        comp_user_id = f"{user_id_val}_saga_compensate" if user_id_val != "system" else "system_saga_compensate"
 
         logger.info(
             "Starting compensation for doc %d with %d executed steps.",
@@ -322,7 +345,7 @@ class ConfirmExecutionSaga:
                             warehouse_id=step.warehouse_id,
                             quantity=step.quantity,
                             reservation_id=0,
-                            user_id="system_saga_compensate",
+                            user_id=comp_user_id,
                             idempotency_key=comp_key,
                             source_warehouse_id=0,
                         ),

@@ -3,6 +3,8 @@ from __future__ import annotations
 import grpc
 
 from shared_utils.events import get_publisher
+from shared_utils.security import sanitize_grpc_error
+
 
 from app.modules.documents.application.services.document_service import DocumentService
 from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
@@ -151,7 +153,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.PostDocumentResponse(message=str(exc))
 
     # Phase 7: Approve without stock movement
@@ -169,7 +171,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.ApproveRequestResponse(message=str(exc))
 
     # Phase 8: Sales reservation workflow
@@ -186,7 +188,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.ReserveRequestResponse(message=str(exc))
 
     def ReleaseReservation(self, request: documents_pb2.ReleaseReservationRequest, context: grpc.ServicerContext):
@@ -202,7 +204,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.ReleaseReservationResponse(message=str(exc))
 
     def GetDocument(self, request: documents_pb2.GetDocumentRequest, context: grpc.ServicerContext):
@@ -236,7 +238,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.DeleteDocumentResponse(message=str(exc))
 
     # Phase 10: Start execution
@@ -253,7 +255,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.StartExecutionResponse(message=str(exc))
 
     # Phase 10: Confirm execution
@@ -274,7 +276,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.ConfirmExecutionResponse(message=str(exc))
 
     # Phase 10: Complete request
@@ -292,7 +294,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.CompleteRequestResponse(message=str(exc))
 
     def RevertToInProgress(self, request: documents_pb2.RevertToInProgressRequest, context: grpc.ServicerContext):
@@ -308,7 +310,7 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.RevertToInProgressResponse(message=str(exc))
 
 

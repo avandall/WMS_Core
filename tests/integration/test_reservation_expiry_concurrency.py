@@ -30,9 +30,15 @@ if services_dir.exists():
 
 try:
     import app
-    app.__path__ = [str(s / "app") for s in services_dir.glob("*/src") if (s / "app").exists()]
+    for s in services_dir.glob("*/src"):
+        p = str(s / "app")
+        if os.path.exists(p) and p not in app.__path__:
+            app.__path__.append(p)
     import app.modules
-    app.modules.__path__ = [str(s / "app" / "modules") for s in services_dir.glob("*/src") if (s / "app" / "modules").exists()]
+    for s in services_dir.glob("*/src"):
+        p = str(s / "app" / "modules")
+        if os.path.exists(p) and p not in app.modules.__path__:
+            app.modules.__path__.append(p)
 except Exception:
     pass
 

@@ -4,6 +4,7 @@ import asyncio
 import grpc
 
 from shared_utils.events import get_publisher
+from shared_utils.security import sanitize_grpc_error
 
 from app.modules.products.application.services.product_service import ProductService
 from app.modules.products.infrastructure.repositories.product_repo import ProductRepo
@@ -64,9 +65,9 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                 service = self._service(db)
                 p = asyncio.run(service.get_product_details(int(request.product_id)))
                 return self._to_proto_product(p)
-        except Exception:
+        except Exception as exc:
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details("Product not found")
+            context.set_details(sanitize_grpc_error(exc, default_code="WMS_ERR_NOT_FOUND"))
             return product_pb2.Product()
 
     def CreateProduct(self, request: product_pb2.CreateProductRequest, context: grpc.ServicerContext):
@@ -127,9 +128,9 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                     },
                 )
                 return self._to_proto_product(p)
-        except Exception:
+        except Exception as exc:
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details("Product not found")
+            context.set_details(sanitize_grpc_error(exc, default_code="WMS_ERR_NOT_FOUND"))
             return product_pb2.Product()
 
     def DeleteProduct(self, request: product_pb2.DeleteProductRequest, context: grpc.ServicerContext):
@@ -150,9 +151,9 @@ class ProductServiceServicer(product_pb2_grpc.ProductServiceServicer):
                 return product_pb2.DeleteProductResponse(
                     message=f"Product {product_id} deleted successfully"
                 )
-        except Exception:
+        except Exception as exc:
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details("Product not found")
+            context.set_details(sanitize_grpc_error(exc, default_code="WMS_ERR_NOT_FOUND"))
             return product_pb2.DeleteProductResponse(message="Product not found")
 
 

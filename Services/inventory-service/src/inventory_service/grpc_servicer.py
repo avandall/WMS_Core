@@ -4,6 +4,7 @@ import json
 import grpc
 
 from shared_utils.events import get_publisher
+from shared_utils.security import sanitize_grpc_error
 
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
@@ -17,10 +18,20 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
 
     @staticmethod
     def _request_id(context: grpc.ServicerContext) -> str | None:
-        for k, v in context.invocation_metadata() or []:
-            if k.lower() == "x-request-id":
-                return v
+        if context:
+            for k, v in context.invocation_metadata() or []:
+                if k.lower() == "x-request-id":
+                    return v
         return None
+
+    @staticmethod
+    def _user_id(context: grpc.ServicerContext) -> str:
+        if context:
+            for k, v in context.invocation_metadata() or []:
+                if k.lower() == "user-id":
+                    return v
+        return "system"
+
 
     def _service(self, db: object) -> InventoryService:
         return InventoryService(
@@ -189,7 +200,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 return inventory_pb2.ReleaseReservationResponse(success=True)
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return inventory_pb2.ReleaseReservationResponse(success=False)
 
     # Phase 9: Inventory transaction ledger
@@ -237,7 +248,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 return inventory_pb2.ListTransactionsResponse(transactions=transaction_rows)
         except Exception as exc:
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return inventory_pb2.ListTransactionsResponse(transactions=[])
 
     def ConfirmInventoryTransaction(
@@ -246,13 +257,17 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
         try:
             with get_db_session() as db:
                 service = self._service(db)
+                req_user = (request.user_id or "").strip()
+                ctx_user = self._user_id(context)
+                eff_user_id = req_user if (req_user and req_user != "system") else ctx_user
+
                 tx_id = service.confirm_inventory_transaction(
                     transaction_type=request.transaction_type,
                     product_id=int(request.product_id),
                     warehouse_id=int(request.warehouse_id),
                     quantity=int(request.quantity),
                     reservation_id=int(request.reservation_id),
-                    user_id=request.user_id or "system",
+                    user_id=eff_user_id,
                     idempotency_key=request.idempotency_key or None,
                     source_warehouse_id=int(request.source_warehouse_id) if request.source_warehouse_id else 0,
                 )
@@ -262,7 +277,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return inventory_pb2.ConfirmInventoryTransactionResponse(success=False, transaction_id=0)
 
     def ReserveStock(self, request: inventory_pb2.ReserveStockRequest, context: grpc.ServicerContext):
@@ -287,11 +302,11 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(exc))
+            context.set_details(sanitize_grpc_error(exc))
             return inventory_pb2.ReserveStockResponse(
                 success=False,
                 reservation_id=0,
-                message=str(exc)
+                message=sanitize_grpc_error(exc)
             )
 
 

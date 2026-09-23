@@ -25,6 +25,30 @@ if services_dir.exists():
         if str(service_path) not in sys.path:
             sys.path.insert(0, str(service_path))
 
+# Pre-populate app and sub-packages __path__ across all Services
+try:
+    import app
+    app_paths = [str(s / "app") for s in services_dir.glob("*/src") if (s / "app").exists()]
+    app.__path__ = list(dict.fromkeys(list(app.__path__) + app_paths))
+    
+    import app.modules
+    modules_paths = [str(s / "app" / "modules") for s in services_dir.glob("*/src") if (s / "app" / "modules").exists()]
+    app.modules.__path__ = list(dict.fromkeys(list(app.modules.__path__) + modules_paths))
+    
+    import app.shared
+    shared_paths = [str(s / "app" / "shared") for s in services_dir.glob("*/src") if (s / "app" / "shared").exists()]
+    app.shared.__path__ = list(dict.fromkeys(list(app.shared.__path__) + shared_paths))
+    
+    import app.shared.core
+    core_paths = [str(s / "app" / "shared" / "core") for s in services_dir.glob("*/src") if (s / "app" / "shared" / "core").exists()]
+    app.shared.core.__path__ = list(dict.fromkeys(list(app.shared.core.__path__) + core_paths))
+
+    import app.api
+    api_paths = [str(s / "app" / "api") for s in services_dir.glob("*/src") if (s / "app" / "api").exists()]
+    app.api.__path__ = list(dict.fromkeys(list(app.api.__path__) + api_paths))
+except Exception:
+    pass
+
 
 
 import pytest
