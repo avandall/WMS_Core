@@ -188,3 +188,87 @@ def test_product_recall_query(db_session):
     assert recall_res["customers"][0]["customer_id"] == 777
     assert recall_res["customers"][0]["document_id"] == 501
     assert recall_res["customers"][0]["quantity"] == 25
+
+
+def test_fefo_skips_expired_lots(db_session):
+    repo = InventoryRepo(db_session)
+    alloc_service = AllocationService(repo)
+
+    now = datetime.now(timezone.utc)
+    exp_past = now - timedelta(days=5)
+    exp_near = now + timedelta(days=10)
+    exp_far = now + timedelta(days=30)
+
+    # Bin 1: Expired stock (5 days ago) - 20 units
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=1, product_id=400, quantity_delta=20, lpn="LPN-EXPIRED",
+        lot_number="LOT-EXPIRED", expiry_date=exp_past,
+    )
+
+    # Bin 2: Valid stock expiring in 10 days - 10 units
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=2, product_id=400, quantity_delta=10, lpn="LPN-VALID-1",
+        lot_number="LOT-VALID-1", expiry_date=exp_near,
+    )
+
+    # Bin 3: Valid stock expiring in 30 days - 10 units
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=3, product_id=400, quantity_delta=10, lpn="LPN-VALID-2",
+        lot_number="LOT-VALID-2", expiry_date=exp_far,
+    )
+
+    # Request allocation of 15 units
+    allocations = alloc_service.allocate_fefo(warehouse_id=1, product_id=400, quantity=15)
+
+    assert len(allocations) == 2
+    # Expired lot is skipped completely
+    assert allocations[0]["lot_number"] == "LOT-VALID-1"
+    assert allocations[0]["allocated_qty"] == 10
+    assert allocations[1]["lot_number"] == "LOT-VALID-2"
+    assert allocations[1]["allocated_qty"] == 5
+
+    # If asking for 25 units, InsufficientStockError should be raised because expired stock is ignored
+    with pytest.raises(InsufficientStockError):
+        alloc_service.allocate_fefo(warehouse_id=1, product_id=400, quantity=25)
+
+
+def test_fifo_fallback_uses_mfg_date(db_session):
+    repo = InventoryRepo(db_session)
+    alloc_service = AllocationService(repo)
+
+    now = datetime.now(timezone.utc)
+    exp_date = now + timedelta(days=30)
+    mfg_early = now - timedelta(days=60)
+    mfg_late = now - timedelta(days=10)
+
+    # Bin 1: position_id=99 (larger), but earlier mfg_date (60 days ago) -> FIFO priority
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=99, product_id=500, quantity_delta=10, lpn="LPN-EARLY",
+        lot_number="LOT-EARLY-MFG", mfg_date=mfg_early, expiry_date=exp_date,
+    )
+
+    # Bin 2: position_id=1 (smaller), but later mfg_date (10 days ago)
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=1, product_id=500, quantity_delta=10, lpn="LPN-LATE",
+        lot_number="LOT-LATE-MFG", mfg_date=mfg_late, expiry_date=exp_date,
+    )
+
+    # Bin 3: mfg_date is None
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=2, product_id=500, quantity_delta=10, lpn="LPN-NO-MFG",
+        lot_number="LOT-NO-MFG", mfg_date=None, expiry_date=exp_date,
+    )
+
+    allocations = alloc_service.allocate_fefo(warehouse_id=1, product_id=500, quantity=25)
+
+    assert len(allocations) == 3
+    # 1st: Earlier manufacture date (LOT-EARLY-MFG) despite position_id=99
+    assert allocations[0]["lot_number"] == "LOT-EARLY-MFG"
+    assert allocations[0]["allocated_qty"] == 10
+    # 2nd: Later manufacture date (LOT-LATE-MFG)
+    assert allocations[1]["lot_number"] == "LOT-LATE-MFG"
+    assert allocations[1]["allocated_qty"] == 10
+    # 3rd: Null manufacture date (LOT-NO-MFG)
+    assert allocations[2]["lot_number"] == "LOT-NO-MFG"
+    assert allocations[2]["allocated_qty"] == 5
+

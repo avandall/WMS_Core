@@ -10,6 +10,24 @@ from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRep
 logger = get_logger(__name__)
 
 
+def _parse_datetime(val: Any) -> tuple[bool, datetime]:
+    if val is None:
+        return False, datetime.max.replace(tzinfo=timezone.utc)
+    if isinstance(val, datetime):
+        dt = val
+    elif isinstance(val, str):
+        try:
+            dt = datetime.fromisoformat(val)
+        except (ValueError, TypeError):
+            return False, datetime.max.replace(tzinfo=timezone.utc)
+    else:
+        return False, datetime.max.replace(tzinfo=timezone.utc)
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return True, dt
+
+
 class AllocationService:
     """Service for FEFO (First-Expired, First-Out) stock allocation and product recall queries."""
 
@@ -28,9 +46,11 @@ class AllocationService:
         Allocates requested quantity of product_id in warehouse_id using FEFO rules.
 
         Sorting logic:
+        - Filters out expired stock (expiry_date < current UTC time)
         - Expiry date ASC (earliest expiring first)
         - Locations with NO expiry date placed AFTER locations WITH expiry date
-        - Tie-breaking by position_id ASC, location id ASC
+        - Tie-breaking by FIFO: mfg_date ASC (earliest manufacture date first)
+        - Fallback tie-breaker by location id ASC (DB insert order)
         """
         if quantity <= 0:
             raise InvalidQuantityError("Allocation quantity must be greater than zero")
@@ -42,31 +62,27 @@ class AllocationService:
             status=status,
         )
 
-        # 2. Filter available_qty > 0
-        candidate_locations = [loc for loc in locations if loc.get("available_qty", 0) > 0]
+        # 2. Filter available_qty > 0 and not expired (expiry_date < now)
+        now = datetime.now(timezone.utc)
+
+        def is_expired(loc: Dict[str, Any]) -> bool:
+            has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
+            return has_expiry and expiry_dt < now
+
+        candidate_locations = [
+            loc for loc in locations
+            if loc.get("available_qty", 0) > 0 and not is_expired(loc)
+        ]
         if not candidate_locations:
             raise InsufficientStockError(
                 f"No available stock to allocate for product {product_id} in warehouse {warehouse_id}"
             )
 
-        # 3. Sort using FEFO rule
+        # 3. Sort using FEFO rule with mfg_date FIFO tiebreak
         def fefo_sort_key(loc: Dict[str, Any]) -> tuple:
-            expiry_val = loc.get("expiry_date")
-            has_expiry = expiry_val is not None
-            if has_expiry and isinstance(expiry_val, str):
-                try:
-                    expiry_dt = datetime.fromisoformat(expiry_val)
-                except (ValueError, TypeError):
-                    expiry_dt = datetime.max.replace(tzinfo=timezone.utc)
-            elif has_expiry and isinstance(expiry_val, datetime):
-                expiry_dt = expiry_val
-            else:
-                expiry_dt = datetime.max.replace(tzinfo=timezone.utc)
-
-            if expiry_dt.tzinfo is None:
-                expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
-
-            return (not has_expiry, expiry_dt, loc.get("position_id", 0), loc.get("id", 0))
+            has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
+            has_mfg, mfg_dt = _parse_datetime(loc.get("mfg_date"))
+            return (not has_expiry, expiry_dt, not has_mfg, mfg_dt, loc.get("id", 0))
 
         candidate_locations.sort(key=fefo_sort_key)
 
