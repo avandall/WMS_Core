@@ -416,7 +416,10 @@ class InventoryService:
     def get_inventory_status(self, product_id: int) -> Dict[str, Any]:
         total_quantity = self.inventory_repo.get_quantity(product_id)
         warehouse_distribution = self.inventory_repo.get_warehouse_distribution(product_id)
-        total_allocated = sum(row["quantity"] for row in warehouse_distribution)
+        total_allocated = sum(
+            row.get("reserved_qty", 0) + row.get("allocated_qty", 0)
+            for row in warehouse_distribution
+        )
 
         unallocated_quantity = total_quantity - total_allocated
         return {
@@ -484,7 +487,7 @@ class InventoryService:
         issues = []
         for item in self.inventory_repo.get_all():
             total_allocated = sum(
-                row["quantity"]
+                row.get("reserved_qty", 0) + row.get("allocated_qty", 0)
                 for row in self.inventory_repo.get_warehouse_distribution(item.product_id)
             )
             if total_allocated > item.quantity:

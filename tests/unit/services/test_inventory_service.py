@@ -500,4 +500,64 @@ class TestTask039AcceptanceCriteria:
         assert result2 is True
 
 
+class TestTask034AcceptanceCriteria:
+    @pytest.fixture
+    def db_session(self):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        yield session
+        session.close()
+
+    @pytest.fixture
+    def inventory_repo(self, db_session):
+        return InventoryRepo(db_session)
+
+    @pytest.fixture
+    def inventory_service(self, inventory_repo):
+        return InventoryService(inventory_repo)
+
+    def test_inventory_status_allocated_quantity_correct(self, inventory_service, inventory_repo):
+        """TASK-034 Acceptance Criteria:
+        - allocated_quantity = SUM(reserved_qty + allocated_qty).
+        - unallocated_quantity = total_quantity - allocated_quantity.
+        - Verify get_inventory_status returns accurate allocated_quantity and unallocated_quantity.
+        """
+        product_id = 777
+        warehouse_id = 1
+
+        # 1. Adjust initial physical stock (100 units)
+        inventory_service.adjust_inventory(
+            product_id=product_id,
+            quantity_delta=100,
+            warehouse_id=warehouse_id,
+        )
+
+        # Before reservation: total=100, allocated=0, unallocated=100
+        status_before = inventory_service.get_inventory_status(product_id)
+        assert status_before["total_quantity"] == 100
+        assert status_before["allocated_quantity"] == 0
+        assert status_before["unallocated_quantity"] == 100
+
+        # 2. Reserve 30 units
+        res_id = inventory_service.reserve_stock(
+            source_type="order",
+            source_id=101,
+            document_id=201,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            quantity=30,
+        )
+        assert res_id > 0
+
+        # After reservation: total=100, allocated=30, unallocated=70
+        status_after = inventory_service.get_inventory_status(product_id)
+        assert status_after["total_quantity"] == 100
+        assert status_after["allocated_quantity"] == 30
+        assert status_after["unallocated_quantity"] == 70
+
+
+
+
 
