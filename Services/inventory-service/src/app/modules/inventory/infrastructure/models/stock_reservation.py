@@ -18,7 +18,7 @@ class StockReservationModel(Base):
     reserved_qty = Column(Integer, nullable=False, default=0)
     released_qty = Column(Integer, nullable=False, default=0)
     consumed_qty = Column(Integer, nullable=False, default=0)
-    status = Column(String(50), nullable=False, default="PENDING")  # PENDING, RESERVED, RELEASED, CONSUMED, EXPIRED
+    status = Column(String(50), nullable=False, default="RESERVED")  # RESERVED, RELEASED, CONSUMED, EXPIRED
     expires_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

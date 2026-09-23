@@ -1070,16 +1070,25 @@ def report_sales(
     # Fetch document details for salesperson info
     doc_salesperson_map: dict[int, str] = {}
     try:
-        with documents_stub() as dstub:
-            dresp = _grpc_call(
-                dstub.ListDocuments,
-                documents_pb2.ListDocumentsRequest(doc_type="sale", page=1, page_size=200),
-                request=request,
-                timeout=GRPC_TIMEOUT_SLOW,
-                idempotent=True,
-            )
-        for d in dresp.documents:
-            doc_salesperson_map[int(d.document_id)] = getattr(d, "created_by", "-") or "-"
+        page = 1
+        page_size = 100
+        while True:
+            with documents_stub() as dstub:
+                dresp = _grpc_call(
+                    dstub.ListDocuments,
+                    documents_pb2.ListDocumentsRequest(doc_type="sale", page=page, page_size=page_size),
+                    request=request,
+                    timeout=GRPC_TIMEOUT_SLOW,
+                    idempotent=True,
+                )
+            docs = getattr(dresp, "documents", [])
+            if not docs:
+                break
+            for d in docs:
+                doc_salesperson_map[int(d.document_id)] = getattr(d, "created_by", "-") or "-"
+            if len(docs) < page_size:
+                break
+            page += 1
     except Exception:
         pass
 

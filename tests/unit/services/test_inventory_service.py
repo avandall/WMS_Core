@@ -15,8 +15,8 @@ for mod in list(sys.modules.keys()):
         del sys.modules[mod]
 
 inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
-sys.path = [p for p in sys.path if "/Services/" not in p]
-sys.path.insert(0, inv_src)
+if inv_src not in sys.path:
+    sys.path.insert(0, inv_src)
 
 import pytest  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -556,6 +556,37 @@ class TestTask034AcceptanceCriteria:
         assert status_after["total_quantity"] == 100
         assert status_after["allocated_quantity"] == 30
         assert status_after["unallocated_quantity"] == 70
+
+    def test_get_all_inventory_batch_query(self, inventory_service, inventory_repo):
+        """
+        TASK-038 Requirement:
+        get_all_inventory_with_details must fetch inventory details using batch queries
+        (max 3 queries total) instead of calling per-product N+1 queries.
+        """
+        inventory_service.adjust_inventory(product_id=1, quantity_delta=100, warehouse_id=1)
+        inventory_service.adjust_inventory(product_id=1, quantity_delta=50, warehouse_id=2)
+        inventory_service.adjust_inventory(product_id=2, quantity_delta=200, warehouse_id=1)
+        inventory_service.adjust_inventory(product_id=3, quantity_delta=300, warehouse_id=2)
+
+        from unittest.mock import MagicMock
+        inventory_repo.get_quantity = MagicMock(side_effect=Exception("N+1 get_quantity called"))
+        inventory_repo.get_warehouse_distribution = MagicMock(side_effect=Exception("N+1 get_warehouse_distribution called"))
+
+        details = inventory_service.get_all_inventory_with_details()
+
+        assert len(details) == 3
+        p1 = next(d for d in details if d["product_id"] == 1)
+        assert p1["total_quantity"] == 150
+        assert p1["warehouse_count"] == 2
+
+        p2 = next(d for d in details if d["product_id"] == 2)
+        assert p2["total_quantity"] == 200
+        assert p2["warehouse_count"] == 1
+
+        p3 = next(d for d in details if d["product_id"] == 3)
+        assert p3["total_quantity"] == 300
+        assert p3["warehouse_count"] == 1
+
 
 
 

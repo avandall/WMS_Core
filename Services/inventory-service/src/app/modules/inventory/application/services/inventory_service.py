@@ -446,10 +446,39 @@ class InventoryService:
         }
 
     def get_all_inventory_with_details(self) -> List[Dict[str, Any]]:
-        all_inventory = self.inventory_repo.get_all()
+        rows = self.inventory_repo.get_inventory_by_warehouse_rows()
+        grouped: Dict[int, List[Dict[str, Any]]] = {}
+        for row in rows:
+            pid = int(row["product_id"])
+            if pid not in grouped:
+                grouped[pid] = []
+            wh_dist = {k: v for k, v in row.items() if k != "product_id"}
+            grouped[pid].append(wh_dist)
+
+        all_items = self.inventory_repo.get_all()
+        for item in all_items:
+            if item.product_id not in grouped:
+                grouped[item.product_id] = []
+
         result = []
-        for item in all_inventory:
-            result.append(self.get_inventory_status(item.product_id))
+        for pid in sorted(grouped.keys()):
+            wh_dist = grouped[pid]
+            total_quantity = sum(row.get("physical_qty", row.get("quantity", 0)) for row in wh_dist)
+            total_allocated = sum(
+                row.get("reserved_qty", 0) + row.get("allocated_qty", 0)
+                for row in wh_dist
+            )
+            unallocated_quantity = total_quantity - total_allocated
+            result.append(
+                {
+                    "product_id": pid,
+                    "total_quantity": total_quantity,
+                    "allocated_quantity": total_allocated,
+                    "unallocated_quantity": unallocated_quantity,
+                    "warehouse_count": len(wh_dist),
+                    "warehouse_distribution": wh_dist,
+                }
+            )
         return result
 
     def get_low_stock_products(self, threshold: int = 10) -> List[Dict[str, Any]]:

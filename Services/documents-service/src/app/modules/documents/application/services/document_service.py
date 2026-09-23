@@ -650,13 +650,10 @@ class DocumentService:
         }
 
     def get_pending_documents(self) -> List[Document]:
-        # TODO: Full table scan O(n). Add a SQL-level status filter to IDocumentRepo.get_all()
-        # and push the filter to the DB. Only used in tests / admin tooling currently.
-        return [d for d in self.document_repo.get_all() if d.status == DocumentStatus.DRAFT]
+        return self.document_repo.get_all(status=DocumentStatus.DRAFT)
 
     def get_documents_by_status(self, status: DocumentStatus) -> List[Document]:
-        # TODO: Full table scan O(n). Add SQL filter param to IDocumentRepo.get_all().
-        return [d for d in self.document_repo.get_all() if d.status == status]
+        return self.document_repo.get_all(status=status)
 
     def get_document(self, document_id: int) -> Document:
         document = self.document_repo.get(document_id)
@@ -672,13 +669,8 @@ class DocumentService:
     ) -> List[Document]:
         offset = (page - 1) * page_size
         if doc_type:
-            # TODO: Full table scan when doc_type filter is present. Proper fix: add a
-            # SQL-level doc_type WHERE clause to IDocumentRepo.get_all() / add a separate
-            # get_by_type(doc_type, limit, offset) method on the interface.
-            all_docs = self.document_repo.get_all()
-            doc_type_enum = DocumentType(doc_type.upper())
-            filtered = [doc for doc in all_docs if doc.doc_type == doc_type_enum]
-            return filtered[offset: offset + page_size]
+            doc_type_enum = DocumentType(doc_type.upper()) if isinstance(doc_type, str) else doc_type
+            return self.document_repo.get_all(doc_type=doc_type_enum, limit=page_size, offset=offset)
         # No type filter — delegate pagination entirely to SQL
         return self.document_repo.get_all(limit=page_size, offset=offset)
 

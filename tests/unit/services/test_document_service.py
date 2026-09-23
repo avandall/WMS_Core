@@ -352,3 +352,32 @@ def test_create_document_invalid_product_raises(mock_document_repo):
     mock_product_repo.get.assert_called_once_with(99999)
 
 
+def test_get_by_status_uses_sql_filter(document_service, mock_document_repo):
+    """
+    TASK-038 Requirement:
+    get_documents_by_status and get_pending_documents must query document_repo.get_all
+    with status SQL filter parameter instead of fetching all documents and filtering in memory.
+    """
+    mock_doc = Document(
+        document_id=100,
+        doc_type=DocumentType.SALE,
+        from_warehouse_id=1,
+        items=[],
+        created_by="test_user",
+    )
+    mock_doc.status = DocumentStatus.DRAFT
+    mock_document_repo.get_all.return_value = [mock_doc]
+
+    # Test get_documents_by_status(DRAFT)
+    res_status = document_service.get_documents_by_status(DocumentStatus.DRAFT)
+    assert res_status == [mock_doc]
+    mock_document_repo.get_all.assert_called_with(status=DocumentStatus.DRAFT)
+
+    # Test get_pending_documents()
+    mock_document_repo.get_all.reset_mock()
+    res_pending = document_service.get_pending_documents()
+    assert res_pending == [mock_doc]
+    mock_document_repo.get_all.assert_called_with(status=DocumentStatus.DRAFT)
+
+
+
