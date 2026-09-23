@@ -321,7 +321,7 @@ def test_import_reserve_rejected(document_service, mock_document_repo):
     with pytest.raises(InvalidDocumentStatusError) as exc_info:
         document_service.reserve_request_stock(document_id=30)
 
-    assert "Reservation only supported for SALE, EXPORT, and TRANSFER" in str(exc_info.value)
+    assert "Reservation only supported for SALE, EXPORT, TRANSFER" in str(exc_info.value)
 
 
 def test_create_document_invalid_product_raises(mock_document_repo):
@@ -378,6 +378,50 @@ def test_get_by_status_uses_sql_filter(document_service, mock_document_repo):
     res_pending = document_service.get_pending_documents()
     assert res_pending == [mock_doc]
     mock_document_repo.get_all.assert_called_with(status=DocumentStatus.DRAFT)
+
+
+def test_sale_execution_requires_reservation(document_service, mock_document_repo):
+    """TASK-042 [FLOW-02]: Sale order execution must enforce reservation before execution."""
+    item = DocumentProduct(product_id=1, quantity=10, unit_price=10.0)
+    doc = Document(
+        document_id=10,
+        doc_type=DocumentType.SALE,
+        from_warehouse_id=1,
+        items=[item],
+        created_by="tester",
+    )
+    doc.status = DocumentStatus.POSTED
+    mock_document_repo._store[10] = doc
+
+    with pytest.raises(InvalidDocumentStatusError) as exc_info:
+        document_service.start_execution(document_id=10)
+
+    assert "must have active reservation" in str(exc_info.value)
+
+
+def test_partial_fulfillment_releases_remainder(document_service, mock_document_repo):
+    """TASK-042 [EDGE-01]: Partial fulfillment (shipping 80/100) auto-releases surplus reservation."""
+    item = DocumentProduct(product_id=1, quantity=100, unit_price=10.0)
+    item.reserved_qty = 100
+    doc = Document(
+        document_id=11,
+        doc_type=DocumentType.SALE,
+        from_warehouse_id=1,
+        items=[item],
+        created_by="tester",
+    )
+    doc.status = DocumentStatus.IN_PROGRESS
+    mock_document_repo._store[11] = doc
+
+    executed_doc = document_service.confirm_execution(
+        document_id=11,
+        items=[{"product_id": 1, "quantity": 80}],
+    )
+
+    assert executed_doc.status == DocumentStatus.EXECUTED
+    assert executed_doc.items[0].executed_qty == 80
+    assert executed_doc.items[0].reserved_qty == 80
+
 
 
 

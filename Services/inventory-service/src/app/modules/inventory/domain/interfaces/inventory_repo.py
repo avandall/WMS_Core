@@ -158,7 +158,12 @@ class IInventoryRepo(ABC):
         lpn: str | None = None,
         status: str | None = None,
         lot_number: str | None = None,
+        for_update: bool = False,
     ) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def get_low_stock_items(self, threshold: int = 10) -> List["InventoryItem"]:
         pass
 
     @abstractmethod

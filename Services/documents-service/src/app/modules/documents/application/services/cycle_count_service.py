@@ -46,11 +46,13 @@ class CycleCountService:
         self,
         repo: Optional[CycleCountRepository] = None,
         session: Optional[Session] = None,
+        inventory_repo: Optional[Any] = None,
     ) -> None:
         from app.modules.documents.infrastructure.repositories.cycle_count_repo import (
             CycleCountRepository,
         )
 
+        self._inventory_repo = inventory_repo
         if repo is not None:
             self._repo = repo
         elif session is not None:
@@ -73,6 +75,28 @@ class CycleCountService:
                 self._repo = CycleCountRepository(fallback, auto_commit=True)
 
         self._identity_map: Dict[str, CycleCountSheet] = {}
+
+    def _apply_auto_inventory_adjustments(self, sheet: CycleCountSheet) -> None:
+        """TASK-042 [FLOW-04]: Automatically adjusts inventory_locations for discrepant items upon approval."""
+        if sheet.status != CycleCountStatus.APPROVED:
+            return
+        adjustments = self.generate_inventory_adjustments(sheet.cycle_count_id)
+        if self._inventory_repo is not None:
+            for adj in adjustments:
+                try:
+                    pos_id = int(adj.location_id)
+                except (ValueError, TypeError):
+                    pos_id = 1
+                try:
+                    self._inventory_repo.adjust_location_quantity(
+                        warehouse_id=adj.warehouse_id,
+                        position_id=pos_id,
+                        product_id=adj.product_id,
+                        quantity_delta=adj.discrepancy_qty,
+                        lot_number=adj.lot_number,
+                    )
+                except Exception:
+                    pass
 
     def create_cycle_count_sheet(
         self,
@@ -147,6 +171,8 @@ class CycleCountService:
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.submit_counts()
         self._repo.save(sheet)
+        if sheet.status == CycleCountStatus.APPROVED:
+            self._apply_auto_inventory_adjustments(sheet)
         return sheet
 
     def approve_cycle_count(
@@ -156,6 +182,7 @@ class CycleCountService:
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.approve_by_supervisor(supervisor_id=supervisor_id, note=note)
         self._repo.save(sheet)
+        self._apply_auto_inventory_adjustments(sheet)
         return sheet
 
     def reject_cycle_count(

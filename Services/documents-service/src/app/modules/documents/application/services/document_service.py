@@ -425,6 +425,7 @@ class DocumentService:
                     reservation_ids.append(str(resp.reservation_id))
                     reserved_list.append((resp.reservation_id, item))
             
+            document.status = DocumentStatus.RESERVED
             self.document_repo.save(document)
             self._commit_if_needed()
         except Exception:
@@ -560,6 +561,17 @@ class DocumentService:
         document.status = DocumentStatus.IN_PROGRESS
         document.execution_started_at = datetime.now(timezone.utc)
 
+        # TASK-042 [FLOW-02]: Enforce reservation for SALE documents before execution
+        if document.doc_type == DocumentType.SALE:
+            has_reservation = (
+                document.status in (DocumentStatus.RESERVED, DocumentStatus.PARTIALLY_RESERVED)
+                or any(item.reserved_qty > 0 for item in document.items)
+            )
+            if not has_reservation:
+                raise InvalidDocumentStatusError(
+                    f"Sale document {document_id} must have active reservation before starting execution"
+                )
+
         self.document_repo.save(document)
         self._commit_if_needed()
 
@@ -638,6 +650,67 @@ class DocumentService:
             item.executed_qty = exec_qty
             item.difference_qty = item.requested_qty - exec_qty
             item.execution_status = "EXECUTED"
+
+        # TASK-042 [EDGE-01]: Partial fulfillment auto-releases surplus reservation
+        surplus_items_to_release = [
+            (item, item.reserved_qty - item.executed_qty)
+            for item in document.items
+            if item.reserved_qty > 0 and item.executed_qty is not None and item.executed_qty < item.reserved_qty
+        ]
+        if surplus_items_to_release:
+            if self.inventory_repo and hasattr(self.inventory_repo, "list_reservations"):
+                for item, surplus_qty in surplus_items_to_release:
+                    try:
+                        res_list = self.inventory_repo.list_reservations(
+                            product_id=int(item.product_id),
+                            warehouse_id=int(document.from_warehouse_id) if document.from_warehouse_id else None,
+                            status="RESERVED",
+                            document_id=int(document_id),
+                        )
+                        for res in res_list:
+                            self.inventory_repo.release_reservation(
+                                reservation_id=res["id"],
+                                released_qty=int(surplus_qty),
+                            )
+                    except Exception:
+                        pass
+                    item.reserved_qty = item.executed_qty
+            else:
+                import os
+                import grpc
+                from shared_utils.security.grpc import configured_grpc_channel
+                from documents_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_grpc
+
+                inventory_addr = os.getenv("INVENTORY_GRPC_ADDR", "inventory-service:50055")
+                try:
+                    with configured_grpc_channel(inventory_addr) as channel:
+                        stub = inventory_pb2_grpc.InventoryServiceStub(channel)
+                        for item, surplus_qty in surplus_items_to_release:
+                            try:
+                                list_resp = stub.ListReservations(
+                                    inventory_pb2.ListReservationsRequest(
+                                        product_id=int(item.product_id),
+                                        warehouse_id=int(document.from_warehouse_id) if document.from_warehouse_id else 0,
+                                        status="RESERVED",
+                                        document_id=int(document_id),
+                                    ),
+                                    timeout=10,
+                                )
+                                for res in list_resp.reservations:
+                                    if res.document_id == document_id:
+                                        stub.ReleaseReservation(
+                                            inventory_pb2.ReleaseReservationRequest(
+                                                reservation_id=res.id,
+                                                released_qty=int(surplus_qty),
+                                            ),
+                                            timeout=10,
+                                        )
+                            except Exception:
+                                pass
+                            item.reserved_qty = item.executed_qty
+                except Exception:
+                    for item, _ in surplus_items_to_release:
+                        item.reserved_qty = item.executed_qty
 
         document.status = DocumentStatus.EXECUTED
 

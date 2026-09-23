@@ -144,6 +144,23 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             for product_id, total_qty in rows
         ]
 
+    def get_low_stock_items(self, threshold: int = 10) -> List[InventoryItem]:
+        """TASK-042 [EDGE-09]: Queries low stock items using SQL HAVING filter directly in DB."""
+        query = (
+            select(
+                WarehouseInventoryModel.product_id,
+                func.coalesce(func.sum(WarehouseInventoryModel.physical_qty), 0).label("total_qty"),
+            )
+            .group_by(WarehouseInventoryModel.product_id)
+            .having(func.coalesce(func.sum(WarehouseInventoryModel.physical_qty), 0) <= threshold)
+            .order_by(WarehouseInventoryModel.product_id)
+        )
+        rows = self.session.execute(query).all()
+        return [
+            InventoryItem(product_id=int(product_id), quantity=int(total_qty))
+            for product_id, total_qty in rows
+        ]
+
     def _get_warehouse_name_map(self, warehouse_ids: set[int]) -> dict[int, str]:
         """Resolves real warehouse names from DB warehouses table or gRPC Warehouse Service [BIZ-21]."""
         if not warehouse_ids:
@@ -700,8 +717,11 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         status: Optional[str] = None,
         lot_number: Optional[str] = None,
         owner_id: Optional[str] = None,
+        for_update: bool = False,
     ) -> List[dict]:
         query = select(InventoryLocationModel)
+        if for_update:
+            query = query.with_for_update()
         if warehouse_id is not None:
             query = query.where(InventoryLocationModel.warehouse_id == warehouse_id)
         if owner_id is not None:

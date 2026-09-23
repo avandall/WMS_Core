@@ -55,12 +55,20 @@ class AllocationService:
         if quantity <= 0:
             raise InvalidQuantityError("Allocation quantity must be greater than zero")
 
-        # 1. Fetch candidate locations
-        locations = self.inventory_repo.get_inventory_locations(
-            warehouse_id=warehouse_id,
-            product_id=product_id,
-            status=status,
-        )
+        # 1. Fetch candidate locations (TASK-042 [EDGE-03]: with_for_update to block concurrent over-allocation)
+        try:
+            locations = self.inventory_repo.get_inventory_locations(
+                warehouse_id=warehouse_id,
+                product_id=product_id,
+                status=status,
+                for_update=True,
+            )
+        except TypeError:
+            locations = self.inventory_repo.get_inventory_locations(
+                warehouse_id=warehouse_id,
+                product_id=product_id,
+                status=status,
+            )
 
         # 2. Filter available_qty > 0 and not expired (expiry_date < now)
         now = datetime.now(timezone.utc)

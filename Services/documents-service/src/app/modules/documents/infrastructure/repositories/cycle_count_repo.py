@@ -35,8 +35,8 @@ class CycleCountRepository(TransactionalRepository):
 
         status_val = (
             sheet.status.value
-            if isinstance(sheet.status, CycleCountStatus)
-            else str(sheet.status)
+            if hasattr(sheet.status, "value")
+            else str(sheet.status).replace("CycleCountStatus.", "")
         )
 
         model = self.session.get(CycleCountSheetModel, sheet.cycle_count_id)
@@ -107,7 +107,8 @@ class CycleCountRepository(TransactionalRepository):
             created_by=model.created_by,
             note=model.note,
         )
-        sheet.status = CycleCountStatus(model.status)
+        raw_status = str(model.status).replace("CycleCountStatus.", "") if model.status else "DRAFT"
+        sheet.status = CycleCountStatus(raw_status)
         sheet.created_at = model.created_at
         sheet.submitted_at = model.submitted_at
         sheet.approved_by = model.approved_by

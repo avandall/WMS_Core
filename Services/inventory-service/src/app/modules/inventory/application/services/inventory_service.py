@@ -499,18 +499,19 @@ class InventoryService:
     def get_low_stock_products(self, threshold: int = 10) -> List[Dict[str, Any]]:
         if threshold < 0:
             raise InvalidQuantityError("Threshold must be non-negative")
-        low_stock_products = []
-        for item in self.inventory_repo.get_all():
-            if item.quantity <= threshold:
-                low_stock_products.append(
-                    {
-                        "product_id": item.product_id,
-                        "current_quantity": item.quantity,
-                        "threshold": threshold,
-                        "needs_restock": True,
-                    }
-                )
-        return low_stock_products
+        if hasattr(self.inventory_repo, "get_low_stock_items"):
+            items = self.inventory_repo.get_low_stock_items(threshold=threshold)
+        else:
+            items = [item for item in self.inventory_repo.get_all() if item.quantity <= threshold]
+        return [
+            {
+                "product_id": item.product_id,
+                "current_quantity": item.quantity,
+                "threshold": threshold,
+                "needs_restock": True,
+            }
+            for item in items
+        ]
 
     def get_all_inventory_items(self) -> List[InventoryItem]:
         return self.inventory_repo.get_all()
@@ -899,6 +900,7 @@ class InventoryService:
         lpn: Optional[str] = None,
         status: Optional[str] = None,
         lot_number: Optional[str] = None,
+        for_update: bool = False,
     ) -> List[dict]:
         return self.inventory_repo.get_inventory_locations(
             warehouse_id=warehouse_id,
@@ -907,6 +909,7 @@ class InventoryService:
             lpn=lpn,
             status=status,
             lot_number=lot_number,
+            for_update=for_update,
         )
 
     def adjust_location_inventory(

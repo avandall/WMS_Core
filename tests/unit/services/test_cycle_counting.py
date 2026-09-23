@@ -306,3 +306,31 @@ class TestCycleCounting:
         assert sheet2.items[0].counted_qty == 110
         assert sheet2.items[0].discrepancy_qty == 10
 
+    def test_cycle_count_auto_adjusts_inventory(
+        self, sample_items: list[CycleCountItem]
+    ) -> None:
+        """TASK-042 [FLOW-04]: Cycle Count approved automatically adjusts inventory locations."""
+        from unittest.mock import MagicMock
+        mock_inv_repo = MagicMock()
+
+        service = CycleCountService(inventory_repo=mock_inv_repo)
+        service.create_cycle_count_sheet(
+            cycle_count_id="CC-AUTO-001",
+            warehouse_id=1,
+            title="Auto Adjust Test",
+            items=sample_items,
+            discrepancy_qty_threshold=0,
+        )
+        service.start_cycle_count("CC-AUTO-001")
+        service.record_counts("CC-AUTO-001", {"ITEM-001": 105, "ITEM-002": 50})
+        service.submit_counts("CC-AUTO-001")
+
+        service.approve_cycle_count("CC-AUTO-001", supervisor_id="sup_bob")
+
+        mock_inv_repo.adjust_location_quantity.assert_called_once()
+        call_kwargs = mock_inv_repo.adjust_location_quantity.call_args.kwargs
+        assert call_kwargs["warehouse_id"] == 1
+        assert call_kwargs["product_id"] == 101
+        assert call_kwargs["quantity_delta"] == 5
+
+
