@@ -299,6 +299,121 @@ class TestInventoryLocationRepositoryIntegration:
         status = inventory_service.get_inventory_status(product_id)
         assert status["total_quantity"] == 80
 
+    def test_transfer_preserves_total_inventory(self, inventory_service, inventory_repo):
+        """TASK-025 Acceptance Criteria:
+        - TRANSFER_RECEIPT updates destination location stock (inventory_locations).
+        - Aggregate query get_quantity(product_id) returns SUM(warehouse_inventory.physical_qty) unchanged before and after transfer.
+        """
+        product_id = 888
+        src_wh = 1
+        dst_wh = 2
+        src_pos = 101
+        dst_pos = 201
+
+        # 1. Seed initial stock at Warehouse 1, Position 101 (100 units)
+        inventory_service.adjust_location_inventory(
+            warehouse_id=src_wh,
+            position_id=src_pos,
+            product_id=product_id,
+            quantity_delta=100,
+            lpn="PALLET-SRC",
+            lot_number="LOT-001",
+        )
+
+        initial_total = inventory_service.get_total_quantity(product_id)
+        assert initial_total == 100
+
+        # Verify initial location stock
+        src_locs = inventory_service.get_inventory_locations(
+            warehouse_id=src_wh, product_id=product_id, position_id=src_pos
+        )
+        assert len(src_locs) == 1
+        assert src_locs[0]["quantity"] == 100
+
+        # 2. Execute TRANSFER_ISSUE (issue 40 units from Warehouse 1 Position 101)
+        inventory_service.confirm_inventory_transaction(
+            transaction_type="TRANSFER_ISSUE",
+            product_id=product_id,
+            warehouse_id=src_wh,
+            quantity=40,
+            position_id=src_pos,
+            lpn="PALLET-SRC",
+            lot_number="LOT-001",
+            idempotency_key="transfer_issue_888",
+        )
+
+        # Source location stock reduced to 60
+        src_locs_after = inventory_service.get_inventory_locations(
+            warehouse_id=src_wh, product_id=product_id, position_id=src_pos
+        )
+        assert src_locs_after[0]["quantity"] == 60
+
+        # 3. Execute TRANSFER_RECEIPT at Warehouse 2 Position 201 (40 units)
+        inventory_service.confirm_inventory_transaction(
+            transaction_type="TRANSFER_RECEIPT",
+            product_id=product_id,
+            warehouse_id=dst_wh,
+            source_warehouse_id=src_wh,
+            quantity=40,
+            position_id=dst_pos,
+            lpn="PALLET-DST",
+            lot_number="LOT-001",
+            idempotency_key="transfer_receipt_888",
+        )
+
+        # 4. Verify TRANSFER_RECEIPT updated destination location stock (inventory_locations)
+        dst_locs = inventory_service.get_inventory_locations(
+            warehouse_id=dst_wh, product_id=product_id, position_id=dst_pos
+        )
+        assert len(dst_locs) == 1
+        assert dst_locs[0]["quantity"] == 40
+        assert dst_locs[0]["warehouse_id"] == dst_wh
+        assert dst_locs[0]["position_id"] == dst_pos
+        assert dst_locs[0]["lpn"] == "PALLET-DST"
+
+        # 5. Verify aggregate get_quantity returns SUM(warehouse_inventory.physical_qty) unchanged (100)
+        final_total = inventory_service.get_total_quantity(product_id)
+        assert final_total == 100  # 60 (Wh 1) + 40 (Wh 2) = 100
+
+        repo_total = inventory_repo.get_quantity(product_id)
+        assert repo_total == 100
+
+        # Also test apply_document_movement with doc_type="TRANSFER"
+        doc_product_id = 777
+        inventory_service.adjust_location_inventory(
+            warehouse_id=src_wh,
+            position_id=10,
+            product_id=doc_product_id,
+            quantity_delta=100,
+            lpn="PALLET-DOC-SRC",
+        )
+        assert inventory_service.get_total_quantity(doc_product_id) == 100
+
+        inventory_service.apply_document_movement({
+            "event_id": "transfer_doc_evt_777",
+            "doc_type": "TRANSFER",
+            "document_id": 5001,
+            "from_warehouse_id": src_wh,
+            "to_warehouse_id": dst_wh,
+            "items": [
+                {
+                    "product_id": doc_product_id,
+                    "quantity": 30,
+                    "from_position_id": 10,
+                    "to_position_id": 20,
+                    "from_lpn": "PALLET-DOC-SRC",
+                    "to_lpn": "PALLET-DOC-DST",
+                }
+            ],
+        })
+
+        assert inventory_service.get_total_quantity(doc_product_id) == 100
+        dst_doc_locs = inventory_service.get_inventory_locations(
+            warehouse_id=dst_wh, product_id=doc_product_id, position_id=20
+        )
+        assert len(dst_doc_locs) == 1
+        assert dst_doc_locs[0]["quantity"] == 30
+
 
 class TestTask039AcceptanceCriteria:
     """Acceptance criteria unit tests for TASK-039:

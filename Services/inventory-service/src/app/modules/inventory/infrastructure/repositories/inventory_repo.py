@@ -253,8 +253,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         self._commit_if_auto()
 
     @staticmethod
-    def _to_domain(row: InventoryModel) -> InventoryItem:
-        return InventoryItem(product_id=row.product_id, quantity=row.quantity)
+    def _to_domain(row: WarehouseInventoryModel) -> InventoryItem:
+        return InventoryItem(product_id=row.product_id, quantity=row.physical_qty)
 
     # Phase 4: Reservation methods
     def create_reservation(
@@ -845,7 +845,16 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             )
         ).scalar() or 0
 
+        total_allocated_loc = self.session.execute(
+            select(func.coalesce(func.sum(InventoryLocationModel.allocated_qty), 0)).where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.owner_id == owner_clean,
+                InventoryLocationModel.product_id == product_id,
+            )
+        ).scalar() or 0
+
         active_reserved = self._get_active_reserved_qty(warehouse_id, product_id)
+        effective_reserved = max(int(total_allocated_loc), int(active_reserved))
 
         wh_inv = self.session.execute(
             select(WarehouseInventoryModel).where(
@@ -862,7 +871,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 product_id=product_id,
                 quantity=total_physical,
                 physical_qty=total_physical,
-                reserved_qty=active_reserved,
+                reserved_qty=effective_reserved,
                 incoming_qty=0,
                 in_transit_qty=0,
             )
@@ -870,7 +879,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         else:
             wh_inv.quantity = total_physical
             wh_inv.physical_qty = total_physical
-            wh_inv.reserved_qty = active_reserved
+            wh_inv.reserved_qty = effective_reserved
         self.session.flush()
 
 

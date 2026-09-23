@@ -354,8 +354,13 @@ class InventoryService:
             elif doc_type in {"EXPORT", "SALE"}:
                 self._apply_outbound(product_id, int(from_warehouse_id), quantity)
             elif doc_type == "TRANSFER":
-                self._apply_outbound(product_id, int(from_warehouse_id), quantity)
-                self._apply_inbound(product_id, int(to_warehouse_id), quantity, total_delta=0)
+                from_pos = item.get("from_position_id") or item.get("position_id")
+                to_pos = item.get("to_position_id") or item.get("position_id")
+                from_lpn_val = str(item.get("from_lpn") or item.get("lpn") or "")
+                to_lpn_val = str(item.get("to_lpn") or item.get("lpn") or "")
+                lot_val = str(item.get("lot_number") or "")
+                self._apply_outbound(product_id, int(from_warehouse_id), quantity, position_id=from_pos, lpn=from_lpn_val, lot_number=lot_val)
+                self._apply_inbound(product_id, int(to_warehouse_id), quantity, total_delta=0, position_id=to_pos, lpn=to_lpn_val, lot_number=lot_val)
             else:
                 raise ValueError(f"Unsupported document movement type: {doc_type}")
 
@@ -495,15 +500,51 @@ class InventoryService:
         quantity: int,
         *,
         total_delta: Optional[int] = None,
+        position_id: Optional[int] = None,
+        lpn: str = "",
+        status: str = "AVAILABLE",
+        lot_number: str = "",
     ) -> None:
         Sku(product_id)
         WarehouseLocation(warehouse_id)
-        self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, quantity)
+        if position_id:
+            self.adjust_location_inventory(
+                warehouse_id=warehouse_id,
+                position_id=position_id,
+                product_id=product_id,
+                quantity_delta=quantity,
+                lpn=lpn,
+                status=status,
+                lot_number=lot_number,
+            )
+        else:
+            self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, quantity)
 
-    def _apply_outbound(self, product_id: int, warehouse_id: int, quantity: int) -> None:
+    def _apply_outbound(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        quantity: int,
+        *,
+        position_id: Optional[int] = None,
+        lpn: str = "",
+        status: str = "AVAILABLE",
+        lot_number: str = "",
+    ) -> None:
         Sku(product_id)
         WarehouseLocation(warehouse_id)
-        self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, -quantity)
+        if position_id:
+            self.adjust_location_inventory(
+                warehouse_id=warehouse_id,
+                position_id=position_id,
+                product_id=product_id,
+                quantity_delta=-quantity,
+                lpn=lpn,
+                status=status,
+                lot_number=lot_number,
+            )
+        else:
+            self.inventory_repo.adjust_warehouse_quantity(product_id, warehouse_id, -quantity)
 
     def _record_movement(
         self,
@@ -587,6 +628,9 @@ class InventoryService:
         user_id: str = "system",
         idempotency_key: Optional[str] = None,
         source_warehouse_id: int = 0,
+        position_id: int = 0,
+        lpn: str = "",
+        lot_number: str = "",
     ) -> int:
         """Confirms an inventory transaction (either consuming a reservation or directly updating stock)."""
         if quantity <= 0:
@@ -620,14 +664,33 @@ class InventoryService:
             # Handle Transfer lifecycle stock movements
             if transaction_type == "TRANSFER_ISSUE":
                 # TRANSFER_ISSUE reduces physical stock at source, increases in_transit stock at source
-                self.adjust_inventory(
-                    product_id=product_id,
-                    quantity_delta=-quantity,
-                    warehouse_id=warehouse_id,
-                    event_id=idempotency_key,
-                    reason=f"confirm_issue_{document_id or 'transfer'}",
-                    transaction_type="TRANSFER_ISSUE",
-                )
+                if position_id > 0:
+                    self.adjust_location_inventory(
+                        warehouse_id=warehouse_id,
+                        position_id=position_id,
+                        product_id=product_id,
+                        quantity_delta=-quantity,
+                        lpn=lpn,
+                        lot_number=lot_number,
+                    )
+                    self._write_transaction(
+                        transaction_type="TRANSFER_ISSUE",
+                        product_id=product_id,
+                        warehouse_id=warehouse_id,
+                        quantity=quantity,
+                        document_id=document_id,
+                        idempotency_key=f"{idempotency_key}:ledger" if idempotency_key else None,
+                        payload={"position_id": position_id, "lpn": lpn, "lot_number": lot_number},
+                    )
+                else:
+                    self.adjust_inventory(
+                        product_id=product_id,
+                        quantity_delta=-quantity,
+                        warehouse_id=warehouse_id,
+                        event_id=idempotency_key,
+                        reason=f"confirm_issue_{document_id or 'transfer'}",
+                        transaction_type="TRANSFER_ISSUE",
+                    )
                 self.adjust_in_transit(
                     product_id=product_id,
                     quantity_delta=quantity,
@@ -654,14 +717,33 @@ class InventoryService:
                 )
             elif transaction_type == "TRANSFER_RECEIPT":
                 # TRANSFER_RECEIPT increases physical stock at destination, reduces in_transit stock at source
-                self.adjust_inventory(
-                    product_id=product_id,
-                    quantity_delta=quantity,
-                    warehouse_id=warehouse_id,
-                    event_id=idempotency_key,
-                    reason=f"confirm_receipt_{document_id or 'transfer'}",
-                    transaction_type="TRANSFER_RECEIPT",
-                )
+                if position_id > 0:
+                    self.adjust_location_inventory(
+                        warehouse_id=warehouse_id,
+                        position_id=position_id,
+                        product_id=product_id,
+                        quantity_delta=quantity,
+                        lpn=lpn,
+                        lot_number=lot_number,
+                    )
+                    self._write_transaction(
+                        transaction_type="TRANSFER_RECEIPT",
+                        product_id=product_id,
+                        warehouse_id=warehouse_id,
+                        quantity=quantity,
+                        document_id=document_id,
+                        idempotency_key=f"{idempotency_key}:ledger" if idempotency_key else None,
+                        payload={"source_warehouse_id": source_warehouse_id, "position_id": position_id, "lpn": lpn, "lot_number": lot_number},
+                    )
+                else:
+                    self.adjust_inventory(
+                        product_id=product_id,
+                        quantity_delta=quantity,
+                        warehouse_id=warehouse_id,
+                        event_id=idempotency_key,
+                        reason=f"confirm_receipt_{document_id or 'transfer'}",
+                        transaction_type="TRANSFER_RECEIPT",
+                    )
                 # Decrement in-transit stock at the source warehouse
                 src_wh = source_warehouse_id if source_warehouse_id > 0 else warehouse_id
                 self.adjust_in_transit(
