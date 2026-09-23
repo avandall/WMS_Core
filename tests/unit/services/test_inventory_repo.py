@@ -179,3 +179,66 @@ def test_sync_preserves_reservation(db_session, inventory_repo):
     tester.test_sync_preserves_reservation(db_session, inventory_repo)
 
 
+def test_consume_does_not_increase_released_qty(db_session, inventory_repo):
+    """
+    TASK-032 / BIZ-08:
+    Verify that consume_reservation does NOT increase released_qty.
+    Audit invariant requested_qty == reserved_qty + released_qty + consumed_qty must hold true.
+    """
+    warehouse_id = 1
+    product_id = 300
+
+    # 1. Seed initial inventory
+    inventory_repo.adjust_location_quantity(
+        warehouse_id=warehouse_id,
+        position_id=10,
+        product_id=product_id,
+        quantity_delta=100,
+    )
+
+    # 2. Create reservation for 30 units
+    res_id = inventory_repo.create_reservation(
+        source_type="sales_order",
+        source_id=500,
+        document_id=None,
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+        requested_qty=30,
+        created_by="test_user",
+        idempotency_key="res-consume-001",
+        expires_at=None,
+    )
+
+    res = inventory_repo.get_reservation(res_id)
+    assert res is not None
+    assert res["requested_qty"] == 30
+    assert res["reserved_qty"] == 30
+    assert res["consumed_qty"] == 0
+    assert res["released_qty"] == 0
+    assert res["status"] == "RESERVED"
+    assert res["requested_qty"] == res["reserved_qty"] + res["released_qty"] + res["consumed_qty"]
+
+    # 3. Consume 10 units (partial consume)
+    inventory_repo.consume_reservation(reservation_id=res_id, consumed_qty=10)
+
+    res = inventory_repo.get_reservation(res_id)
+    assert res is not None
+    assert res["consumed_qty"] == 10
+    assert res["reserved_qty"] == 20
+    assert res["released_qty"] == 0  # released_qty MUST NOT increase on consume!
+    assert res["status"] == "RESERVED"
+    assert res["requested_qty"] == res["reserved_qty"] + res["released_qty"] + res["consumed_qty"]
+
+    # 4. Consume remaining 20 units (full consume)
+    inventory_repo.consume_reservation(reservation_id=res_id, consumed_qty=20)
+
+    res = inventory_repo.get_reservation(res_id)
+    assert res is not None
+    assert res["consumed_qty"] == 30
+    assert res["reserved_qty"] == 0
+    assert res["released_qty"] == 0  # Still 0!
+    assert res["status"] == "CONSUMED"
+    assert res["requested_qty"] == res["reserved_qty"] + res["released_qty"] + res["consumed_qty"]
+
+
+

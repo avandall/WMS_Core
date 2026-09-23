@@ -330,7 +330,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if reservation.status in ("RELEASED", "CONSUMED") or reservation.reserved_qty == 0:
             return  # Already released, consumed, or zero reserved quantity
 
-        qty_to_release = released_qty or reservation.reserved_qty - reservation.released_qty
+        qty_to_release = released_qty if released_qty is not None else reservation.reserved_qty
         if qty_to_release <= 0:
             return
 
@@ -366,10 +366,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 f"Cannot consume more than reserved. Reserved: {reservation.reserved_qty}, Requested: {consumed_qty}"
             )
 
-        # Update reservation
+        # Update reservation: consumed_qty increases, reserved_qty decreases, released_qty remains UNCHANGED [BIZ-08 / TASK-032]
         reservation.consumed_qty += consumed_qty
         reservation.reserved_qty -= consumed_qty
-        reservation.released_qty += consumed_qty  # Consumed is also released from reservation
 
         if reservation.reserved_qty <= 0:
             reservation.status = "CONSUMED"
@@ -399,6 +398,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "product_id": int(row.product_id),
             "warehouse_id": int(row.warehouse_id),
             "document_id": int(row.document_id) if row.document_id else None,
+            "requested_qty": int(row.requested_qty),
             "reserved_qty": int(row.reserved_qty),
             "consumed_qty": int(row.consumed_qty),
             "released_qty": int(row.released_qty),
