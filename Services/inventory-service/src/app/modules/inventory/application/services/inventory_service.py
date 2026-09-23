@@ -199,7 +199,7 @@ class InventoryService:
             existing = self.inventory_repo.session.execute(
                 select(StockReservationModel).where(
                     StockReservationModel.idempotency_key == event_id
-                )
+                ).with_for_update()
             ).scalar_one_or_none()
             if existing:
                 return existing.id
@@ -335,8 +335,6 @@ class InventoryService:
         event_id = str(payload.get("event_id") or "")
         if not event_id:
             raise ValueError("Inventory movement payload requires event_id")
-        if self.inventory_repo.has_movement_event(event_id):
-            return False
 
         doc_type = str(payload.get("doc_type") or "").upper()
         document_id = int(payload["document_id"]) if payload.get("document_id") is not None else None
@@ -345,6 +343,22 @@ class InventoryService:
         items = list(payload.get("items") or [])
         if not items:
             raise InvalidQuantityError("Inventory movement requires at least one item")
+
+        # Lock target warehouse inventory & location rows FIRST in sorted order to enforce Lock Ordering Rule
+        lock_pairs = set()
+        for item in items:
+            p_id = int(item["product_id"])
+            if to_warehouse_id is not None:
+                lock_pairs.add((p_id, int(to_warehouse_id)))
+            if from_warehouse_id is not None:
+                lock_pairs.add((p_id, int(from_warehouse_id)))
+
+        if lock_pairs:
+            self.inventory_repo.lock_warehouse_inventory_and_locations(sorted(lock_pairs))
+
+        # Re-check idempotency AFTER acquiring locks to eliminate double deduction under concurrency
+        if self.inventory_repo.has_movement_event(event_id):
+            return False
 
         for item in items:
             product_id = int(item["product_id"])

@@ -54,6 +54,12 @@ class IInventoryRepo(ABC):
         pass
 
     @abstractmethod
+    def lock_warehouse_inventory_and_locations(
+        self, pairs: list[tuple[int, int]]
+    ) -> None:
+        pass
+
+    @abstractmethod
     def record_movement_event(
         self,
         *,

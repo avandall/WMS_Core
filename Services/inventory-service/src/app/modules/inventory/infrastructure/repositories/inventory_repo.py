@@ -256,6 +256,24 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
     def _to_domain(row: WarehouseInventoryModel) -> InventoryItem:
         return InventoryItem(product_id=row.product_id, quantity=row.physical_qty)
 
+    def lock_warehouse_inventory_and_locations(self, pairs: list[tuple[int, int]]) -> None:
+        """Lock InventoryLocationModel and WarehouseInventoryModel rows in sorted order to enforce Lock Ordering Rule."""
+        unique_sorted_pairs = sorted(set(pairs))
+        for product_id, warehouse_id in unique_sorted_pairs:
+            self.session.execute(
+                select(InventoryLocationModel).where(
+                    InventoryLocationModel.warehouse_id == warehouse_id,
+                    InventoryLocationModel.product_id == product_id,
+                ).with_for_update()
+            ).scalars().all()
+
+            self.session.execute(
+                select(WarehouseInventoryModel).where(
+                    WarehouseInventoryModel.warehouse_id == warehouse_id,
+                    WarehouseInventoryModel.product_id == product_id,
+                ).with_for_update()
+            ).scalars().all()
+
     # Phase 4: Reservation methods
     def create_reservation(
         self,
@@ -271,21 +289,23 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         expires_at: datetime | None,
     ) -> int:
 
-        # Check for idempotency
-        if idempotency_key:
-            existing = self.session.execute(
-                select(StockReservationModel).where(StockReservationModel.idempotency_key == idempotency_key)
-            ).scalar_one_or_none()
-            if existing:
-                return existing.id
-
-        # Check ATP (available-to-promise)
+        # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
         warehouse_row = self.session.execute(
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == product_id,
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
             ).with_for_update()
         ).scalar_one_or_none()
+
+        # Step 2 (Lock Ordering): Check idempotency on StockReservationModel SECOND with FOR UPDATE
+        if idempotency_key:
+            existing = self.session.execute(
+                select(StockReservationModel)
+                .where(StockReservationModel.idempotency_key == idempotency_key)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if existing:
+                return existing.id
 
         if not warehouse_row:
             raise InsufficientStockError(f"No inventory found for product {product_id} in warehouse {warehouse_id}")
@@ -320,7 +340,30 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         return reservation.id
 
     def release_reservation(self, reservation_id: int, released_qty: int | None = None) -> None:
+        meta = self.session.execute(
+            select(
+                StockReservationModel.product_id,
+                StockReservationModel.warehouse_id,
+                StockReservationModel.status,
+                StockReservationModel.reserved_qty,
+            ).where(StockReservationModel.id == reservation_id)
+        ).first()
+        if not meta:
+            raise KeyError(f"Reservation {reservation_id} not found")
 
+        prod_id, wh_id, current_status, current_reserved_qty = meta
+        if current_status in ("RELEASED", "CONSUMED") or current_reserved_qty == 0:
+            return  # Already released, consumed, or zero reserved quantity
+
+        # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
+        warehouse_row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == prod_id,
+                WarehouseInventoryModel.warehouse_id == wh_id,
+            ).with_for_update()
+        ).scalar_one_or_none()
+
+        # Step 2 (Lock Ordering): Lock StockReservationModel SECOND
         reservation = self.session.execute(
             select(StockReservationModel).where(StockReservationModel.id == reservation_id).with_for_update()
         ).scalar_one_or_none()
@@ -340,21 +383,32 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if reservation.reserved_qty <= 0:
             reservation.status = "RELEASED"
 
-        # Update warehouse reserved_qty
-        warehouse_row = self.session.execute(
-            select(WarehouseInventoryModel).where(
-                WarehouseInventoryModel.product_id == reservation.product_id,
-                WarehouseInventoryModel.warehouse_id == reservation.warehouse_id,
-            ).with_for_update()
-        ).scalar_one_or_none()
-
         if warehouse_row:
-            warehouse_row.reserved_qty -= qty_to_release
+            warehouse_row.reserved_qty = max(0, warehouse_row.reserved_qty - qty_to_release)
 
         self._commit_if_auto()
 
     def consume_reservation(self, reservation_id: int, consumed_qty: int) -> None:
+        meta = self.session.execute(
+            select(
+                StockReservationModel.product_id,
+                StockReservationModel.warehouse_id,
+            ).where(StockReservationModel.id == reservation_id)
+        ).first()
+        if not meta:
+            raise KeyError(f"Reservation {reservation_id} not found")
 
+        prod_id, wh_id = meta
+
+        # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
+        warehouse_row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.product_id == prod_id,
+                WarehouseInventoryModel.warehouse_id == wh_id,
+            ).with_for_update()
+        ).scalar_one_or_none()
+
+        # Step 2 (Lock Ordering): Lock StockReservationModel SECOND
         reservation = self.session.execute(
             select(StockReservationModel).where(StockReservationModel.id == reservation_id).with_for_update()
         ).scalar_one_or_none()
@@ -374,15 +428,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             reservation.status = "CONSUMED"
 
         # Update warehouse reserved_qty and physical_qty
-        warehouse_row = self.session.execute(
-            select(WarehouseInventoryModel).where(
-                WarehouseInventoryModel.product_id == reservation.product_id,
-                WarehouseInventoryModel.warehouse_id == reservation.warehouse_id,
-            ).with_for_update()
-        ).scalar_one_or_none()
-
         if warehouse_row:
-            warehouse_row.reserved_qty -= consumed_qty
+            warehouse_row.reserved_qty = max(0, warehouse_row.reserved_qty - consumed_qty)
             warehouse_row.physical_qty -= consumed_qty  # Physical stock decreases on consumption
             warehouse_row.quantity = warehouse_row.physical_qty  # Keep legacy quantity in sync
 
