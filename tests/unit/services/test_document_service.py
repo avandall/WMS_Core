@@ -185,3 +185,136 @@ def test_cancel_draft_document_does_not_call_release_reservation(document_servic
 
     assert not mock_channel_ctx.called
     assert cancelled_doc.status == DocumentStatus.CANCELLED
+
+
+def test_export_reserve_blocks_concurrent_export(document_service, mock_document_repo):
+    """
+    TASK-023 Requirement:
+    Reserving stock for an EXPORT document succeeds and blocks concurrent reservation when stock is insufficient.
+    """
+    from app.shared.domain.business_exceptions import ValidationError
+
+    # 1. Setup POSTED Export document
+    item = DocumentProduct(product_id=101, quantity=10, unit_price=50.0)
+    export_doc = Document(
+        document_id=10,
+        doc_type=DocumentType.EXPORT,
+        from_warehouse_id=1,
+        items=[item],
+        created_by="exporter",
+    )
+    export_doc.status = DocumentStatus.POSTED
+    mock_document_repo._store[10] = export_doc
+
+    # 2. Setup mock ReserveStock response for first EXPORT
+    mock_reserve_resp_1 = MagicMock()
+    mock_reserve_resp_1.success = True
+    mock_reserve_resp_1.reservation_id = 901
+
+    mock_stub_1 = MagicMock()
+    mock_stub_1.ReserveStock.return_value = mock_reserve_resp_1
+
+    with patch("shared_utils.security.grpc.configured_grpc_channel") as mock_channel_ctx:
+        mock_channel = MagicMock()
+        mock_channel_ctx.return_value.__enter__.return_value = mock_channel
+        with patch("documents_service.gen.wms.inventory.v1.inventory_pb2_grpc.InventoryServiceStub", return_value=mock_stub_1):
+            reserved_doc = document_service.reserve_request_stock(document_id=10)
+
+    # Verify reservation call parameters
+    assert mock_stub_1.ReserveStock.called
+    req = mock_stub_1.ReserveStock.call_args[0][0]
+    assert req.product_id == 101
+    assert req.quantity == 10
+    assert req.warehouse_id == 1
+    assert req.source_type == "export_document"
+    assert reserved_doc.items[0].reserved_qty == 10
+
+    # 3. Concurrent EXPORT attempt when stock is insufficient (ReserveStock fails)
+    export_doc_2 = Document(
+        document_id=11,
+        doc_type=DocumentType.EXPORT,
+        from_warehouse_id=1,
+        items=[DocumentProduct(product_id=101, quantity=10, unit_price=50.0)],
+        created_by="exporter_2",
+    )
+    export_doc_2.status = DocumentStatus.POSTED
+    mock_document_repo._store[11] = export_doc_2
+
+    mock_reserve_resp_2 = MagicMock()
+    mock_reserve_resp_2.success = False
+    mock_reserve_resp_2.message = "Insufficient available stock"
+
+    mock_stub_2 = MagicMock()
+    mock_stub_2.ReserveStock.return_value = mock_reserve_resp_2
+
+    with patch("shared_utils.security.grpc.configured_grpc_channel") as mock_channel_ctx:
+        mock_channel = MagicMock()
+        mock_channel_ctx.return_value.__enter__.return_value = mock_channel
+        with patch("documents_service.gen.wms.inventory.v1.inventory_pb2_grpc.InventoryServiceStub", return_value=mock_stub_2):
+            with pytest.raises(ValidationError) as exc_info:
+                document_service.reserve_request_stock(document_id=11)
+            assert "Insufficient available stock" in str(exc_info.value)
+
+
+def test_transfer_reserve_success(document_service, mock_document_repo):
+    """
+    TASK-023 Requirement:
+    Reserving stock for a TRANSFER document succeeds using from_warehouse_id.
+    """
+    item = DocumentProduct(product_id=202, quantity=15, unit_price=30.0)
+    transfer_doc = Document(
+        document_id=20,
+        doc_type=DocumentType.TRANSFER,
+        from_warehouse_id=2,
+        to_warehouse_id=3,
+        items=[item],
+        created_by="transfer_agent",
+    )
+    transfer_doc.status = DocumentStatus.POSTED
+    mock_document_repo._store[20] = transfer_doc
+
+    mock_reserve_resp = MagicMock()
+    mock_reserve_resp.success = True
+    mock_reserve_resp.reservation_id = 902
+
+    mock_stub = MagicMock()
+    mock_stub.ReserveStock.return_value = mock_reserve_resp
+
+    with patch("shared_utils.security.grpc.configured_grpc_channel") as mock_channel_ctx:
+        mock_channel = MagicMock()
+        mock_channel_ctx.return_value.__enter__.return_value = mock_channel
+        with patch("documents_service.gen.wms.inventory.v1.inventory_pb2_grpc.InventoryServiceStub", return_value=mock_stub):
+            reserved_doc = document_service.reserve_request_stock(document_id=20)
+
+    assert mock_stub.ReserveStock.called
+    req = mock_stub.ReserveStock.call_args[0][0]
+    assert req.product_id == 202
+    assert req.quantity == 15
+    assert req.warehouse_id == 2
+    assert req.source_type == "transfer_document"
+    assert reserved_doc.items[0].reserved_qty == 15
+
+
+def test_import_reserve_rejected(document_service, mock_document_repo):
+    """
+    TASK-023 Requirement:
+    Attempting to reserve stock for an IMPORT document raises InvalidDocumentStatusError.
+    """
+    from app.shared.domain.business_exceptions import InvalidDocumentStatusError
+
+    item = DocumentProduct(product_id=303, quantity=100, unit_price=10.0)
+    import_doc = Document(
+        document_id=30,
+        doc_type=DocumentType.IMPORT,
+        to_warehouse_id=1,
+        items=[item],
+        created_by="importer",
+    )
+    import_doc.status = DocumentStatus.POSTED
+    mock_document_repo._store[30] = import_doc
+
+    with pytest.raises(InvalidDocumentStatusError) as exc_info:
+        document_service.reserve_request_stock(document_id=30)
+
+    assert "Reservation only supported for SALE, EXPORT, and TRANSFER" in str(exc_info.value)
+

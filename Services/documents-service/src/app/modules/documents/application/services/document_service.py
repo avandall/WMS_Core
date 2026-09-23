@@ -266,18 +266,18 @@ class DocumentService:
         document_id: int,
         request_id: Optional[str] = None,
     ) -> Document:
-        """Reserve stock for SALE documents to prevent double-selling.
+        """Reserve stock for SALE, EXPORT, and TRANSFER documents to prevent double-selling/double-allocation.
         
-        For SALE documents, reserves each line from the source warehouse.
+        For SALE, EXPORT, and TRANSFER documents, reserves each line from the source warehouse (from_warehouse_id).
         Updates document line reserved_qty with the reservation ID.
         """
 
         document = self.get_document(document_id)
         
-        # Phase 8: Only implement for SALE documents initially
-        if document.doc_type != DocumentType.SALE:
+        # TASK-023 [BIZ-04]: Support reservation for SALE, EXPORT, and TRANSFER documents
+        if document.doc_type not in (DocumentType.SALE, DocumentType.EXPORT, DocumentType.TRANSFER):
             raise InvalidDocumentStatusError(
-                f"Reservation only supported for SALE documents, got {document.doc_type}"
+                f"Reservation only supported for SALE, EXPORT, and TRANSFER documents, got {document.doc_type}"
             )
         
         if document.status != DocumentStatus.POSTED:
@@ -309,7 +309,7 @@ class DocumentService:
                                 quantity=int(item.requested_qty),
                                 warehouse_id=int(document.from_warehouse_id),
                                 event_id=event_id,
-                                source_type="sale_document",
+                                source_type=f"{document.doc_type.value.lower()}_document",
                                 source_id=int(document_id),
                                 document_id=int(document_id),
                                 created_by=document.created_by or "system",
