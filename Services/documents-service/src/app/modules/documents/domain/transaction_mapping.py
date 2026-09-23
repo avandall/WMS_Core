@@ -9,6 +9,8 @@ DOC_TYPE_TO_TRANSACTION_TYPE: dict[DocumentType, TransactionType] = {
     DocumentType.EXPORT: TransactionType.ADJUSTMENT_OUT,
     DocumentType.SALE: TransactionType.SALES_SHIPMENT,
     DocumentType.TRANSFER: TransactionType.TRANSFER_ISSUE,
+    DocumentType.PURCHASE_RETURN: TransactionType.PURCHASE_RETURN_SHIPMENT,
+    DocumentType.SALES_RETURN: TransactionType.SALES_RETURN_RECEIPT,
 }
 
 

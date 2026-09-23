@@ -20,12 +20,15 @@ class DocumentType(str, Enum):
     EXPORT = "EXPORT"
     TRANSFER = "TRANSFER"
     SALE = "SALE"
+    PURCHASE_RETURN = "PURCHASE_RETURN"
+    SALES_RETURN = "SALES_RETURN"
 
 
 class DocumentStatus(str, Enum):
     DRAFT = "DRAFT"
     REQUESTED = "REQUESTED"
     APPROVED = "APPROVED"
+    QA_INSPECTED = "QA_INSPECTED"
     RESERVED = "RESERVED"
     PARTIALLY_RESERVED = "PARTIALLY_RESERVED"
     IN_PROGRESS = "IN_PROGRESS"
@@ -155,12 +158,12 @@ class Document(DomainEntity):
         from_warehouse_id: Optional[int],
         to_warehouse_id: Optional[int],
     ) -> None:
-        if doc_type == DocumentType.IMPORT:
+        if doc_type in (DocumentType.IMPORT, DocumentType.SALES_RETURN):
             if to_warehouse_id is None:
-                raise ValidationError("IMPORT documents require a destination warehouse")
-        elif doc_type in (DocumentType.EXPORT, DocumentType.SALE):
+                raise ValidationError(f"{doc_type.value} documents require a destination warehouse")
+        elif doc_type in (DocumentType.EXPORT, DocumentType.SALE, DocumentType.PURCHASE_RETURN):
             if from_warehouse_id is None:
-                raise ValidationError("EXPORT and SALE documents require a source warehouse")
+                raise ValidationError(f"{doc_type.value} documents require a source warehouse")
         elif doc_type == DocumentType.TRANSFER:
             if from_warehouse_id is None or to_warehouse_id is None:
                 raise ValidationError("TRANSFER documents require both source and destination warehouses")

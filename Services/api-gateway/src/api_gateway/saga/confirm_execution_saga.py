@@ -140,6 +140,10 @@ class ConfirmExecutionSaga:
                     target_tx_type = "PURCHASE_RECEIPT"
                 elif doc_type in ("EXPORT", "SCRAP"):
                     target_tx_type = "SCRAP"
+                elif doc_type in ("PURCHASE_RETURN", "PURCHASE_RETURN_SHIPMENT"):
+                    target_tx_type = "PURCHASE_RETURN_SHIPMENT"
+                elif doc_type in ("SALES_RETURN", "SALES_RETURN_RECEIPT"):
+                    target_tx_type = "SALES_RETURN_RECEIPT"
                 else:
                     target_tx_type = doc_type
 

@@ -54,6 +54,21 @@ class DocumentsServiceStub(object):
                 request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.SerializeToString,
                 response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.Document.FromString,
                 _registered_method=True)
+        self.CreatePurchaseReturn = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/CreatePurchaseReturn',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.Document.FromString,
+                _registered_method=True)
+        self.CreateSalesReturn = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/CreateSalesReturn',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.Document.FromString,
+                _registered_method=True)
+        self.InspectQa = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/InspectQa',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.InspectQaRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.InspectQaResponse.FromString,
+                _registered_method=True)
         self.PostDocument = channel.unary_unary(
                 '/wms.documents.v1.DocumentsService/PostDocument',
                 request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.PostDocumentRequest.SerializeToString,
@@ -133,6 +148,24 @@ class DocumentsServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def CreateTransfer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreatePurchaseReturn(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateSalesReturn(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def InspectQa(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -229,6 +262,21 @@ def add_DocumentsServiceServicer_to_server(servicer, server):
                     servicer.CreateTransfer,
                     request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.FromString,
                     response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.Document.SerializeToString,
+            ),
+            'CreatePurchaseReturn': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreatePurchaseReturn,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.Document.SerializeToString,
+            ),
+            'CreateSalesReturn': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateSalesReturn,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.Document.SerializeToString,
+            ),
+            'InspectQa': grpc.unary_unary_rpc_method_handler(
+                    servicer.InspectQa,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.InspectQaRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.InspectQaResponse.SerializeToString,
             ),
             'PostDocument': grpc.unary_unary_rpc_method_handler(
                     servicer.PostDocument,
@@ -394,6 +442,87 @@ class DocumentsService(object):
             '/wms.documents.v1.DocumentsService/CreateTransfer',
             wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.SerializeToString,
             wms_dot_documents_dot_v1_dot_documents__pb2.Document.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreatePurchaseReturn(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/CreatePurchaseReturn',
+            wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.Document.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateSalesReturn(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/CreateSalesReturn',
+            wms_dot_documents_dot_v1_dot_documents__pb2.CreateDocumentRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.Document.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InspectQa(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/InspectQa',
+            wms_dot_documents_dot_v1_dot_documents__pb2.InspectQaRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.InspectQaResponse.FromString,
             options,
             channel_credentials,
             insecure,

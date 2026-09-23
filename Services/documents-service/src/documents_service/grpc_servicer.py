@@ -139,6 +139,61 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             )
             return self._to_proto(doc)
 
+    def CreatePurchaseReturn(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
+        with get_db_session() as db:
+            service = self._service(db)
+            doc = service.create_purchase_return_document(
+                from_warehouse_id=int(request.from_warehouse_id),
+                items=[
+                    {"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)}
+                    for i in request.items
+                ],
+                created_by=request.created_by or "system",
+                note=request.note or None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                reason_code=request.reason_code if request.reason_code else None,
+                request_id=self._request_id(context),
+            )
+            return self._to_proto(doc)
+
+    def CreateSalesReturn(self, request: documents_pb2.CreateDocumentRequest, context: grpc.ServicerContext):
+        with get_db_session() as db:
+            service = self._service(db)
+            doc = service.create_sales_return_document(
+                to_warehouse_id=int(request.to_warehouse_id),
+                items=[
+                    {"product_id": int(i.product_id), "quantity": int(i.quantity), "unit_price": float(i.unit_price)}
+                    for i in request.items
+                ],
+                created_by=request.created_by or "system",
+                note=request.note or None,
+                customer_id=int(request.customer_id) if request.customer_id else None,
+                transaction_type=request.transaction_type if request.transaction_type else None,
+                reason_code=request.reason_code if request.reason_code else None,
+                request_id=self._request_id(context),
+            )
+            return self._to_proto(doc)
+
+    def InspectQa(self, request: documents_pb2.InspectQaRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                doc = service.inspect_qa_document(
+                    document_id=int(request.document_id),
+                    inspected_by=request.inspected_by or "system",
+                    passed=request.passed,
+                    note=request.note or None,
+                    request_id=self._request_id(context),
+                )
+                return documents_pb2.InspectQaResponse(
+                    message="QA inspection completed successfully",
+                    document=self._to_proto(doc),
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return documents_pb2.InspectQaResponse(message=sanitize_grpc_error(exc))
+
     def PostDocument(self, request: documents_pb2.PostDocumentRequest, context: grpc.ServicerContext):
         try:
             with get_db_session() as db:

@@ -43,6 +43,7 @@ from api_gateway.schemas import (
     WarehouseTransferPayload,
     ConfirmExecutionPayload,
     LoginPayload,
+    InspectQaPayload,
 )
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
@@ -709,6 +710,86 @@ def create_transfer_document(payload: DocumentPayload, request: Request):
             timeout=GRPC_TIMEOUT_SLOW,
         )
     return document_to_dict(doc)
+
+
+@router.post(
+    "/documents/purchase-return",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_CREATE_EXPORT))],
+)
+def create_purchase_return_document(payload: DocumentPayload, request: Request):
+    with documents_stub() as stub:
+        doc = _grpc_call(
+            stub.CreatePurchaseReturn,
+            documents_pb2.CreateDocumentRequest(
+                from_warehouse_id=payload.source_warehouse_id or payload.warehouse_id,
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=i.product_id,
+                        quantity=i.quantity,
+                        unit_price=i.unit_price,
+                    )
+                    for i in payload.items
+                ],
+                created_by=payload.created_by,
+                note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return document_to_dict(doc)
+
+
+@router.post(
+    "/documents/sales-return",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_CREATE_IMPORT))],
+)
+def create_sales_return_document(payload: DocumentPayload, request: Request):
+    with documents_stub() as stub:
+        doc = _grpc_call(
+            stub.CreateSalesReturn,
+            documents_pb2.CreateDocumentRequest(
+                to_warehouse_id=payload.destination_warehouse_id or payload.warehouse_id,
+                customer_id=payload.customer_id,
+                items=[
+                    documents_pb2.DocumentItem(
+                        product_id=i.product_id,
+                        quantity=i.quantity,
+                        unit_price=i.unit_price,
+                    )
+                    for i in payload.items
+                ],
+                created_by=payload.created_by,
+                note=payload.note,
+                transaction_type=payload.transaction_type or "",
+                reason_code=payload.reason_code or "",
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return document_to_dict(doc)
+
+
+@router.post(
+    "/documents/{document_id}/inspect-qa",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.DOC_POST))],
+)
+def inspect_qa_document(document_id: int, payload: InspectQaPayload, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.InspectQa,
+            documents_pb2.InspectQaRequest(
+                document_id=document_id,
+                inspected_by=payload.inspected_by,
+                passed=payload.passed,
+                note=payload.note,
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    return {"message": resp.message, "document": document_to_dict(resp.document)}
+
 
 
 @router.post(

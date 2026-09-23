@@ -365,7 +365,20 @@ class InventoryService:
             quantity = Quantity(int(item["quantity"])).value
             if doc_type == "IMPORT":
                 self._apply_inbound(product_id, int(to_warehouse_id), quantity)
-            elif doc_type in {"EXPORT", "SALE"}:
+            elif doc_type == "SALES_RETURN":
+                pos_id = item.get("position_id") or 1
+                lpn_val = str(item.get("lpn") or "")
+                lot_val = str(item.get("lot_number") or "")
+                self._apply_inbound(
+                    product_id,
+                    int(to_warehouse_id),
+                    quantity,
+                    position_id=pos_id,
+                    lpn=lpn_val,
+                    status="QUARANTINED",
+                    lot_number=lot_val,
+                )
+            elif doc_type in {"EXPORT", "SALE", "PURCHASE_RETURN"}:
                 self._apply_outbound(product_id, int(from_warehouse_id), quantity)
             elif doc_type == "TRANSFER":
                 from_pos = item.get("from_position_id") or item.get("position_id")
@@ -390,6 +403,8 @@ class InventoryService:
             "EXPORT": "ADJUSTMENT_OUT",
             "SALE": "SALES_SHIPMENT",
             "TRANSFER": "TRANSFER_ISSUE",
+            "PURCHASE_RETURN": "PURCHASE_RETURN_SHIPMENT",
+            "SALES_RETURN": "SALES_RETURN_RECEIPT",
         }
         ledger_tx_type = _tx_type_map.get(doc_type, doc_type)
         for item in items:
@@ -817,6 +832,35 @@ class InventoryService:
                     event_type="TransferReceived",
                     payload=rcpt_payload,
                 )
+            elif transaction_type == "SALES_RETURN_RECEIPT":
+                if position_id > 0:
+                    self.adjust_location_inventory(
+                        warehouse_id=warehouse_id,
+                        position_id=position_id,
+                        product_id=product_id,
+                        quantity_delta=quantity,
+                        lpn=lpn,
+                        status="QUARANTINED",
+                        lot_number=lot_number,
+                    )
+                    self._write_transaction(
+                        transaction_type="SALES_RETURN_RECEIPT",
+                        product_id=product_id,
+                        warehouse_id=warehouse_id,
+                        quantity=quantity,
+                        document_id=document_id,
+                        idempotency_key=f"{idempotency_key}:ledger" if idempotency_key else None,
+                        payload={"position_id": position_id, "lpn": lpn, "lot_number": lot_number, "status": "QUARANTINED"},
+                    )
+                else:
+                    self.adjust_inventory(
+                        product_id=product_id,
+                        quantity_delta=quantity,
+                        warehouse_id=warehouse_id,
+                        event_id=idempotency_key,
+                        reason=f"confirm_sales_return_{document_id or 'return'}",
+                        transaction_type="SALES_RETURN_RECEIPT",
+                    )
             else:
                 # Direct physical quantity adjustment
                 OUTBOUND_TYPES = {

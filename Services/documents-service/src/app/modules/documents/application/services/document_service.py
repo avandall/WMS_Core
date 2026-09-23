@@ -148,6 +148,58 @@ class DocumentService:
         self._publish_document_uploaded(document, request_id)
         return document
 
+    def create_purchase_return_document(
+        self,
+        from_warehouse_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str,
+        note: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        document = Document(
+            document_id=0,
+            doc_type=DocumentType.PURCHASE_RETURN,
+            from_warehouse_id=from_warehouse_id,
+            items=self._validate_and_convert_items(items),
+            created_by=created_by,
+            note=note,
+        )
+        document.transaction_type = transaction_type or "PURCHASE_RETURN_SHIPMENT"
+        document.reason_code = reason_code
+        self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
+        return document
+
+    def create_sales_return_document(
+        self,
+        to_warehouse_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str,
+        note: Optional[str] = None,
+        customer_id: Optional[int] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        document = Document(
+            document_id=0,
+            doc_type=DocumentType.SALES_RETURN,
+            to_warehouse_id=to_warehouse_id,
+            items=self._validate_and_convert_items(items),
+            created_by=created_by,
+            note=note,
+            customer_id=customer_id,
+        )
+        document.transaction_type = transaction_type or "SALES_RETURN_RECEIPT"
+        document.reason_code = reason_code
+        self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
+        return document
+
     def post_document(
         self,
         document_id: int,
@@ -237,6 +289,47 @@ class DocumentService:
         )
         return document
 
+    def inspect_qa_document(
+        self,
+        document_id: int,
+        inspected_by: str,
+        passed: bool = True,
+        note: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """Inspect QA for return/inbound documents.
+        
+        Transitions status DRAFT/POSTED/APPROVED -> QA_INSPECTED.
+        """
+        document = self.get_document(document_id)
+        if document.status == DocumentStatus.CANCELLED:
+            raise InvalidDocumentStatusError(f"Cannot inspect cancelled document {document_id}")
+        if document.status in (DocumentStatus.COMPLETED, DocumentStatus.EXECUTED):
+            raise InvalidDocumentStatusError(f"Cannot QA inspect already executed/completed document {document_id}")
+
+        if passed:
+            document.status = DocumentStatus.QA_INSPECTED
+        else:
+            document.status = DocumentStatus.CANCELLED
+            document.cancellation_reason = f"QA Inspection Failed: {note or ''}"
+
+        self.document_repo.save(document)
+        self._commit_if_needed()
+
+        self.event_publisher.publish(
+            event_type="DocumentQaInspected",
+            payload={
+                "event_id": f"documents:{document_id}:qa-inspected",
+                "request_id": request_id,
+                "document_id": document_id,
+                "status": document.status.value,
+                "inspected_by": inspected_by,
+                "passed": passed,
+                "note": note,
+            },
+        )
+        return document
+
     def cancel_document(
         self,
         document_id: int,
@@ -272,18 +365,18 @@ class DocumentService:
         document_id: int,
         request_id: Optional[str] = None,
     ) -> Document:
-        """Reserve stock for SALE, EXPORT, and TRANSFER documents to prevent double-selling/double-allocation.
+        """Reserve stock for SALE, EXPORT, TRANSFER, and PURCHASE_RETURN documents to prevent double-selling/double-allocation.
         
-        For SALE, EXPORT, and TRANSFER documents, reserves each line from the source warehouse (from_warehouse_id).
+        For SALE, EXPORT, TRANSFER, and PURCHASE_RETURN documents, reserves each line from the source warehouse (from_warehouse_id).
         Updates document line reserved_qty with the reservation ID.
         """
 
         document = self.get_document(document_id)
         
-        # TASK-023 [BIZ-04]: Support reservation for SALE, EXPORT, and TRANSFER documents
-        if document.doc_type not in (DocumentType.SALE, DocumentType.EXPORT, DocumentType.TRANSFER):
+        # TASK-023 [BIZ-04]: Support reservation for SALE, EXPORT, TRANSFER, and PURCHASE_RETURN documents
+        if document.doc_type not in (DocumentType.SALE, DocumentType.EXPORT, DocumentType.TRANSFER, DocumentType.PURCHASE_RETURN):
             raise InvalidDocumentStatusError(
-                f"Reservation only supported for SALE, EXPORT, and TRANSFER documents, got {document.doc_type}"
+                f"Reservation only supported for SALE, EXPORT, TRANSFER, and PURCHASE_RETURN documents, got {document.doc_type}"
             )
         
         if document.status != DocumentStatus.POSTED:

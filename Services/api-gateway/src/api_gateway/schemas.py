@@ -70,3 +70,10 @@ class LoginPayload(BaseModel):
     password: str = ""
 
 
+class InspectQaPayload(BaseModel):
+    inspected_by: str = "system"
+    passed: bool = True
+    note: str = ""
+
+
+

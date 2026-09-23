@@ -7,6 +7,9 @@ service DocumentsService {
   rpc CreateExport(CreateDocumentRequest) returns (Document);
   rpc CreateSale(CreateDocumentRequest) returns (Document);
   rpc CreateTransfer(CreateDocumentRequest) returns (Document);
+  rpc CreatePurchaseReturn(CreateDocumentRequest) returns (Document);
+  rpc CreateSalesReturn(CreateDocumentRequest) returns (Document);
+  rpc InspectQa(InspectQaRequest) returns (InspectQaResponse);
   rpc PostDocument(PostDocumentRequest) returns (PostDocumentResponse);
   rpc GetDocument(GetDocumentRequest) returns (Document);
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
@@ -21,6 +24,16 @@ service DocumentsService {
   rpc ConfirmExecution(ConfirmExecutionRequest) returns (ConfirmExecutionResponse);
   rpc CompleteRequest(CompleteRequestRequest) returns (CompleteRequestResponse);
   rpc RevertToInProgress(RevertToInProgressRequest) returns (RevertToInProgressResponse);
+}
+
+enum DocumentType {
+  DOCUMENT_TYPE_UNSPECIFIED = 0;
+  IMPORT = 1;
+  EXPORT = 2;
+  TRANSFER = 3;
+  SALE = 4;
+  PURCHASE_RETURN = 6;
+  SALES_RETURN = 7;
 }
 
 message DocumentItem {
@@ -152,5 +165,18 @@ message RevertToInProgressRequest {
 message RevertToInProgressResponse {
   string message = 1;
 }
+
+message InspectQaRequest {
+  int64 document_id = 1;
+  string inspected_by = 2;
+  bool passed = 3;
+  string note = 4;
+}
+
+message InspectQaResponse {
+  string message = 1;
+  Document document = 2;
+}
+
 
 
