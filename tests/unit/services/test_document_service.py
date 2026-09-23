@@ -1,9 +1,16 @@
-"""
-Unit tests for DocumentService — TASK-019
-Validates auto-release of stock reservations when cancelling documents in RESERVED / IN_PROGRESS status.
-"""
-
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Purge any previously imported 'app' module to avoid cross-service namespace collisions
+for mod in list(sys.modules.keys()):
+    if mod == "app" or mod.startswith("app."):
+        del sys.modules[mod]
+
+doc_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "documents-service" / "src")
+if doc_src not in sys.path:
+    sys.path.insert(0, doc_src)
+
 import pytest
 
 from app.modules.documents.application.services.document_service import DocumentService
@@ -13,7 +20,9 @@ from app.modules.documents.domain.entities.document import (
     DocumentStatus,
     DocumentType,
 )
+from app.modules.documents.domain.exceptions import InvalidDocumentStatusError, DocumentNotFoundError
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
+from app.shared.domain.business_exceptions import EntityNotFoundError, ValidationError
 
 
 @pytest.fixture
@@ -192,8 +201,6 @@ def test_export_reserve_blocks_concurrent_export(document_service, mock_document
     TASK-023 Requirement:
     Reserving stock for an EXPORT document succeeds and blocks concurrent reservation when stock is insufficient.
     """
-    from app.shared.domain.business_exceptions import ValidationError
-
     # 1. Setup POSTED Export document
     item = DocumentProduct(product_id=101, quantity=10, unit_price=50.0)
     export_doc = Document(
@@ -300,8 +307,6 @@ def test_import_reserve_rejected(document_service, mock_document_repo):
     TASK-023 Requirement:
     Attempting to reserve stock for an IMPORT document raises InvalidDocumentStatusError.
     """
-    from app.shared.domain.business_exceptions import InvalidDocumentStatusError
-
     item = DocumentProduct(product_id=303, quantity=100, unit_price=10.0)
     import_doc = Document(
         document_id=30,
@@ -317,4 +322,33 @@ def test_import_reserve_rejected(document_service, mock_document_repo):
         document_service.reserve_request_stock(document_id=30)
 
     assert "Reservation only supported for SALE, EXPORT, and TRANSFER" in str(exc_info.value)
+
+
+def test_create_document_invalid_product_raises(mock_document_repo):
+    """
+    TASK-035 Acceptance Criteria [BIZ-20]:
+    Creating a document with an invalid/non-existent product_id raises EntityNotFoundError.
+    """
+    mock_product_repo = MagicMock()
+    mock_product_repo.get.return_value = None  # Product 99999 does not exist
+
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        product_repo=mock_product_repo,
+    )
+
+    invalid_items = [
+        {"product_id": 99999, "quantity": 10, "unit_price": 50.0}
+    ]
+
+    with pytest.raises(EntityNotFoundError) as exc_info:
+        service.create_sale_document(
+            from_warehouse_id=1,
+            items=invalid_items,
+            created_by="sales_rep",
+        )
+
+    assert "Product 99999 not found" in str(exc_info.value)
+    mock_product_repo.get.assert_called_once_with(99999)
+
 

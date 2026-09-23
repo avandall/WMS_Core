@@ -16,7 +16,7 @@ from app.modules.documents.domain.entities.document import (
 from app.modules.documents.domain.exceptions import InvalidDocumentStatusError, DocumentNotFoundError
 from app.modules.documents.domain.interfaces.document_repo import IDocumentRepo
 from app.modules.documents.domain.transaction_types import REQUIRES_REASON_CODE
-from app.shared.domain.business_exceptions import InvalidQuantityError, ValidationError
+from app.shared.domain.business_exceptions import EntityNotFoundError, InvalidQuantityError, ValidationError
 
 
 class DocumentService:
@@ -27,10 +27,16 @@ class DocumentService:
         document_repo: IDocumentRepo,
         session: Optional[Any] = None,
         event_publisher: Optional[DocumentEventPublisher] = None,
+        warehouse_repo: Optional[Any] = None,
+        product_repo: Optional[Any] = None,
+        inventory_repo: Optional[Any] = None,
     ):
         self.document_repo = document_repo
         self.session = session
         self.event_publisher = event_publisher or NoopDocumentEventPublisher()
+        self.warehouse_repo = warehouse_repo
+        self.product_repo = product_repo
+        self.inventory_repo = inventory_repo
         # TASK-001: _doc_id_generator removed. IDs are now assigned by the
         # PostgreSQL BIGSERIAL sequence via DocumentRepo.save() + flush().
 
@@ -733,13 +739,51 @@ class DocumentService:
                 unit_price = 0
             if unit_price < 0:
                 raise ValidationError("Unit price cannot be negative")
+            self._validate_product_exists(int(product_id))
+
+            lot_number = item_data.get("lot_number", "")
+            mfg_date = item_data.get("mfg_date")
+            expiry_date = item_data.get("expiry_date")
 
             document_items.append(
                 DocumentProduct(
                     product_id=int(product_id),
                     quantity=int(quantity),
                     unit_price=float(unit_price),
+                    lot_number=lot_number,
+                    mfg_date=mfg_date,
+                    expiry_date=expiry_date,
                 )
             )
 
         return document_items
+
+    def _validate_product_exists(self, product_id: int) -> None:
+        """Validates that product_id exists in product_repo or via gRPC Product Service [BIZ-20]."""
+        if self.product_repo is not None:
+            product = self.product_repo.get(product_id)
+            if not product:
+                raise EntityNotFoundError(f"Product {product_id} not found")
+            return
+
+        import os
+        product_addr = os.getenv("PRODUCT_SERVICE_ADDR")
+        if product_addr:
+            import grpc
+            from shared_utils.security.grpc import configured_grpc_channel
+
+            try:
+                from documents_service.gen.wms.product.v1 import product_pb2, product_pb2_grpc
+
+                with configured_grpc_channel(product_addr) as channel:
+                    stub = product_pb2_grpc.ProductServiceStub(channel)
+                    resp = stub.GetProduct(
+                        product_pb2.GetProductRequest(product_id=product_id),
+                        timeout=2.0,
+                    )
+                    if not resp or not resp.product or not resp.product.product_id:
+                        raise EntityNotFoundError(f"Product {product_id} not found")
+            except grpc.RpcError as exc:
+                if exc.code() == grpc.StatusCode.NOT_FOUND:
+                    raise EntityNotFoundError(f"Product {product_id} not found")
+

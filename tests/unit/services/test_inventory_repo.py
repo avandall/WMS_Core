@@ -15,8 +15,8 @@ for mod in list(sys.modules.keys()):
         del sys.modules[mod]
 
 inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
-sys.path = [p for p in sys.path if "/Services/" not in p]
-sys.path.insert(0, inv_src)
+if inv_src not in sys.path:
+    sys.path.insert(0, inv_src)
 
 import pytest  # noqa: E402
 from sqlalchemy import create_engine, select  # noqa: E402
@@ -239,6 +239,45 @@ def test_consume_does_not_increase_released_qty(db_session, inventory_repo):
     assert res["released_qty"] == 0  # Still 0!
     assert res["status"] == "CONSUMED"
     assert res["requested_qty"] == res["reserved_qty"] + res["released_qty"] + res["consumed_qty"]
+
+
+def test_get_inventory_by_warehouse_rows_resolves_real_warehouse_name(db_session, inventory_repo):
+    """
+    TASK-035 Acceptance Criteria [BIZ-21]:
+    warehouse_name in inventory response returns real warehouse location/name when warehouses table exists.
+    """
+    from sqlalchemy import Column, Integer, MetaData, String, Table, insert
+
+    metadata = MetaData()
+    warehouses_table = Table(
+        "warehouses",
+        metadata,
+        Column("warehouse_id", Integer, primary_key=True),
+        Column("location", String(200), nullable=False),
+    )
+    metadata.create_all(db_session.bind)
+
+    db_session.execute(
+        insert(warehouses_table).values(warehouse_id=5, location="Kho Central District")
+    )
+    db_session.commit()
+
+    inventory_repo.adjust_location_quantity(
+        warehouse_id=5,
+        position_id=501,
+        product_id=1001,
+        quantity_delta=50,
+        allocated_delta=0,
+    )
+
+    rows = inventory_repo.get_inventory_by_warehouse_rows()
+    wh5_row = next(r for r in rows if r["warehouse_id"] == 5)
+    assert wh5_row["warehouse_name"] == "Kho Central District"
+
+    dist = inventory_repo.get_warehouse_distribution(product_id=1001)
+    dist5 = next(d for d in dist if d["warehouse_id"] == 5)
+    assert dist5["warehouse_name"] == "Kho Central District"
+
 
 
 

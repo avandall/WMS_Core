@@ -144,6 +144,53 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             for product_id, total_qty in rows
         ]
 
+    def _get_warehouse_name_map(self, warehouse_ids: set[int]) -> dict[int, str]:
+        """Resolves real warehouse names from DB warehouses table or gRPC Warehouse Service [BIZ-21]."""
+        if not warehouse_ids:
+            return {}
+        name_map: dict[int, str] = {}
+        try:
+            from sqlalchemy import text
+            ids_str = ",".join(str(int(w)) for w in warehouse_ids)
+            stmt = text(f"SELECT warehouse_id, location FROM warehouses WHERE warehouse_id IN ({ids_str})")
+            res = self.session.execute(stmt).fetchall()
+            for wid, loc in res:
+                if loc:
+                    name_map[int(wid)] = str(loc)
+        except Exception:
+            pass
+
+        missing_ids = warehouse_ids - set(name_map.keys())
+        if missing_ids:
+            import os
+            wh_addr = os.getenv("WAREHOUSE_SERVICE_ADDR")
+            if wh_addr:
+                try:
+                    import grpc
+                    from shared_utils.security.grpc import configured_grpc_channel
+                    from inventory_service.gen.wms.warehouse.v1 import warehouse_pb2, warehouse_pb2_grpc
+
+                    with configured_grpc_channel(wh_addr) as channel:
+                        stub = warehouse_pb2_grpc.WarehouseServiceStub(channel)
+                        for wid in missing_ids:
+                            try:
+                                resp = stub.GetWarehouse(
+                                    warehouse_pb2.GetWarehouseRequest(warehouse_id=wid),
+                                    timeout=2.0,
+                                )
+                                if resp and (resp.name or resp.location):
+                                    name_map[wid] = resp.name or resp.location
+                            except grpc.RpcError:
+                                pass
+                except Exception:
+                    pass
+
+        for wid in warehouse_ids:
+            if wid not in name_map:
+                name_map[wid] = str(wid)
+
+        return name_map
+
     def get_inventory_by_warehouse_rows(self) -> list[dict]:
         rows = self.session.execute(
             select(WarehouseInventoryModel).order_by(
@@ -151,11 +198,13 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 WarehouseInventoryModel.product_id,
             )
         ).scalars().all()
+        wh_ids = {int(row.warehouse_id) for row in rows}
+        name_map = self._get_warehouse_name_map(wh_ids)
         return [
             {
                 "product_id": int(row.product_id),
                 "warehouse_id": int(row.warehouse_id),
-                "warehouse_name": str(row.warehouse_id),
+                "warehouse_name": name_map.get(int(row.warehouse_id), str(row.warehouse_id)),
                 "quantity": int(row.quantity),
                 # Phase 3: Quantity matrix fields
                 "physical_qty": int(row.physical_qty),
@@ -173,10 +222,12 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 WarehouseInventoryModel.product_id == product_id
             )
         ).scalars().all()
+        wh_ids = {int(row.warehouse_id) for row in rows}
+        name_map = self._get_warehouse_name_map(wh_ids)
         return [
             {
                 "warehouse_id": int(row.warehouse_id),
-                "warehouse_name": str(row.warehouse_id),
+                "warehouse_name": name_map.get(int(row.warehouse_id), str(row.warehouse_id)),
                 "quantity": int(row.quantity),
                 # Phase 3: Quantity matrix fields
                 "physical_qty": int(row.physical_qty),
