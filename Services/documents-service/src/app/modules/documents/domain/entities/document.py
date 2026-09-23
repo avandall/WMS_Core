@@ -215,13 +215,29 @@ class Document(DomainEntity):
         self.approved_by = approved_by
         self.posted_at = datetime.now(timezone.utc)
 
-    def cancel(self, cancelled_by: str, reason: Optional[str] = None) -> None:
-        if self.status == DocumentStatus.POSTED:
-            raise InvalidDocumentStatusError(
-                f"Cannot cancel a posted document {self.document_id}"
-            )
+    def cancel(self, cancelled_by: str, reason: Optional[str] = None, from_release_flow: bool = False) -> None:
         if self.status == DocumentStatus.CANCELLED:
             raise InvalidDocumentStatusError(f"Document {self.document_id} is already cancelled")
+
+        if self.status in (
+            DocumentStatus.POSTED,
+            DocumentStatus.EXECUTED,
+            DocumentStatus.PARTIALLY_EXECUTED,
+            DocumentStatus.COMPLETED,
+        ):
+            raise InvalidDocumentStatusError(
+                f"Cannot cancel document {self.document_id} in {self.status.value} status"
+            )
+
+        if self.status in (
+            DocumentStatus.RESERVED,
+            DocumentStatus.PARTIALLY_RESERVED,
+            DocumentStatus.IN_PROGRESS,
+        ) and not from_release_flow:
+            raise InvalidDocumentStatusError(
+                f"Cannot cancel document {self.document_id} in {self.status.value} status directly without release flow"
+            )
+
         if not isinstance(cancelled_by, str) or not cancelled_by.strip():
             raise ValidationError("cancelled_by must be a non-empty string")
 

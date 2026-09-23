@@ -242,14 +242,16 @@ class DocumentService:
 
         # TASK-019 [BIZ-03]: Auto-release reservation if document is in RESERVED/IN_PROGRESS status
         # or has active reserved stock
+        is_release_flow = False
         if (
             document.status in (DocumentStatus.RESERVED, DocumentStatus.PARTIALLY_RESERVED, DocumentStatus.IN_PROGRESS)
             or any(item.reserved_qty > 0 for item in document.items)
         ):
             self.release_request_reservation(document_id, request_id)
             document = self.get_document(document_id)
+            is_release_flow = True
 
-        document.cancel(cancelled_by, reason)
+        document.cancel(cancelled_by, reason, from_release_flow=is_release_flow)
         self.document_repo.save(document)
         self._commit_if_needed()
         self.event_publisher.publish(
@@ -486,9 +488,9 @@ class DocumentService:
     ) -> Document:
         """Confirms execution of actual picked/shipped quantity per item."""
         document = self.get_document(document_id)
-        if document.status not in (DocumentStatus.IN_PROGRESS, DocumentStatus.POSTED, DocumentStatus.RESERVED, DocumentStatus.EXECUTED):
+        if document.status != DocumentStatus.IN_PROGRESS:
             raise InvalidDocumentStatusError(
-                f"Document must be IN_PROGRESS, POSTED/RESERVED, or EXECUTED before confirming execution, current status: {document.status}"
+                f"Document must be IN_PROGRESS before confirming execution, current status: {document.status}"
             )
 
         # Phase 12 & 13: Validate reason code for transaction types that require it
