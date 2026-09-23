@@ -29,7 +29,6 @@ ROLE_PERMISSIONS: Dict[str, Set[Permission]] = {
         Permission.VIEW_PRODUCTS,
         Permission.VIEW_INVENTORY,
         Permission.VIEW_REPORTS,
-        Permission.DOC_CREATE_IMPORT,
     },
     "warehouse_manager": {
         Permission.VIEW_PRODUCTS,
