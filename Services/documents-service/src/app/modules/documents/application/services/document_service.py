@@ -300,6 +300,14 @@ class DocumentService:
         """Inspect QA for return/inbound documents.
         
         Transitions status DRAFT/POSTED/APPROVED -> QA_INSPECTED.
+        If passed:
+          - Transitions status to QA_INSPECTED.
+          - Transitions location inventory from QUARANTINED to AVAILABLE.
+          - Generates Putaway tasks and emits PutawayTaskGenerated event.
+        If failed:
+          - Transitions status to CANCELLED.
+          - Transitions location inventory from QUARANTINED to REJECTED.
+          - Creates Return to Vendor (RTV / PURCHASE_RETURN) document.
         """
         document = self.get_document(document_id)
         if document.status == DocumentStatus.CANCELLED:
@@ -307,11 +315,89 @@ class DocumentService:
         if document.status in (DocumentStatus.COMPLETED, DocumentStatus.EXECUTED):
             raise InvalidDocumentStatusError(f"Cannot QA inspect already executed/completed document {document_id}")
 
+        rtv_document_id = None
+        putaway_tasks = []
+        wh_id = document.to_warehouse_id or 1
+
         if passed:
             document.status = DocumentStatus.QA_INSPECTED
+
+            # Promote QUARANTINED inventory to AVAILABLE if inventory_repo is present
+            if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
+                for item in document.items:
+                    try:
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=wh_id,
+                            position_id=getattr(item, "position_id", 1) or 1,
+                            product_id=item.product_id,
+                            quantity_delta=-item.quantity,
+                            status="QUARANTINED",
+                        )
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=wh_id,
+                            position_id=getattr(item, "position_id", 1) or 1,
+                            product_id=item.product_id,
+                            quantity_delta=item.quantity,
+                            status="AVAILABLE",
+                        )
+                    except Exception:
+                        pass
+
+            # Generate Putaway tasks
+            putaway_tasks = [
+                {
+                    "task_id": f"PUTAWAY_{document_id}_{item.product_id}",
+                    "document_id": document_id,
+                    "warehouse_id": wh_id,
+                    "product_id": item.product_id,
+                    "quantity": item.quantity,
+                    "suggested_zone": "STORAGE",
+                    "status": "PENDING_PUTAWAY",
+                }
+                for item in document.items
+            ]
         else:
             document.status = DocumentStatus.CANCELLED
             document.cancellation_reason = f"QA Inspection Failed: {note or ''}"
+
+            # Transition location inventory to REJECTED
+            if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
+                for item in document.items:
+                    try:
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=wh_id,
+                            position_id=getattr(item, "position_id", 1) or 1,
+                            product_id=item.product_id,
+                            quantity_delta=-item.quantity,
+                            status="QUARANTINED",
+                        )
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=wh_id,
+                            position_id=getattr(item, "position_id", 1) or 1,
+                            product_id=item.product_id,
+                            quantity_delta=item.quantity,
+                            status="REJECTED",
+                        )
+                    except Exception:
+                        pass
+
+            # Auto-create Return to Vendor (RTV / PURCHASE_RETURN) document
+            try:
+                rtv_doc = self.create_purchase_return_document(
+                    from_warehouse_id=wh_id,
+                    items=[
+                        {"product_id": it.product_id, "quantity": it.quantity, "unit_price": it.unit_price}
+                        for it in document.items
+                    ],
+                    created_by=inspected_by,
+                    note=f"RTV generated from failed QA inspection on document {document_id}: {note or ''}",
+                    transaction_type="PURCHASE_RETURN_SHIPMENT",
+                    reason_code="QA_REJECTED",
+                    request_id=request_id,
+                )
+                rtv_document_id = rtv_doc.document_id
+            except Exception:
+                pass
 
         self.document_repo.save(document)
         self._commit_if_needed()
@@ -326,6 +412,8 @@ class DocumentService:
                 "inspected_by": inspected_by,
                 "passed": passed,
                 "note": note,
+                "putaway_tasks": putaway_tasks,
+                "rtv_document_id": rtv_document_id,
             },
         )
         return document

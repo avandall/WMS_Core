@@ -342,6 +342,28 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 ).with_for_update()
             ).scalars().all()
 
+    def reserve_stock(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        requested_qty: int,
+        created_by: str | None = None,
+        source_type: str = "SALE",
+        document_id: int | None = None,
+    ) -> int:
+        """Helper to reserve stock for sales orders or other outbound processes."""
+        return self.create_reservation(
+            source_type=source_type,
+            source_id=None,
+            document_id=document_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            requested_qty=requested_qty,
+            created_by=created_by,
+            idempotency_key=None,
+            expires_at=None,
+        )
+
     # Phase 4: Reservation methods
     def create_reservation(
         self,
@@ -378,7 +400,29 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if not warehouse_row:
             raise InsufficientStockError(f"No inventory found for product {product_id} in warehouse {warehouse_id}")
 
-        available_qty = warehouse_row.physical_qty - warehouse_row.reserved_qty
+        # ATP Check: Only stock with status 'AVAILABLE' is available for sale reservations
+        loc_available = self.session.execute(
+            select(func.coalesce(func.sum(InventoryLocationModel.quantity - InventoryLocationModel.allocated_qty), 0))
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status == "AVAILABLE",
+            )
+        ).scalar() or 0
+
+        has_locations = self.session.execute(
+            select(InventoryLocationModel.id)
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+            ).limit(1)
+        ).scalar() is not None
+
+        if has_locations:
+            available_qty = max(0, int(loc_available) - int(warehouse_row.reserved_qty))
+        else:
+            available_qty = warehouse_row.physical_qty - warehouse_row.reserved_qty
+
         if requested_qty > available_qty:
             raise InsufficientStockError(
                 f"Insufficient available stock. Available: {available_qty}, Requested: {requested_qty}"
@@ -576,13 +620,36 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "available_qty": 0,
             }
 
+        loc_available = self.session.execute(
+            select(func.coalesce(func.sum(InventoryLocationModel.quantity - InventoryLocationModel.allocated_qty), 0))
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status == "AVAILABLE",
+            )
+        ).scalar() or 0
+
+        has_locations = self.session.execute(
+            select(InventoryLocationModel.id)
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+            ).limit(1)
+        ).scalar() is not None
+
+        calc_available = max(0, int(loc_available) - int(warehouse_row.reserved_qty)) if has_locations else int(warehouse_row.physical_qty - warehouse_row.reserved_qty)
+
         return {
             "product_id": product_id,
             "warehouse_id": warehouse_id,
             "physical_qty": int(warehouse_row.physical_qty),
             "reserved_qty": int(warehouse_row.reserved_qty),
-            "available_qty": int(warehouse_row.physical_qty - warehouse_row.reserved_qty),
+            "available_qty": int(calc_available),
         }
+
+    def get_availability(self, product_id: int, warehouse_id: int) -> dict:
+        """Alias for calculate_available_stock."""
+        return self.calculate_available_stock(product_id=product_id, warehouse_id=warehouse_id)
 
     # Phase 9: Inventory transaction ledger methods
     def write_transaction(

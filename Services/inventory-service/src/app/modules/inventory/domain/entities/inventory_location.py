@@ -12,7 +12,7 @@ from app.shared.domain.business_exceptions import (
 from app.shared.domain.entity import DomainEntity
 
 
-VALID_LOCATION_STATUSES = {"AVAILABLE", "ALLOCATED", "QUARANTINED", "DAMAGED"}
+VALID_LOCATION_STATUSES = {"AVAILABLE", "ALLOCATED", "QUARANTINED", "DAMAGED", "REJECTED"}
 
 
 @dataclass(slots=True)

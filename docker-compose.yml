@@ -376,6 +376,15 @@ services:
       - "4317:4317"
       - "4318:4318"
 
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
   # ---------------------------------------------------------------------------
   # AI Service — optional profile
   # ---------------------------------------------------------------------------
@@ -391,6 +400,9 @@ services:
       <<: *shared-env
       PYTHONPATH: /app/src:/app/shared_utils
       DB_CONNECTION_STRING: sqlite:////tmp/wms-ai.db
+      VECTOR_STORE_TYPE: "qdrant"
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-wms_knowledge}"
       VECTOR_DB_PATH: /tmp/wms-ai-vector-db
       AI_REINDEX_CONSUMER_ENABLED: "${AI_REINDEX_CONSUMER_ENABLED:-0}"
       AI_REINDEX_QUEUE_PATH: "${AI_REINDEX_QUEUE_PATH:-/tmp/wms-ai-reindex-queue.jsonl}"
@@ -417,8 +429,10 @@ services:
     depends_on:
       - event-bus
       - otel-collector
+      - qdrant
 
 volumes:
+  qdrant-data:
   ai-hf-cache:
   identity-data:
   customer-data:

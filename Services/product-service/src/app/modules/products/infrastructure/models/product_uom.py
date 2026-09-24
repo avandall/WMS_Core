@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Column, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.shared.core.database import Base
@@ -9,7 +9,7 @@ from app.shared.core.database import Base
 class ProductUomModel(Base):
     __tablename__ = "product_uoms"
 
-    uom_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    uom_id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     product_id = Column(
         BigInteger, ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False
     )

@@ -40,6 +40,14 @@ class PositionModel(Base):
     pick_sequence = Column(Integer, nullable=False, default=0, index=True)
     hazmat_class = Column(String(50), nullable=True)
 
+    # Warehouse physical layout coordinates & capacity (TASK-046 & TASK-047)
+    x_coordinate = Column(Float, nullable=True, default=0.0)
+    y_coordinate = Column(Float, nullable=True, default=0.0)
+    z_coordinate = Column(Float, nullable=True, default=0.0)
+    max_volume_cbm = Column(Float, nullable=True)
+    available_volume = Column(Float, nullable=True)
+    available_weight = Column(Float, nullable=True)
+
     __table_args__ = (
         UniqueConstraint("warehouse_id", "code", name="uq_position_warehouse_code"),
         Index("ix_positions_warehouse_code", "warehouse_id", "code"),

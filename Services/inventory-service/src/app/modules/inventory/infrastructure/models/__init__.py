@@ -1,3 +1,4 @@
+from .draft_proposal import DraftProposalModel
 from .inventory import InventoryModel
 from .inventory_location import InventoryLocationModel
 from .inventory_transaction import InventoryTransactionModel
@@ -6,6 +7,7 @@ from .stock_reservation import StockReservationModel
 from .warehouse_inventory import WarehouseInventoryModel
 
 __all__ = [
+    "DraftProposalModel",
     "InventoryModel",
     "InventoryLocationModel",
     "InventoryTransactionModel",
