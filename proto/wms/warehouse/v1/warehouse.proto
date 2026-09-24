@@ -52,6 +52,17 @@ message Position {
   int32 pick_sequence = 13;
   optional string hazmat_class = 14;
   string full_address = 15;
+  double x_coordinate = 16;
+  double y_coordinate = 17;
+  double z_coordinate = 18;
+  optional double max_volume_cbm = 19;
+  optional double available_volume = 20;
+  optional double available_weight = 21;
+  string zone = 22;
+}
+
+message PositionResponse {
+  Position position = 1;
 }
 
 message GetPositionRequest {

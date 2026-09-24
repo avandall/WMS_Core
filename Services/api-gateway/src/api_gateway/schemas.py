@@ -76,4 +76,12 @@ class InspectQaPayload(BaseModel):
     note: str = ""
 
 
+class ApproveProposalPayload(BaseModel):
+    digital_signature: str = ""
+
+
+class RejectProposalPayload(BaseModel):
+    rejection_reason: str = "Rejected by manager"
+
+
 

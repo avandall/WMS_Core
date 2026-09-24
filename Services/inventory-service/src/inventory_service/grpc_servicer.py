@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import grpc
 
 from shared_utils.events import get_publisher
@@ -308,6 +309,217 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 reservation_id=0,
                 message=sanitize_grpc_error(exc)
             )
+
+    def GetInventoryLocations(
+        self, request: inventory_pb2.GetInventoryLocationsRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                warehouse_id = int(request.warehouse_id) if request.warehouse_id != 0 else None
+                product_id = int(request.product_id) if request.product_id != 0 else None
+                position_id = int(request.position_id) if request.position_id != 0 else None
+                lpn = request.lpn if request.lpn else None
+                status = request.status if request.status else None
+                lot_number = request.lot_number if request.lot_number else None
+
+                locations = service.inventory_repo.list_inventory_locations(
+                    warehouse_id=warehouse_id,
+                    product_id=product_id,
+                    position_id=position_id,
+                    lpn=lpn,
+                    status=status,
+                    lot_number=lot_number,
+                )
+                rows = [
+                    inventory_pb2.InventoryLocationRow(
+                        id=int(loc["id"]),
+                        warehouse_id=int(loc["warehouse_id"]),
+                        position_id=int(loc["position_id"]),
+                        product_id=int(loc["product_id"]),
+                        lpn=loc["lpn"] or "",
+                        quantity=int(loc["quantity"]),
+                        allocated_qty=int(loc["allocated_qty"]),
+                        status=loc["status"] or "AVAILABLE",
+                        available_qty=int(loc["available_qty"]),
+                        lot_number=loc["lot_number"] or "",
+                        mfg_date=loc["mfg_date"] or "",
+                        expiry_date=loc["expiry_date"] or "",
+                        x_coordinate=float(loc.get("x_coordinate", 0.0)),
+                        y_coordinate=float(loc.get("y_coordinate", 0.0)),
+                        z_coordinate=float(loc.get("z_coordinate", 0.0)),
+                        zone_id=loc.get("zone_id", "ZONE-A"),
+                        aisle=loc.get("aisle", "AISLE-01"),
+                        bay=loc.get("bay", "BAY-01"),
+                        level=loc.get("level", "1"),
+                        location_code=loc.get("location_code", ""),
+                    )
+                    for loc in locations
+                ]
+                return inventory_pb2.GetInventoryLocationsResponse(locations=rows)
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.GetInventoryLocationsResponse(locations=[])
+
+    def UpdateInventoryLocation(
+        self, request: inventory_pb2.UpdateInventoryLocationRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                loc = service.inventory_repo.adjust_location_quantity(
+                    warehouse_id=int(request.warehouse_id),
+                    position_id=int(request.position_id),
+                    product_id=int(request.product_id),
+                    quantity_delta=int(request.quantity_delta),
+                    allocated_delta=int(request.allocated_delta),
+                    lpn=request.lpn or "",
+                    status=request.status or "AVAILABLE",
+                    lot_number=request.lot_number or "",
+                    mfg_date=datetime.fromisoformat(request.mfg_date) if request.mfg_date else None,
+                    expiry_date=datetime.fromisoformat(request.expiry_date) if request.expiry_date else None,
+                )
+                return inventory_pb2.UpdateInventoryLocationResponse(
+                    success=True,
+                    location=inventory_pb2.InventoryLocationRow(
+                        id=int(loc["id"]),
+                        warehouse_id=int(loc["warehouse_id"]),
+                        position_id=int(loc["position_id"]),
+                        product_id=int(loc["product_id"]),
+                        lpn=loc["lpn"] or "",
+                        quantity=int(loc["quantity"]),
+                        allocated_qty=int(loc["allocated_qty"]),
+                        status=loc["status"],
+                        available_qty=int(loc["available_qty"]),
+                        lot_number=loc["lot_number"] or "",
+                        mfg_date=loc["mfg_date"] or "",
+                        expiry_date=loc["expiry_date"] or "",
+                        x_coordinate=float(loc.get("x_coordinate", 0.0)),
+                        y_coordinate=float(loc.get("y_coordinate", 0.0)),
+                        z_coordinate=float(loc.get("z_coordinate", 0.0)),
+                        zone_id=loc.get("zone_id", "ZONE-A"),
+                        aisle=loc.get("aisle", "AISLE-01"),
+                        bay=loc.get("bay", "BAY-01"),
+                        level=loc.get("level", "1"),
+                        location_code=loc.get("location_code", ""),
+                    )
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.UpdateInventoryLocationResponse(success=False)
+
+    def ListDraftProposals(
+        self, request: inventory_pb2.ListDraftProposalsRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                status_filter = request.status if request.status else None
+                limit = int(request.limit) if request.limit > 0 else 100
+                offset = int(request.offset) if request.offset > 0 else 0
+                proposals, total = service.list_draft_proposals(
+                    status=status_filter, limit=limit, offset=offset
+                )
+                return inventory_pb2.ListDraftProposalsResponse(
+                    proposals=[self._proposal_to_proto(p) for p in proposals],
+                    total=total,
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.ListDraftProposalsResponse(proposals=[], total=0)
+
+    def ApproveDraftProposal(
+        self, request: inventory_pb2.ApproveDraftProposalRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                eff_user = (request.approved_by or "").strip() or self._user_id(context)
+                proposal, tx_id = service.approve_draft_proposal(
+                    proposal_id=request.proposal_id,
+                    approved_by=eff_user,
+                    digital_signature=request.digital_signature or None,
+                )
+                return inventory_pb2.ApproveDraftProposalResponse(
+                    success=True,
+                    message="Proposal approved and executed successfully",
+                    proposal=self._proposal_to_proto(proposal),
+                    transaction_id=tx_id,
+                )
+        except ValueError as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.ApproveDraftProposalResponse(
+                success=False,
+                message=str(exc),
+            )
+        except Exception as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INTERNAL)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.ApproveDraftProposalResponse(
+                success=False,
+                message=sanitize_grpc_error(exc),
+            )
+
+    def RejectDraftProposal(
+        self, request: inventory_pb2.RejectDraftProposalRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                eff_user = (request.rejected_by or "").strip() or self._user_id(context)
+                proposal = service.reject_draft_proposal(
+                    proposal_id=request.proposal_id,
+                    rejected_by=eff_user,
+                    rejection_reason=request.rejection_reason or "Rejected by manager",
+                )
+                return inventory_pb2.RejectDraftProposalResponse(
+                    success=True,
+                    message="Proposal rejected successfully",
+                    proposal=self._proposal_to_proto(proposal),
+                )
+        except ValueError as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.RejectDraftProposalResponse(
+                success=False,
+                message=str(exc),
+            )
+        except Exception as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INTERNAL)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.RejectDraftProposalResponse(
+                success=False,
+                message=sanitize_grpc_error(exc),
+            )
+
+    @staticmethod
+    def _proposal_to_proto(p) -> inventory_pb2.DraftProposalRow:
+        return inventory_pb2.DraftProposalRow(
+            proposal_id=str(p.proposal_id or ""),
+            proposal_type=str(p.proposal_type or ""),
+            sku_code=str(p.sku_code or ""),
+            current_quantity=int(p.current_quantity or 0),
+            proposed_quantity=int(p.proposed_quantity or 0),
+            adjustment=int(p.adjustment or 0),
+            reason=str(p.reason or ""),
+            requested_by=str(p.requested_by or ""),
+            status=str(p.status or ""),
+            created_at=p.created_at.isoformat() if p.created_at else "",
+            approved_by=str(p.approved_by or ""),
+            approved_at=p.approved_at.isoformat() if p.approved_at else "",
+            rejection_reason=str(p.rejection_reason or ""),
+            executed_at=p.executed_at.isoformat() if p.executed_at else "",
+            executed_by=str(p.executed_by or ""),
+            digital_signature=str(p.digital_signature or ""),
+        )
 
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server

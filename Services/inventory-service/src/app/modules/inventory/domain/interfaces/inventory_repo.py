@@ -192,6 +192,23 @@ class IInventoryRepo(ABC):
     ) -> None:
         pass
 
+    @abstractmethod
+    def get_draft_proposal(self, proposal_id: str) -> Any:
+        pass
+
+    @abstractmethod
+    def list_draft_proposals(
+        self,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[List[Any], int]:
+        pass
+
+    @abstractmethod
+    def save_draft_proposal(self, proposal: Any) -> Any:
+        pass
+
 
 # Alias for backward compatibility
 InventoryRepo = IInventoryRepo

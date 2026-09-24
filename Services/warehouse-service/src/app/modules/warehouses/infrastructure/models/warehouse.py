@@ -8,6 +8,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.shared.core.database import Base
+from app.modules.positions.infrastructure.models.position import PositionModel
 
 
 class WarehouseModel(Base):

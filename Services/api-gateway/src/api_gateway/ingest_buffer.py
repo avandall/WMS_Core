@@ -21,11 +21,18 @@ from typing import Any, Optional
 
 logger = logging.getLogger("api_gateway.ingest_buffer")
 
+MAX_WAL_SIZE_MB = int(os.getenv("INGEST_MAX_WAL_SIZE_MB", "500"))
+
+
+class WalThresholdExceededError(RuntimeError):
+    """Raised when WAL disk usage exceeds MAX_WAL_SIZE_MB and circuit breaker trips."""
+    pass
+
 
 class WalManager:
     """Manages local append-only Write-Ahead Logging (WAL) and checkpointing for ingest durability."""
 
-    def __init__(self, wal_dir: Optional[str] = None):
+    def __init__(self, wal_dir: Optional[str] = None, max_wal_size_mb: Optional[int] = None):
         configured_dir = wal_dir or os.getenv("INGEST_WAL_DIR", "storage/wal")
         self.wal_dir = Path(configured_dir)
         self.wal_dir.mkdir(parents=True, exist_ok=True)
@@ -36,7 +43,21 @@ class WalManager:
         self._active_file_path = self.wal_dir / f"wal_{int(time.time())}_{self._session_id}.jsonl"
         self._file_handle = None
         self._lock = asyncio.Lock()
+        self.max_wal_size_mb = max_wal_size_mb if max_wal_size_mb is not None else MAX_WAL_SIZE_MB
+        self.max_wal_size_bytes = self.max_wal_size_mb * 1024 * 1024
         self._init_current_seq()
+
+    def get_total_wal_size_bytes(self) -> int:
+        """Calculate total size in bytes of all files in wal_dir."""
+        total_bytes = 0
+        try:
+            if self.wal_dir.exists():
+                for file_path in self.wal_dir.iterdir():
+                    if file_path.is_file():
+                        total_bytes += file_path.stat().st_size
+        except Exception as e:
+            logger.warning(f"Failed to calculate WAL dir size: {e}")
+        return total_bytes
 
     def _load_checkpoint(self) -> int:
         """Load the highest sequence number successfully flushed or transferred to DLQ."""
@@ -75,7 +96,7 @@ class WalManager:
         return self._file_handle
 
     async def append(self, event_json: str) -> int:
-        """Append an event to WAL file on disk synchronously flushed before returning."""
+        """Append an event to WAL file on disk synchronously flushed and fsynced before returning."""
         async with self._lock:
             self._current_seq += 1
             seq = self._current_seq
@@ -84,6 +105,7 @@ class WalManager:
             handle = self._get_file_handle()
             handle.write(line)
             handle.flush()
+            os.fsync(handle.fileno())
             return seq
 
     def commit(self, seq: int) -> None:
@@ -241,6 +263,7 @@ class IngestBuffer:
         dlq_dir: Optional[str] = None,
         redis_client: Optional[Any] = None,
         dlq_retry_interval: Optional[float] = None,
+        max_wal_size_mb: Optional[int] = None,
     ):
         self.batch_size = batch_size or int(os.getenv("INGEST_BATCH_SIZE", "100"))
         self.flush_interval_seconds = (
@@ -248,7 +271,9 @@ class IngestBuffer:
         )
         queue_size = max_queue_size or int(os.getenv("INGEST_MAX_QUEUE_SIZE", "50000"))
         self.queue: asyncio.Queue[tuple[int, str]] = asyncio.Queue(maxsize=queue_size)
-        self.wal_manager = WalManager(wal_dir=wal_dir)
+        self.max_wal_size_mb = max_wal_size_mb if max_wal_size_mb is not None else MAX_WAL_SIZE_MB
+        self.max_wal_size_bytes = self.max_wal_size_mb * 1024 * 1024
+        self.wal_manager = WalManager(wal_dir=wal_dir, max_wal_size_mb=self.max_wal_size_mb)
         self.dlq_manager = DLQManager(dlq_dir=dlq_dir)
         self.redis_client = redis_client
         self.dlq_retry_interval = (
@@ -259,6 +284,15 @@ class IngestBuffer:
         self.worker_task: Optional[asyncio.Task] = None
         self.dlq_task: Optional[asyncio.Task] = None
         self.running = False
+
+    def get_total_wal_size_bytes(self) -> int:
+        """Return total disk usage of WAL storage in bytes."""
+        return self.wal_manager.get_total_wal_size_bytes()
+
+    @property
+    def circuit_breaker_tripped(self) -> bool:
+        """Check if WAL size threshold has been reached or exceeded."""
+        return self.get_total_wal_size_bytes() >= self.max_wal_size_bytes
 
     def _get_redis(self):
         if self.redis_client is not None:
@@ -319,13 +353,29 @@ class IngestBuffer:
             self.wal_manager.close()
             logger.info("IngestBuffer worker stopped.")
 
-    async def add_event(self, event_json: str) -> int:
+    async def ingest(self, event_json: str, raise_on_error: bool = True) -> int:
         """Persist event to local disk WAL first, then place in memory buffer for micro-batching.
-        
-        Guarantees durability before returning 202 Accepted.
+
+        Guarantees durability via os.fsync before returning sequence number.
+        If WAL size exceeds MAX_WAL_SIZE_MB, triggers Circuit Breaker:
+        - Logs warning at CRITICAL level
+        - Diverts event to emergency DLQ to guarantee zero data loss
+        - Refuses further data (raises WalThresholdExceededError or returns -1)
         """
         if isinstance(event_json, dict):
             event_json = json.dumps(event_json)
+
+        # Circuit Breaker Check: Bounded WAL retention protection
+        if self.circuit_breaker_tripped:
+            logger.critical("WAL disk threshold exceeded, circuit breaker tripped")
+            # Divert to emergency DLQ immediately to preserve payload
+            self.dlq_manager.write_failed_batch(
+                [event_json],
+                error_message="CRITICAL: WAL disk threshold exceeded, circuit breaker tripped",
+            )
+            if raise_on_error:
+                raise WalThresholdExceededError("CRITICAL: WAL disk threshold exceeded, circuit breaker tripped")
+            return -1
 
         # 1. Append to local disk WAL (Crash durability)
         seq = await self.wal_manager.append(event_json)
@@ -333,6 +383,13 @@ class IngestBuffer:
         # 2. Put into in-memory queue for high-throughput batching
         await self.queue.put((seq, event_json))
         return seq
+
+    async def add_event(self, event_json: str, raise_on_error: bool = True) -> int:
+        """Persist event to local disk WAL first, then place in memory buffer for micro-batching.
+        
+        Guarantees durability before returning 202 Accepted. Alias for ingest().
+        """
+        return await self.ingest(event_json, raise_on_error=raise_on_error)
 
     async def _worker(self):
         while self.running:

@@ -19,6 +19,10 @@ service InventoryService {
   // TASK-002: Bin/Location management RPCs
   rpc GetInventoryLocations(GetInventoryLocationsRequest) returns (GetInventoryLocationsResponse);
   rpc UpdateInventoryLocation(UpdateInventoryLocationRequest) returns (UpdateInventoryLocationResponse);
+  // TASK-059: Maker-Checker Draft Proposal Management RPCs
+  rpc ApproveDraftProposal(ApproveDraftProposalRequest) returns (ApproveDraftProposalResponse);
+  rpc RejectDraftProposal(RejectDraftProposalRequest) returns (RejectDraftProposalResponse);
+  rpc ListDraftProposals(ListDraftProposalsRequest) returns (ListDraftProposalsResponse);
 }
 
 message InventoryItem {
@@ -180,7 +184,7 @@ message ReserveStockResponse {
   string message = 3;
 }
 
-// TASK-002 & TASK-003: Inventory location messages
+// TASK-002 & TASK-003 & TASK-055: Inventory location messages
 message InventoryLocationRow {
   int64 id = 1;
   int64 warehouse_id = 2;
@@ -194,6 +198,30 @@ message InventoryLocationRow {
   string lot_number = 10;
   string mfg_date = 11;
   string expiry_date = 12;
+  double x_coordinate = 13;
+  double y_coordinate = 14;
+  double z_coordinate = 15;
+  string zone_id = 16;
+  string aisle = 17;
+  string bay = 18;
+  string level = 19;
+  string location_code = 20;
+}
+
+// TASK-055: Dedicated item schema for spatial coordinates
+message InventoryLocationItem {
+  int64 id = 1;
+  int32 warehouse_id = 2;
+  int64 position_id = 3;
+  int64 product_id = 4;
+  string location_code = 5;
+  double x_coordinate = 6;
+  double y_coordinate = 7;
+  double z_coordinate = 8;
+  string zone_id = 9;
+  string aisle = 10;
+  string bay = 11;
+  string level = 12;
 }
 
 message GetInventoryLocationsRequest {
@@ -227,5 +255,58 @@ message UpdateInventoryLocationResponse {
   InventoryLocationRow location = 2;
 }
 
+// TASK-059: Maker-Checker Draft Proposal schemas
+message DraftProposalRow {
+  string proposal_id = 1;
+  string proposal_type = 2;
+  string sku_code = 3;
+  int64 current_quantity = 4;
+  int64 proposed_quantity = 5;
+  int64 adjustment = 6;
+  string reason = 7;
+  string requested_by = 8;
+  string status = 9;
+  string created_at = 10;
+  string approved_by = 11;
+  string approved_at = 12;
+  string rejection_reason = 13;
+  string executed_at = 14;
+  string executed_by = 15;
+  string digital_signature = 16;
+}
 
+message ListDraftProposalsRequest {
+  string status = 1;
+  int64 limit = 2;
+  int64 offset = 3;
+}
 
+message ListDraftProposalsResponse {
+  repeated DraftProposalRow proposals = 1;
+  int64 total = 2;
+}
+
+message ApproveDraftProposalRequest {
+  string proposal_id = 1;
+  string approved_by = 2;
+  string digital_signature = 3;
+}
+
+message ApproveDraftProposalResponse {
+  bool success = 1;
+  string message = 2;
+  DraftProposalRow proposal = 3;
+  int64 transaction_id = 4;
+}
+
+message RejectDraftProposalRequest {
+  string proposal_id = 1;
+  string rejected_by = 2;
+  string rejection_reason = 3;
+}
+
+message RejectDraftProposalResponse {
+  bool success = 1;
+  string message = 2;
+  DraftProposalRow proposal = 3;
+}

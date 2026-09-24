@@ -968,4 +968,123 @@ class InventoryService:
         if session is not None:
             session.commit()
 
+    def get_draft_proposal(self, proposal_id: str):
+        return self.inventory_repo.get_draft_proposal(proposal_id)
+
+    def list_draft_proposals(
+        self,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ):
+        return self.inventory_repo.list_draft_proposals(status=status, limit=limit, offset=offset)
+
+    def approve_draft_proposal(
+        self,
+        proposal_id: str,
+        approved_by: str,
+        digital_signature: Optional[str] = None,
+    ):
+        proposal = self.inventory_repo.get_draft_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError(f"Draft proposal {proposal_id} not found")
+        if proposal.status != "DRAFT_PROPOSAL":
+            raise ValueError(f"Proposal cannot be approved in state {proposal.status}")
+
+        proposal.approve(approved_by=approved_by, digital_signature=digital_signature)
+
+        # Resolve product_id from sku_code
+        product_id = None
+        sku_str = str(proposal.sku_code).strip()
+        if sku_str.isdigit():
+            product_id = int(sku_str)
+        else:
+            session = getattr(self.inventory_repo, "session", None)
+            if session is not None:
+                try:
+                    from sqlalchemy import text
+                    res = session.execute(
+                        text("SELECT product_id FROM products WHERE name = :sku"),
+                        {"sku": sku_str}
+                    ).scalar()
+                    if res is not None:
+                        product_id = int(res)
+                except Exception:
+                    pass
+            if product_id is None:
+                digits = "".join(filter(str.isdigit, sku_str))
+                product_id = int(digits) if digits else 1
+
+        adjustment = proposal.adjustment
+        if adjustment is None:
+            adjustment = (proposal.proposed_quantity or 0) - (proposal.current_quantity or 0)
+
+        tx_id = 0
+        if adjustment != 0:
+            tx_type = "ADJUSTMENT_IN" if adjustment > 0 else "ADJUSTMENT_OUT"
+            quantity = abs(adjustment)
+            idempotency_key = f"proposal_{proposal.proposal_id}"
+            tx_id = self.confirm_inventory_transaction(
+                transaction_type=tx_type,
+                product_id=product_id,
+                warehouse_id=1,
+                quantity=quantity,
+                user_id=approved_by,
+                idempotency_key=idempotency_key,
+            )
+
+        proposal.mark_executed(executed_by=approved_by)
+        self._commit_if_needed()
+
+        adjusted_payload = {
+            "event_id": f"inventory:proposal-executed:{proposal.proposal_id}",
+            "entity_type": "draft_proposal",
+            "entity_id": proposal.proposal_id,
+            "proposal_id": proposal.proposal_id,
+            "sku_code": proposal.sku_code,
+            "product_id": product_id,
+            "adjustment": adjustment,
+            "approved_by": approved_by,
+            "executed_at": proposal.executed_at.isoformat() if proposal.executed_at else None,
+            "transaction_id": tx_id,
+        }
+        self._record_outbox_event("InventoryAdjusted", adjusted_payload)
+        self._commit_if_needed()
+        self.event_publisher.publish(
+            event_type="InventoryAdjusted",
+            payload=adjusted_payload,
+        )
+        return proposal, tx_id
+
+    def reject_draft_proposal(
+        self,
+        proposal_id: str,
+        rejected_by: str,
+        rejection_reason: str,
+    ):
+        proposal = self.inventory_repo.get_draft_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError(f"Draft proposal {proposal_id} not found")
+        if proposal.status != "DRAFT_PROPOSAL":
+            raise ValueError(f"Proposal cannot be rejected in state {proposal.status}")
+
+        proposal.reject(rejected_by=rejected_by, rejection_reason=rejection_reason)
+        self._commit_if_needed()
+
+        reject_payload = {
+            "event_id": f"inventory:proposal-rejected:{proposal.proposal_id}",
+            "entity_type": "draft_proposal",
+            "entity_id": proposal.proposal_id,
+            "proposal_id": proposal.proposal_id,
+            "rejected_by": rejected_by,
+            "rejection_reason": rejection_reason,
+        }
+        self._record_outbox_event("ProposalRejected", reject_payload)
+        self._commit_if_needed()
+        self.event_publisher.publish(
+            event_type="ProposalRejected",
+            payload=reject_payload,
+        )
+        return proposal
+
 

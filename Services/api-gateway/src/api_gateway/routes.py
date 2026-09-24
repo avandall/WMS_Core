@@ -6,7 +6,7 @@ import os
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from api_gateway.auth import get_current_user
+from api_gateway.auth import CurrentUser, get_current_user
 from api_gateway.authz import require_permissions
 from api_gateway.errors import grpc_http_exception
 from api_gateway.grpc_clients import (
@@ -31,6 +31,7 @@ from api_gateway.presenters import (
     parse_json,
     product_to_dict,
     warehouse_to_dict,
+    proposal_to_dict,
 )
 from api_gateway.schemas import (
     AIQueryPayload,
@@ -44,6 +45,8 @@ from api_gateway.schemas import (
     ConfirmExecutionPayload,
     LoginPayload,
     InspectQaPayload,
+    ApproveProposalPayload,
+    RejectProposalPayload,
 )
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
@@ -1383,9 +1386,15 @@ def ai_status(request: Request):
     status_code=202,
 )
 async def inventory_ingest(payload: dict):
-    from api_gateway.ingest_buffer import ingest_buffer
+    from api_gateway.ingest_buffer import ingest_buffer, WalThresholdExceededError
     envelope = build_event(source="api-gateway", event_type="InventoryIngested", payload=payload)
-    await ingest_buffer.add_event(envelope.to_json())
+    try:
+        await ingest_buffer.ingest(envelope.to_json())
+    except WalThresholdExceededError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service Overloaded: {exc}",
+        )
     return {"status": "accepted"}
 
 
@@ -1701,3 +1710,109 @@ def get_users_permissions():
 )
 def change_password():
     raise HTTPException(status_code=501, detail="Change password is not implemented")
+
+
+# ============================================================================
+# Phase 7 (Cụm 3) / TASK-059: Maker-Checker Draft Proposals Endpoints
+# ============================================================================
+
+@router.get(
+    "/proposals",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_INVENTORY))],
+)
+def list_draft_proposals(
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    request: Request = None,
+):
+    with inventory_stub() as stub:
+        req = inventory_pb2.ListDraftProposalsRequest(
+            status=status or "",
+            limit=limit,
+            offset=offset,
+        )
+        resp = _grpc_call(
+            stub.ListDraftProposals,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    return {
+        "proposals": [proposal_to_dict(p) for p in resp.proposals],
+        "total": resp.total,
+    }
+
+
+@router.post(
+    "/proposals/{id}/approve",
+)
+def approve_draft_proposal(
+    id: str,
+    payload: ApproveProposalPayload | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+    request: Request = None,
+):
+    if current_user.role not in ("admin", "warehouse_manager"):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. Only warehouse_manager or admin can approve proposals",
+        )
+
+    with inventory_stub() as stub:
+        req = inventory_pb2.ApproveDraftProposalRequest(
+            proposal_id=id,
+            approved_by=str(current_user.user_id),
+            digital_signature=payload.digital_signature if payload else "",
+        )
+        resp = _grpc_call(
+            stub.ApproveDraftProposal,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_SLOW,
+        )
+    if not resp.success:
+        raise HTTPException(status_code=400, detail=resp.message)
+    return {
+        "success": resp.success,
+        "message": resp.message,
+        "proposal": proposal_to_dict(resp.proposal) if resp.HasField("proposal") else None,
+        "transaction_id": resp.transaction_id,
+    }
+
+
+@router.post(
+    "/proposals/{id}/reject",
+)
+def reject_draft_proposal(
+    id: str,
+    payload: RejectProposalPayload,
+    current_user: CurrentUser = Depends(get_current_user),
+    request: Request = None,
+):
+    if current_user.role not in ("admin", "warehouse_manager"):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. Only warehouse_manager or admin can reject proposals",
+        )
+
+    with inventory_stub() as stub:
+        req = inventory_pb2.RejectDraftProposalRequest(
+            proposal_id=id,
+            rejected_by=str(current_user.user_id),
+            rejection_reason=payload.rejection_reason or "Rejected by manager",
+        )
+        resp = _grpc_call(
+            stub.RejectDraftProposal,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    if not resp.success:
+        raise HTTPException(status_code=400, detail=resp.message)
+    return {
+        "success": resp.success,
+        "message": resp.message,
+        "proposal": proposal_to_dict(resp.proposal) if resp.HasField("proposal") else None,
+    }

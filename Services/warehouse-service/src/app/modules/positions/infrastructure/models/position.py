@@ -52,6 +52,7 @@ class PositionModel(Base):
         UniqueConstraint("warehouse_id", "code", name="uq_position_warehouse_code"),
         Index("ix_positions_warehouse_code", "warehouse_id", "code"),
         Index("ix_positions_warehouse_type", "warehouse_id", "type"),
+        {"extend_existing": True},
     )
 
     warehouse = relationship("WarehouseModel", back_populates="positions")

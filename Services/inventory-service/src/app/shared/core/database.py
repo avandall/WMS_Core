@@ -11,23 +11,25 @@ from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-engine = create_engine(
-    settings.database_url,
-    future=True,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=settings.db_pool_size,
-    max_overflow=settings.db_max_overflow,
-    pool_timeout=settings.db_pool_timeout,
-    pool_recycle=settings.db_pool_recycle,
-    poolclass=QueuePool,
-    connect_args={
-        "connect_timeout": 10,
-        "options": "-c statement_timeout=30000",
-    }
-    if "postgresql" in settings.database_url
-    else {},
-)
+db_url = settings.database_url or os.getenv("DATABASE_URL", "sqlite:///:memory:")
+engine_kwargs = {
+    "future": True,
+    "echo": settings.debug,
+}
+if "postgresql" in db_url:
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+        "pool_recycle": settings.db_pool_recycle,
+        "poolclass": QueuePool,
+        "connect_args": {
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000",
+        },
+    })
+engine = create_engine(db_url, **engine_kwargs)
 
 @event.listens_for(engine, "connect")
 def receive_connect(dbapi_conn, connection_record):

@@ -16,8 +16,10 @@ from app.modules.inventory.infrastructure.models.inventory import InventoryModel
 from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
 from app.modules.inventory.infrastructure.models.inventory_transaction import InventoryTransactionModel
 from app.modules.inventory.infrastructure.models.movement_ledger import InventoryMovementLedgerModel
+from app.modules.inventory.infrastructure.models.position import PositionModel
 from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
 from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
+from app.modules.inventory.infrastructure.models.draft_proposal import DraftProposalModel
 
 
 class InventoryRepo(TransactionalRepository, IInventoryRepo):
@@ -786,9 +788,12 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         owner_id: Optional[str] = None,
         for_update: bool = False,
     ) -> List[dict]:
-        query = select(InventoryLocationModel)
+        query = (
+            select(InventoryLocationModel, PositionModel)
+            .outerjoin(PositionModel, InventoryLocationModel.position_id == PositionModel.id)
+        )
         if for_update:
-            query = query.with_for_update()
+            query = query.with_for_update(of=InventoryLocationModel)
         if warehouse_id is not None:
             query = query.where(InventoryLocationModel.warehouse_id == warehouse_id)
         if owner_id is not None:
@@ -809,25 +814,33 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             InventoryLocationModel.position_id,
             InventoryLocationModel.product_id,
         )
-        rows = self.session.execute(query).scalars().all()
-        return [
-            {
-                "id": int(r.id),
-                "warehouse_id": int(r.warehouse_id),
-                "owner_id": r.owner_id or "DEFAULT_OWNER",
-                "position_id": int(r.position_id),
-                "product_id": int(r.product_id),
-                "lpn": r.lpn or "",
-                "lot_number": r.lot_number or "",
-                "mfg_date": r.mfg_date.isoformat() if r.mfg_date else None,
-                "expiry_date": r.expiry_date.isoformat() if r.expiry_date else None,
-                "quantity": int(r.quantity),
-                "allocated_qty": int(r.allocated_qty),
-                "status": r.status,
-                "available_qty": int(r.quantity - r.allocated_qty),
-            }
-            for r in rows
-        ]
+        results = self.session.execute(query).all()
+        locations = []
+        for loc, pos in results:
+            locations.append({
+                "id": int(loc.id),
+                "warehouse_id": int(loc.warehouse_id),
+                "owner_id": loc.owner_id or "DEFAULT_OWNER",
+                "position_id": int(loc.position_id),
+                "product_id": int(loc.product_id),
+                "lpn": loc.lpn or "",
+                "lot_number": loc.lot_number or "",
+                "mfg_date": loc.mfg_date.isoformat() if loc.mfg_date else None,
+                "expiry_date": loc.expiry_date.isoformat() if loc.expiry_date else None,
+                "quantity": int(loc.quantity),
+                "allocated_qty": int(loc.allocated_qty),
+                "status": loc.status,
+                "available_qty": int(loc.quantity - loc.allocated_qty),
+                "x_coordinate": float(pos.x_coordinate or 0.0) if pos else 0.0,
+                "y_coordinate": float(pos.y_coordinate or 0.0) if pos else 0.0,
+                "z_coordinate": float(pos.z_coordinate or 0.0) if pos else 0.0,
+                "zone_id": (pos.zone or "ZONE-A") if pos else "ZONE-A",
+                "aisle": (pos.aisle or "AISLE-01") if pos else "AISLE-01",
+                "bay": (pos.bay or "BAY-01") if pos else "BAY-01",
+                "level": (pos.level or "1") if pos else "1",
+                "location_code": (pos.code or f"POS-{loc.position_id}") if pos else f"POS-{loc.position_id}",
+            })
+        return locations
 
     def adjust_location_quantity(
         self,
@@ -1066,5 +1079,31 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             wh_inv.physical_qty = total_physical
             wh_inv.reserved_qty = effective_reserved
         self.session.flush()
+
+    def get_draft_proposal(self, proposal_id: str) -> Optional[DraftProposalModel]:
+        return self.session.execute(
+            select(DraftProposalModel).where(DraftProposalModel.proposal_id == proposal_id).with_for_update()
+        ).scalar_one_or_none()
+
+    def list_draft_proposals(
+        self,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[List[DraftProposalModel], int]:
+        stmt = select(DraftProposalModel)
+        count_stmt = select(func.count()).select_from(DraftProposalModel)
+        if status:
+            stmt = stmt.where(DraftProposalModel.status == status)
+            count_stmt = count_stmt.where(DraftProposalModel.status == status)
+        total = self.session.execute(count_stmt).scalar() or 0
+        stmt = stmt.order_by(DraftProposalModel.created_at.desc()).limit(limit).offset(offset)
+        items = list(self.session.execute(stmt).scalars().all())
+        return items, total
+
+    def save_draft_proposal(self, proposal: DraftProposalModel) -> DraftProposalModel:
+        self.session.add(proposal)
+        self._commit_if_auto()
+        return proposal
 
 

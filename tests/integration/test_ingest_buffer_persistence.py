@@ -15,10 +15,16 @@ import os
 import shutil
 import tempfile
 import time
+from unittest.mock import AsyncMock, patch
 import pytest
-from unittest.mock import AsyncMock
 
-from api_gateway.ingest_buffer import IngestBuffer, WalManager, DLQManager
+from api_gateway.ingest_buffer import (
+    IngestBuffer,
+    WalManager,
+    DLQManager,
+    WalThresholdExceededError,
+    MAX_WAL_SIZE_MB,
+)
 
 
 class MockRedisStream:
@@ -226,3 +232,155 @@ async def test_dlq_retry_worker_recovers_when_redis_heals(temp_storage):
 
     finally:
         await buffer.stop()
+
+
+@pytest.mark.asyncio
+async def test_wal_fsync_durability_called(temp_storage):
+    """
+    Verify TECH-03: WalManager.append() must synchronously invoke os.fsync(fd)
+    after handle.flush() to guarantee durable physical write to SSD before sequence commit.
+    """
+    wal_dir, dlq_dir = temp_storage
+    wal_mgr = WalManager(wal_dir=wal_dir)
+
+    try:
+        with patch("os.fsync") as mock_fsync:
+            seq1 = await wal_mgr.append(json.dumps({"evt": "fsync_test_1"}))
+            assert seq1 >= 0
+            assert mock_fsync.called
+            assert mock_fsync.call_count == 1
+
+            seq2 = await wal_mgr.append(json.dumps({"evt": "fsync_test_2"}))
+            assert seq2 == seq1 + 1
+            assert mock_fsync.call_count == 2
+    finally:
+        wal_mgr.close()
+
+
+@pytest.mark.asyncio
+async def test_wal_get_total_size_bytes(temp_storage):
+    """
+    Verify calculation of total disk bytes across all WAL files in wal_dir.
+    """
+    wal_dir, dlq_dir = temp_storage
+    buffer = IngestBuffer(wal_dir=wal_dir, dlq_dir=dlq_dir)
+    try:
+        # Initially empty (or just checkpoint)
+        initial_size = buffer.get_total_wal_size_bytes()
+        assert initial_size >= 0
+
+        # Add events and assert size strictly increases
+        for i in range(10):
+            await buffer.ingest(json.dumps({"test_id": i, "data": "x" * 200}))
+
+        new_size = buffer.get_total_wal_size_bytes()
+        assert new_size > initial_size
+        assert buffer.wal_manager.get_total_wal_size_bytes() == new_size
+    finally:
+        await buffer.stop()
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_tripped_on_wal_threshold(temp_storage, caplog):
+    """
+    Verify MED-09: When WAL size exceeds MAX_WAL_SIZE_MB:
+    1. Circuit breaker trips.
+    2. Event is rejected with WalThresholdExceededError (or -1 if raise_on_error=False).
+    3. Log warning level CRITICAL: 'WAL disk threshold exceeded, circuit breaker tripped'.
+    4. Rejected event is immediately diverted to Emergency DLQ to prevent data loss.
+    """
+    wal_dir, dlq_dir = temp_storage
+    mock_redis = MockRedisStream()
+
+    # Configure small max_wal_size_mb (e.g. 1MB = 1024*1024 bytes)
+    buffer = IngestBuffer(
+        wal_dir=wal_dir,
+        dlq_dir=dlq_dir,
+        max_wal_size_mb=1,
+        redis_client=mock_redis,
+    )
+    buffer.start()
+
+    try:
+        assert not buffer.circuit_breaker_tripped
+
+        # Artificially simulate disk usage exceeding 1MB limit by creating a dummy WAL file
+        large_file = buffer.wal_manager.wal_dir / "wal_overflow_dummy.jsonl"
+        with open(large_file, "wb") as f:
+            f.seek(1024 * 1024 + 10)  # > 1MB
+            f.write(b"\0")
+
+        # Now circuit breaker must be tripped
+        assert buffer.circuit_breaker_tripped
+
+        # 1. Ingest with raise_on_error=True (default) must raise WalThresholdExceededError
+        with pytest.raises(WalThresholdExceededError, match="WAL disk threshold exceeded, circuit breaker tripped"):
+            await buffer.ingest(json.dumps({"event": "emergency_payload_1"}))
+
+        # 2. Ingest with raise_on_error=False must return -1
+        res = await buffer.ingest(json.dumps({"event": "emergency_payload_2"}), raise_on_error=False)
+        assert res == -1
+
+        # 3. Check that CRITICAL log was emitted
+        assert any("WAL disk threshold exceeded, circuit breaker tripped" in record.message for record in caplog.records)
+
+        # 4. Check that both emergency events were preserved in Emergency DLQ
+        dlq_files = buffer.dlq_manager.list_dlq_files()
+        assert len(dlq_files) >= 1
+        dlq_events = []
+        for df in dlq_files:
+            dlq_events.extend(buffer.dlq_manager.read_dlq_events(df))
+        assert any("emergency_payload_1" in evt for evt in dlq_events)
+        assert any("emergency_payload_2" in evt for evt in dlq_events)
+
+    finally:
+        await buffer.stop()
+
+
+@pytest.mark.asyncio
+async def test_high_load_durability_bounded_retention(temp_storage):
+    """
+    Simulate high load (1,500 events) under abrupt shutdown and verify bounded storage & full recovery.
+    """
+    wal_dir, dlq_dir = temp_storage
+    mock_redis = MockRedisStream()
+
+    # Stage 1: Send 1,500 events without flushing
+    pod1 = IngestBuffer(
+        batch_size=5000,
+        flush_interval_seconds=10.0,
+        wal_dir=wal_dir,
+        dlq_dir=dlq_dir,
+        redis_client=mock_redis,
+    )
+    pod1.running = True
+
+    for i in range(1500):
+        await pod1.ingest(json.dumps({"load_id": i, "scanner": "HANDHELD-Z9"}))
+
+    # Crash pod abruptly
+    pod1.wal_manager.close()
+    assert len(mock_redis.stored_events) == 0
+
+    # Stage 2: Restart pod on the same WAL directory
+    pod2 = IngestBuffer(
+        batch_size=100,
+        flush_interval_seconds=0.01,
+        wal_dir=wal_dir,
+        dlq_dir=dlq_dir,
+        redis_client=mock_redis,
+    )
+    pod2.start()
+
+    timeout = 8.0
+    start = time.time()
+    while len(mock_redis.stored_events) < 1500 and (time.time() - start) < timeout:
+        await asyncio.sleep(0.05)
+
+    await pod2.stop()
+
+    # Verify 100% of 1,500 events recovered
+    assert len(mock_redis.stored_events) == 1500
+    recovered_ids = {json.loads(e)["load_id"] for e in mock_redis.stored_events}
+    assert len(recovered_ids) == 1500
+

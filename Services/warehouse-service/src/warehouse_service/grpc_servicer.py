@@ -120,6 +120,87 @@ class WarehouseServiceServicer(warehouse_pb2_grpc.WarehouseServiceServicer):
                 message="Warehouse inventory ownership moved to inventory-service",
             )
 
+    def GetPosition(self, request: warehouse_pb2.GetPositionRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                query = select(PositionModel).where(PositionModel.warehouse_id == int(request.warehouse_id))
+                if request.code:
+                    query = query.where(PositionModel.code == request.code)
+                pos = db.execute(query).scalars().first()
+                if not pos:
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details(f"Position not found: warehouse_id={request.warehouse_id}, code={request.code}")
+                    return warehouse_pb2.Position()
+
+                return warehouse_pb2.Position(
+                    id=int(pos.id),
+                    warehouse_id=int(pos.warehouse_id),
+                    code=pos.code or "",
+                    type=pos.type or "STORAGE",
+                    description=pos.description or "",
+                    is_active=bool(pos.is_active),
+                    aisle=pos.aisle or "",
+                    bay=pos.bay or "",
+                    level=pos.level or "",
+                    bin=pos.bin or "",
+                    max_weight_kg=float(pos.max_weight_kg) if pos.max_weight_kg is not None else None,
+                    temperature_zone=pos.temperature_zone or "ambient",
+                    pick_sequence=int(pos.pick_sequence or 0),
+                    hazmat_class=pos.hazmat_class,
+                    full_address=f"{pos.aisle or ''}-{pos.bay or ''}-{pos.level or ''}",
+                    x_coordinate=float(pos.x_coordinate or 0.0),
+                    y_coordinate=float(pos.y_coordinate or 0.0),
+                    z_coordinate=float(pos.z_coordinate or 0.0),
+                    max_volume_cbm=float(pos.max_volume_cbm) if pos.max_volume_cbm is not None else None,
+                    available_volume=float(pos.available_volume) if pos.available_volume is not None else None,
+                    available_weight=float(pos.available_weight) if pos.available_weight is not None else None,
+                    zone=pos.zone or "",
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(sanitize_grpc_error(exc))
+            return warehouse_pb2.Position()
+
+    def ListPositions(self, request: warehouse_pb2.ListPositionsRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                query = select(PositionModel).where(PositionModel.warehouse_id == int(request.warehouse_id))
+                if not request.include_inactive:
+                    query = query.where(PositionModel.is_active == 1)
+                positions = db.execute(query).scalars().all()
+                rows = [
+                    warehouse_pb2.Position(
+                        id=int(pos.id),
+                        warehouse_id=int(pos.warehouse_id),
+                        code=pos.code or "",
+                        type=pos.type or "STORAGE",
+                        description=pos.description or "",
+                        is_active=bool(pos.is_active),
+                        aisle=pos.aisle or "",
+                        bay=pos.bay or "",
+                        level=pos.level or "",
+                        bin=pos.bin or "",
+                        max_weight_kg=float(pos.max_weight_kg) if pos.max_weight_kg is not None else None,
+                        temperature_zone=pos.temperature_zone or "ambient",
+                        pick_sequence=int(pos.pick_sequence or 0),
+                        hazmat_class=pos.hazmat_class,
+                        full_address=f"{pos.aisle or ''}-{pos.bay or ''}-{pos.level or ''}",
+                        x_coordinate=float(pos.x_coordinate or 0.0),
+                        y_coordinate=float(pos.y_coordinate or 0.0),
+                        z_coordinate=float(pos.z_coordinate or 0.0),
+                        max_volume_cbm=float(pos.max_volume_cbm) if pos.max_volume_cbm is not None else None,
+                        available_volume=float(pos.available_volume) if pos.available_volume is not None else None,
+                        available_weight=float(pos.available_weight) if pos.available_weight is not None else None,
+                        zone=pos.zone or "",
+                    )
+                    for pos in positions
+                ]
+                return warehouse_pb2.ListPositionsResponse(positions=rows)
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(sanitize_grpc_error(exc))
+            return warehouse_pb2.ListPositionsResponse(positions=[])
+
 
 class WarehouseOperationsServiceServicer(warehouse_pb2_grpc.WarehouseOperationsServiceServicer):
     def _repo(self, db: object) -> WarehouseRepo:

@@ -98,3 +98,24 @@ def parse_json(value: str):
         return json.loads(value) if value else value
     except Exception:
         return value
+
+
+def proposal_to_dict(p: Any) -> dict[str, Any]:
+    return {
+        "proposal_id": p.proposal_id,
+        "proposal_type": p.proposal_type,
+        "sku_code": p.sku_code,
+        "current_quantity": int(p.current_quantity),
+        "proposed_quantity": int(p.proposed_quantity),
+        "adjustment": int(p.adjustment),
+        "reason": p.reason,
+        "requested_by": p.requested_by,
+        "status": p.status,
+        "created_at": p.created_at,
+        "approved_by": p.approved_by,
+        "approved_at": p.approved_at,
+        "rejection_reason": p.rejection_reason,
+        "executed_at": p.executed_at,
+        "executed_by": p.executed_by,
+        "digital_signature": p.digital_signature,
+    }

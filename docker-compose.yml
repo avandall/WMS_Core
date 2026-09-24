@@ -420,6 +420,7 @@ services:
       AI_BACKEND_QUERY_URL: "${AI_BACKEND_QUERY_URL:-http://api-gateway:8000/api/v1/ai/backend-query}"
       AI_BACKEND_QUERY_TOKEN: "${AI_BACKEND_QUERY_TOKEN:-}"
       AI_BACKEND_QUERY_TIMEOUT: "${AI_BACKEND_QUERY_TIMEOUT:-10}"
+      WMS_PROPOSAL_HMAC_SECRET: "${WMS_PROPOSAL_HMAC_SECRET:-dev_hmac_secret_key_change_in_prod}"
     command: ["ai-grpc"]
     volumes:
       - ../WMS_AI_Services/src:/app/src
