@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -87,5 +88,6 @@ class ProductModel(Base):
         CheckConstraint("height_cm >= 0", name="check_product_height_positive"),
         CheckConstraint("gross_weight_kg >= 0", name="check_product_gross_weight_positive"),
         CheckConstraint("net_weight_kg >= 0", name="check_product_net_weight_positive"),
+        UniqueConstraint("name", name="uq_products_name"),
         Index("ix_products_name", "name"),
     )

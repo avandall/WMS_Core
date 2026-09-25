@@ -934,6 +934,128 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "available_qty": int(row.quantity - row.allocated_qty),
         }
 
+    def move_location_stock(
+        self,
+        product_id: int,
+        from_warehouse_id: int,
+        from_position_id: int,
+        to_position_id: int,
+        quantity: int,
+        to_warehouse_id: Optional[int] = None,
+        owner_id: str = "DEFAULT_OWNER",
+        lpn: str = "",
+        lot_number: str = "",
+        status: str = "AVAILABLE",
+    ) -> tuple[dict, dict]:
+        """
+        TASK-076 / DOM-01: Atomically moves stock between two locations with dual row-locking.
+        Enforces deterministic lock acquisition order (min key -> max key) to eliminate deadlocks.
+        Updates physical quantities synchronously across inventory_locations and warehouse_inventory.
+        """
+        if quantity <= 0:
+            raise InvalidQuantityError("Quantity to move must be greater than 0")
+
+        dest_warehouse_id = to_warehouse_id or from_warehouse_id
+        if from_warehouse_id == dest_warehouse_id and from_position_id == to_position_id:
+            raise ValueError("Source and destination locations cannot be the same")
+
+        lpn_clean = lpn or ""
+        lot_clean = lot_number or ""
+        owner_clean = owner_id or "DEFAULT_OWNER"
+
+        # Deterministic Lock Ordering: order by (warehouse_id, position_id)
+        # Prevents AB-BA deadlocks when two concurrent workers transfer stock in reverse directions
+        from_key = (from_warehouse_id, from_position_id)
+        to_key = (dest_warehouse_id, to_position_id)
+
+        def _fetch_lock_row(wh_id: int, pos_id: int) -> Optional[InventoryLocationModel]:
+            return self.session.execute(
+                select(InventoryLocationModel).where(
+                    InventoryLocationModel.warehouse_id == wh_id,
+                    InventoryLocationModel.owner_id == owner_clean,
+                    InventoryLocationModel.position_id == pos_id,
+                    InventoryLocationModel.product_id == product_id,
+                    InventoryLocationModel.lpn == lpn_clean,
+                    InventoryLocationModel.lot_number == lot_clean,
+                    InventoryLocationModel.status == status,
+                ).with_for_update()
+            ).scalar_one_or_none()
+
+        if from_key < to_key:
+            source_row = _fetch_lock_row(from_warehouse_id, from_position_id)
+            dest_row = _fetch_lock_row(dest_warehouse_id, to_position_id)
+        else:
+            dest_row = _fetch_lock_row(dest_warehouse_id, to_position_id)
+            source_row = _fetch_lock_row(from_warehouse_id, from_position_id)
+
+        # Validate source stock
+        if source_row is None:
+            raise InsufficientStockError(
+                f"No stock found at source location (warehouse={from_warehouse_id}, position={from_position_id}, product={product_id})"
+            )
+
+        source_available = source_row.quantity - source_row.allocated_qty
+        if source_available < quantity:
+            raise InsufficientStockError(
+                f"Insufficient available stock at source location: available={source_available}, requested={quantity}"
+            )
+
+        # Decrement source location
+        source_row.quantity -= quantity
+        mfg_date = source_row.mfg_date
+        expiry_date = source_row.expiry_date
+
+        # Increment or create destination location
+        if dest_row is None:
+            dest_row = InventoryLocationModel(
+                warehouse_id=dest_warehouse_id,
+                owner_id=owner_clean,
+                position_id=to_position_id,
+                product_id=product_id,
+                lpn=lpn_clean,
+                lot_number=lot_clean,
+                mfg_date=mfg_date,
+                expiry_date=expiry_date,
+                quantity=quantity,
+                allocated_qty=0,
+                status=status,
+            )
+            self.session.add(dest_row)
+        else:
+            dest_row.quantity += quantity
+            if mfg_date and not dest_row.mfg_date:
+                dest_row.mfg_date = mfg_date
+            if expiry_date and not dest_row.expiry_date:
+                dest_row.expiry_date = expiry_date
+
+        self.session.flush()
+
+        # Synchronize summary table (warehouse_inventory)
+        self.sync_warehouse_inventory_summary(from_warehouse_id, product_id, owner_clean)
+        if dest_warehouse_id != from_warehouse_id:
+            self.sync_warehouse_inventory_summary(dest_warehouse_id, product_id, owner_clean)
+
+        self._commit_if_auto()
+
+        def _row_dict(r: InventoryLocationModel) -> dict:
+            return {
+                "id": int(r.id),
+                "warehouse_id": int(r.warehouse_id),
+                "owner_id": r.owner_id,
+                "position_id": int(r.position_id),
+                "product_id": int(r.product_id),
+                "lpn": r.lpn,
+                "lot_number": r.lot_number or "",
+                "mfg_date": r.mfg_date.isoformat() if r.mfg_date else None,
+                "expiry_date": r.expiry_date.isoformat() if r.expiry_date else None,
+                "quantity": int(r.quantity),
+                "allocated_qty": int(r.allocated_qty),
+                "status": r.status,
+                "available_qty": int(r.quantity - r.allocated_qty),
+            }
+
+        return _row_dict(source_row), _row_dict(dest_row)
+
     def recall_query(self, lot_number: str) -> dict:
         """Recall Query: Get all location bins storing lot_number and customer orders receiving it."""
         loc_rows = self.session.execute(

@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
-import grpc
 
+import grpc
+from app.modules.inventory.application.services.inventory_service import (
+    InventoryService,
+)
+from app.modules.inventory.infrastructure.repositories.inventory_repo import (
+    InventoryRepo,
+)
+from app.shared.core.database import get_db_session
+from app.shared.domain.business_exceptions import (
+    InsufficientStockError,
+    InvalidQuantityError,
+)
 from shared_utils.events import get_publisher
 from shared_utils.security import sanitize_grpc_error
-
-from app.modules.inventory.application.services.inventory_service import InventoryService
-from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
-from app.shared.core.database import get_db_session
 
 from inventory_service.gen.wms.inventory.v1 import inventory_pb2, inventory_pb2_grpc
 
@@ -410,6 +418,50 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             context.set_details(sanitize_grpc_error(exc))
             return inventory_pb2.UpdateInventoryLocationResponse(success=False)
 
+    def CreateDraftProposal(
+        self, request: inventory_pb2.CreateDraftProposalRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                eff_user = (request.requested_by or "").strip() or self._user_id(context)
+                proposal_id = request.proposal_id.strip() if request.proposal_id else f"PROP-{uuid.uuid4().hex[:12].upper()}"
+
+                proposal = service.create_draft_proposal(
+                    proposal_id=proposal_id,
+                    sku_code=request.sku_code,
+                    proposal_type=request.proposal_type or "DraftAdjustmentProposal",
+                    current_quantity=request.current_quantity if request.current_quantity != 0 else None,
+                    proposed_quantity=request.proposed_quantity if request.proposed_quantity != 0 else None,
+                    adjustment=request.adjustment if request.adjustment != 0 else None,
+                    reason=request.reason or None,
+                    requested_by=eff_user,
+                    warehouse_id=int(request.warehouse_id) if request.warehouse_id != 0 else 1,
+                    location_code=request.location_code or None,
+                    position_id=int(request.position_id) if request.position_id != 0 else None,
+                )
+                return inventory_pb2.CreateDraftProposalResponse(
+                    success=True,
+                    message="Draft proposal created successfully",
+                    proposal=self._proposal_to_proto(proposal),
+                )
+        except ValueError as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.CreateDraftProposalResponse(
+                success=False,
+                message=str(exc),
+            )
+        except Exception as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INTERNAL)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.CreateDraftProposalResponse(
+                success=False,
+                message=sanitize_grpc_error(exc),
+            )
+
     def ListDraftProposals(
         self, request: inventory_pb2.ListDraftProposalsRequest, context: grpc.ServicerContext
     ):
@@ -566,6 +618,81 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             location_code=str(getattr(p, "location_code", "") or ""),
             position_id=int(getattr(p, "position_id", 0) or 0),
         )
+
+    @staticmethod
+    def _loc_to_proto(loc: dict) -> inventory_pb2.InventoryLocationRow:
+        return inventory_pb2.InventoryLocationRow(
+            id=int(loc.get("id", 0)),
+            warehouse_id=int(loc.get("warehouse_id", 1)),
+            position_id=int(loc.get("position_id", 0)),
+            product_id=int(loc.get("product_id", 0)),
+            lpn=loc.get("lpn") or "",
+            quantity=int(loc.get("quantity", 0)),
+            allocated_qty=int(loc.get("allocated_qty", 0)),
+            status=loc.get("status") or "AVAILABLE",
+            available_qty=int(loc.get("available_qty", 0)),
+            lot_number=loc.get("lot_number") or "",
+            mfg_date=loc.get("mfg_date") or "",
+            expiry_date=loc.get("expiry_date") or "",
+            x_coordinate=float(loc.get("x_coordinate", 0.0)),
+            y_coordinate=float(loc.get("y_coordinate", 0.0)),
+            z_coordinate=float(loc.get("z_coordinate", 0.0)),
+            zone_id=loc.get("zone_id", "ZONE-A"),
+            aisle=loc.get("aisle", "AISLE-01"),
+            bay=loc.get("bay", "BAY-01"),
+            level=loc.get("level", "1"),
+            location_code=loc.get("location_code", ""),
+        )
+
+    def MoveLocationStock(
+        self, request: inventory_pb2.MoveLocationStockRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                eff_user = (request.user_id or "").strip() or self._user_id(context)
+                prod_id = int(request.product_id)
+                if prod_id <= 0 and request.sku_code:
+                    prod_id = service.resolve_sku_to_product_id(request.sku_code)
+
+                from_loc, to_loc, tx_id = service.move_location_stock(
+                    product_id=prod_id,
+                    from_warehouse_id=int(request.warehouse_id),
+                    to_warehouse_id=int(request.to_warehouse_id) if request.to_warehouse_id else int(request.warehouse_id),
+                    from_position_id=int(request.from_position_id) if request.from_position_id else None,
+                    to_position_id=int(request.to_position_id) if request.to_position_id else None,
+                    from_location_code=request.from_location_code or None,
+                    to_location_code=request.to_location_code or None,
+                    quantity=int(request.quantity),
+                    sku_code=request.sku_code or None,
+                    user_id=eff_user,
+                    lpn=request.lpn or "",
+                    lot_number=request.lot_number or "",
+                    idempotency_key=request.idempotency_key or None,
+                )
+                return inventory_pb2.MoveLocationStockResponse(
+                    success=True,
+                    message="Stock moved successfully between locations",
+                    from_location=self._loc_to_proto(from_loc),
+                    to_location=self._loc_to_proto(to_loc),
+                    transaction_id=tx_id,
+                )
+        except (ValueError, InsufficientStockError, InvalidQuantityError) as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.MoveLocationStockResponse(
+                success=False,
+                message=str(exc),
+            )
+        except Exception as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INTERNAL)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.MoveLocationStockResponse(
+                success=False,
+                message=sanitize_grpc_error(exc),
+            )
 
 
 add_InventoryServiceServicer_to_server = inventory_pb2_grpc.add_InventoryServiceServicer_to_server

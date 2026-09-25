@@ -153,8 +153,19 @@ def test_partial_fulfillment_releases_remainder():
 
 def test_cycle_count_auto_adjusts_inventory():
     """FLOW-04: Cycle count approval automatically adjusts inventory locations."""
+    from app.shared.core.database import Base, import_all_models
+    from app.modules.documents.infrastructure.models.cycle_count_sheet import CycleCountSheetModel
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine("sqlite:///:memory:")
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    CycleCountSheetModel.__table__.create(bind=engine, checkfirst=True)
+    session = sessionmaker(bind=engine)()
+
     inv_repo = InMemoryInventoryRepo()
-    cc_service = CycleCountService(inventory_repo=inv_repo)
+    cc_service = CycleCountService(session=session, inventory_repo=inv_repo)
 
     item = CycleCountItem(
         item_id="ITEM-1",

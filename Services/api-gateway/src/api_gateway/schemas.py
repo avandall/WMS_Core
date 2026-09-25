@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CustomerPayload(BaseModel):
@@ -74,6 +74,38 @@ class InspectQaPayload(BaseModel):
     inspected_by: str = "system"
     passed: bool = True
     note: str = ""
+
+
+class CreateProposalPayload(BaseModel):
+    proposal_id: str = ""
+    proposal_type: str = "DraftAdjustmentProposal"
+    sku_code: str
+    warehouse_id: int = 1
+    location_code: str = ""
+    position_id: int = 0
+    current_quantity: int | None = None
+    proposed_quantity: int | None = None
+    adjustment: int | None = None
+    reason: str = ""
+
+    @model_validator(mode="after")
+    def validate_location_for_negative_adjustments(self) -> CreateProposalPayload:
+        adj = self.adjustment
+        if adj is None:
+            if self.proposed_quantity is not None and self.current_quantity is not None:
+                adj = self.proposed_quantity - self.current_quantity
+            else:
+                adj = 0
+
+        has_loc = bool(
+            (self.location_code and self.location_code.strip())
+            or (self.position_id and self.position_id > 0)
+        )
+        if adj < 0 and not has_loc:
+            raise ValueError(
+                "location_code or position_id is required for negative inventory adjustments"
+            )
+        return self
 
 
 class ApproveProposalPayload(BaseModel):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 
@@ -949,6 +950,31 @@ class InventoryService:
             expiry_date=expiry_date,
         )
 
+    def allocate_inventory_fefo(
+        self,
+        *,
+        warehouse_id: int,
+        product_id: int,
+        quantity: int,
+        status: str = "AVAILABLE",
+        min_shelf_life_days: int = 30,
+        min_remaining_shelf_life_days: Optional[int] = None,
+    ) -> List[dict]:
+        """
+        TASK-077 / DOM-04: Allocates stock using FEFO with Minimum Remaining Shelf Life (MRSL) filtering.
+        """
+        from app.modules.inventory.application.services.allocation_service import AllocationService
+
+        alloc_service = AllocationService(self.inventory_repo)
+        return alloc_service.allocate_inventory_fefo(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            quantity=quantity,
+            status=status,
+            min_shelf_life_days=min_shelf_life_days,
+            min_remaining_shelf_life_days=min_remaining_shelf_life_days,
+        )
+
     def allocate_fefo(
         self,
         *,
@@ -956,6 +982,8 @@ class InventoryService:
         product_id: int,
         quantity: int,
         status: str = "AVAILABLE",
+        min_shelf_life_days: int = 0,
+        min_remaining_shelf_life_days: Optional[int] = None,
     ) -> List[dict]:
         from app.modules.inventory.application.services.allocation_service import AllocationService
 
@@ -965,6 +993,8 @@ class InventoryService:
             product_id=product_id,
             quantity=quantity,
             status=status,
+            min_shelf_life_days=min_shelf_life_days,
+            min_remaining_shelf_life_days=min_remaining_shelf_life_days,
         )
 
     def recall_query(self, lot_number: str) -> dict:
@@ -1013,6 +1043,11 @@ class InventoryService:
                 adjustment = proposed_quantity - current_quantity
             else:
                 adjustment = 0
+
+        # TASK-074 / CRIT-02: Mandatory location_code or position_id for negative adjustments
+        has_location = bool((location_code and str(location_code).strip()) or (position_id and position_id > 0))
+        if adjustment < 0 and not has_location:
+            raise ValueError("location_code or position_id is required for negative inventory adjustments")
 
         proposal = DraftProposalModel(
             proposal_id=proposal_id,
@@ -1100,6 +1135,133 @@ class InventoryService:
             expiry_date=expiry_date,
             owner_id=owner_id,
         )
+
+    def _resolve_position_id(
+        self,
+        warehouse_id: int,
+        position_id: Optional[int],
+        location_code: Optional[str],
+        product_id: Optional[int] = None,
+    ) -> int:
+        if position_id is not None and position_id > 0:
+            return position_id
+        session = getattr(self.inventory_repo, "session", None)
+        if location_code and session is not None:
+            try:
+                from app.modules.inventory.infrastructure.models.position import PositionModel
+                pos = session.execute(
+                    select(PositionModel).where(
+                        PositionModel.warehouse_id == warehouse_id,
+                        PositionModel.code == location_code,
+                    )
+                ).scalar_one_or_none()
+                if pos:
+                    return int(pos.id)
+            except Exception:
+                pass
+            if product_id is not None:
+                try:
+                    from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+                    loc_pos = session.execute(
+                        select(InventoryLocationModel.position_id).where(
+                            InventoryLocationModel.warehouse_id == warehouse_id,
+                            InventoryLocationModel.product_id == product_id,
+                        ).limit(1)
+                    ).scalar_one_or_none()
+                    if loc_pos:
+                        return int(loc_pos)
+                except Exception:
+                    pass
+            digits = "".join(filter(str.isdigit, str(location_code)))
+            if digits:
+                return int(digits)
+        return position_id or 1
+
+    def move_location_stock(
+        self,
+        product_id: int,
+        from_warehouse_id: int,
+        from_position_id: Optional[int] = None,
+        to_position_id: Optional[int] = None,
+        from_location_code: Optional[str] = None,
+        to_location_code: Optional[str] = None,
+        quantity: int = 0,
+        to_warehouse_id: Optional[int] = None,
+        sku_code: Optional[str] = None,
+        user_id: str = "mcp-agent",
+        lpn: str = "",
+        lot_number: str = "",
+        status: str = "AVAILABLE",
+        idempotency_key: Optional[str] = None,
+        owner_id: str = "DEFAULT_OWNER",
+    ) -> tuple[dict, dict, int]:
+        """
+        Atomically transfers stock between two locations with dual row-locking (TASK-076 / DOM-01).
+        Records immutable transaction ledger entry and emits domain event.
+        """
+        if quantity <= 0:
+            raise InvalidQuantityError("Quantity to move must be greater than 0")
+
+        dest_warehouse_id = to_warehouse_id or from_warehouse_id
+        resolved_from_pos = self._resolve_position_id(from_warehouse_id, from_position_id, from_location_code, product_id)
+        resolved_to_pos = self._resolve_position_id(dest_warehouse_id, to_position_id, to_location_code, product_id)
+
+        if from_warehouse_id == dest_warehouse_id and resolved_from_pos == resolved_to_pos:
+            raise ValueError("Source and destination locations cannot be the same")
+
+        from_loc, to_loc = self.inventory_repo.move_location_stock(
+            product_id=product_id,
+            from_warehouse_id=from_warehouse_id,
+            from_position_id=resolved_from_pos,
+            to_position_id=resolved_to_pos,
+            quantity=quantity,
+            to_warehouse_id=dest_warehouse_id,
+            owner_id=owner_id,
+            lpn=lpn,
+            lot_number=lot_number,
+            status=status,
+        )
+
+        # Write immutable transaction record
+        tx_res = self._write_transaction(
+            transaction_type="LOCATION_TRANSFER",
+            product_id=product_id,
+            warehouse_id=from_warehouse_id,
+            quantity=quantity,
+            user_id=user_id,
+            idempotency_key=idempotency_key,
+            payload={
+                "from_warehouse_id": from_warehouse_id,
+                "to_warehouse_id": dest_warehouse_id,
+                "from_position_id": resolved_from_pos,
+                "to_position_id": resolved_to_pos,
+                "from_location_code": from_location_code,
+                "to_location_code": to_location_code,
+                "quantity": quantity,
+                "lpn": lpn,
+                "lot_number": lot_number,
+                "sku_code": sku_code,
+            },
+        )
+        tx_id = int(tx_res.get("id", 0) if isinstance(tx_res, dict) else (tx_res or 0))
+
+        # Publish outbox event
+        event_payload = {
+            "event_id": idempotency_key or f"evt_{uuid.uuid4().hex[:12]}",
+            "product_id": product_id,
+            "sku_code": sku_code,
+            "from_warehouse_id": from_warehouse_id,
+            "to_warehouse_id": dest_warehouse_id,
+            "from_position_id": resolved_from_pos,
+            "to_position_id": resolved_to_pos,
+            "quantity": quantity,
+            "user_id": user_id,
+            "transaction_id": tx_id,
+        }
+        self._record_outbox_event("InventoryLocationStockMoved", event_payload)
+        self.event_publisher.publish(event_type="InventoryLocationStockMoved", payload=event_payload)
+
+        return from_loc, to_loc, tx_id
 
     @staticmethod
     def _table_exists(session, table_name: str) -> bool:

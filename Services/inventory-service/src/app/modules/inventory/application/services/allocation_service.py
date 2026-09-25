@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
-from app.shared.core.logging import get_logger
-from app.shared.domain.business_exceptions import InsufficientStockError, InvalidQuantityError
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
+from app.shared.core.logging import get_logger
+from app.shared.domain.business_exceptions import (
+    InsufficientStockError,
+    InvalidQuantityError,
+)
 
 logger = get_logger(__name__)
 
@@ -34,6 +37,34 @@ class AllocationService:
     def __init__(self, inventory_repo: IInventoryRepo):
         self.inventory_repo = inventory_repo
 
+    def allocate_inventory_fefo(
+        self,
+        *,
+        warehouse_id: int,
+        product_id: int,
+        quantity: int,
+        status: str = "AVAILABLE",
+        min_shelf_life_days: int = 30,
+        min_remaining_shelf_life_days: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        TASK-077 / DOM-04: Allocates requested quantity using FEFO rules with
+        Minimum Remaining Shelf Life (MRSL) filtering.
+        Defaults min_shelf_life_days to 30 days.
+        """
+        effective_days = (
+            min_remaining_shelf_life_days
+            if min_remaining_shelf_life_days is not None
+            else min_shelf_life_days
+        )
+        return self.allocate_fefo(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            quantity=quantity,
+            status=status,
+            min_shelf_life_days=effective_days,
+        )
+
     def allocate_fefo(
         self,
         *,
@@ -41,12 +72,14 @@ class AllocationService:
         product_id: int,
         quantity: int,
         status: str = "AVAILABLE",
+        min_shelf_life_days: int = 0,
+        min_remaining_shelf_life_days: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Allocates requested quantity of product_id in warehouse_id using FEFO rules.
 
-        Sorting logic:
-        - Filters out expired stock (expiry_date < current UTC time)
+        Sorting & Filtering logic:
+        - Filters out expired stock or stock violating MRSL (expiry_date < now + min_shelf_life_days)
         - Expiry date ASC (earliest expiring first)
         - Locations with NO expiry date placed AFTER locations WITH expiry date
         - Tie-breaking by FIFO: mfg_date ASC (earliest manufacture date first)
@@ -54,6 +87,15 @@ class AllocationService:
         """
         if quantity <= 0:
             raise InvalidQuantityError("Allocation quantity must be greater than zero")
+
+        effective_min_days = max(
+            0,
+            int(
+                min_remaining_shelf_life_days
+                if min_remaining_shelf_life_days is not None
+                else min_shelf_life_days
+            ),
+        )
 
         # 1. Fetch candidate locations (TASK-042 [EDGE-03]: with_for_update to block concurrent over-allocation)
         try:
@@ -70,24 +112,30 @@ class AllocationService:
                 status=status,
             )
 
-        # 2. Filter available_qty > 0 and not expired (expiry_date < now)
+        # 2. Filter available_qty > 0 and compliant with MRSL (expiry_date >= now + timedelta(days=effective_min_days))
         now = datetime.now(timezone.utc)
+        threshold = now + timedelta(days=effective_min_days)
 
-        def is_expired(loc: Dict[str, Any]) -> bool:
+        def is_shelf_life_insufficient(loc: Dict[str, Any]) -> bool:
             has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
-            return has_expiry and expiry_dt < now
+            return has_expiry and expiry_dt < threshold
 
         candidate_locations = [
             loc for loc in locations
-            if loc.get("available_qty", 0) > 0 and not is_expired(loc)
+            if loc.get("available_qty", 0) > 0 and not is_shelf_life_insufficient(loc)
         ]
         if not candidate_locations:
             raise InsufficientStockError(
                 f"No available stock to allocate for product {product_id} in warehouse {warehouse_id}"
             )
 
-        # Check ATP availability deducting active reservations (RESERVED and PENDING_ADJUSTMENT) [TASK-064 / CRIT-03]
-        atp_available = self.check_availability(warehouse_id=warehouse_id, product_id=product_id)
+        # Check ATP availability deducting active reservations (RESERVED and PENDING_ADJUSTMENT) [TASK-064 / CRIT-03 & TASK-077 / DOM-04]
+        atp_available = self.check_availability(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            min_shelf_life_days=effective_min_days,
+            locations=locations,
+        )
         if quantity > atp_available:
             raise InsufficientStockError(
                 f"Insufficient stock for FEFO allocation. ATP Available: {atp_available}, Requested: {quantity}"
@@ -152,48 +200,85 @@ class AllocationService:
             raise ValueError("lot_number must be a non-empty string")
         return self.inventory_repo.recall_query(lot_number.strip())
 
-    def check_availability(self, warehouse_id: int, product_id: int) -> int:
+    def check_availability(
+        self,
+        warehouse_id: int,
+        product_id: int,
+        min_shelf_life_days: int = 30,
+        min_remaining_shelf_life_days: Optional[int] = None,
+        locations: Optional[List[Dict[str, Any]]] = None,
+    ) -> int:
         """
         Calculates available-to-promise (ATP) stock for product in warehouse.
-        Deducts both RESERVED and PENDING_ADJUSTMENT reservations [TASK-064 / CRIT-03].
+        Formula (TASK-072 / CRIT-01 & TASK-077 / DOM-04):
+        ATP = max(0, Total Valid Physical - max(Total Allocated Loc, Doc Reservations) - Quarantine Reserved)
+        Excludes lots with remaining shelf life < min_shelf_life_days.
         """
-        try:
-            locations = self.inventory_repo.get_inventory_locations(
-                warehouse_id=warehouse_id,
-                product_id=product_id,
-                status="AVAILABLE",
-            )
-        except Exception:
-            locations = []
+        if locations is None:
+            try:
+                locations = self.inventory_repo.get_inventory_locations(
+                    warehouse_id=warehouse_id,
+                    product_id=product_id,
+                    status="AVAILABLE",
+                )
+            except Exception:
+                locations = []
 
         now = datetime.now(timezone.utc)
+        effective_min_days = max(
+            0,
+            int(
+                min_remaining_shelf_life_days
+                if min_remaining_shelf_life_days is not None
+                else min_shelf_life_days
+            ),
+        )
+        threshold = now + timedelta(days=effective_min_days)
 
-        def is_expired(loc: Dict[str, Any]) -> bool:
+        def is_shelf_life_insufficient(loc: Dict[str, Any]) -> bool:
             has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
-            return has_expiry and expiry_dt < now
+            return has_expiry and expiry_dt < threshold
 
-        valid_locations = [loc for loc in locations if not is_expired(loc)]
+        valid_locations = [loc for loc in locations if not is_shelf_life_insufficient(loc)]
         has_locations = len(valid_locations) > 0
 
-        active_reserved = 0
+        doc_reserved = 0
+        quarantine_reserved = 0
         session = getattr(self.inventory_repo, "session", None)
         if session is not None:
+            from app.modules.inventory.infrastructure.models.stock_reservation import (
+                StockReservationModel,
+            )
+            from app.modules.inventory.infrastructure.models.warehouse_inventory import (
+                WarehouseInventoryModel,
+            )
             from sqlalchemy import func, select
-            from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
-            from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
 
-            reserved_sum = session.execute(
+            doc_sum = session.execute(
                 select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
                     StockReservationModel.warehouse_id == warehouse_id,
                     StockReservationModel.product_id == product_id,
-                    StockReservationModel.status.in_(["RESERVED", "PENDING_ADJUSTMENT"]),
+                    StockReservationModel.status == "RESERVED",
                 )
             ).scalar() or 0
-            active_reserved = int(reserved_sum)
+            doc_reserved = int(doc_sum)
+
+            quarantine_sum = session.execute(
+                select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
+                    StockReservationModel.warehouse_id == warehouse_id,
+                    StockReservationModel.product_id == product_id,
+                    StockReservationModel.status == "PENDING_ADJUSTMENT",
+                )
+            ).scalar() or 0
+            quarantine_reserved = int(quarantine_sum)
 
             if has_locations:
-                loc_avail = sum(int(loc.get("available_qty", 0)) for loc in valid_locations)
-                return max(0, loc_avail - active_reserved)
+                total_physical = sum(
+                    int(loc["quantity"]) if "quantity" in loc and loc["quantity"] is not None else int(loc.get("available_qty", 0))
+                    for loc in valid_locations
+                )
+                total_allocated = sum(int(loc.get("allocated_qty", 0)) for loc in valid_locations)
+                return max(0, total_physical - max(total_allocated, doc_reserved) - quarantine_reserved)
             else:
                 wh_row = session.execute(
                     select(WarehouseInventoryModel).where(
@@ -202,14 +287,22 @@ class AllocationService:
                     )
                 ).scalar_one_or_none()
                 if wh_row:
-                    return max(0, int(wh_row.physical_qty) - active_reserved)
+                    return max(0, int(wh_row.physical_qty) - doc_reserved - quarantine_reserved)
                 return 0
         else:
             if hasattr(self.inventory_repo, "list_reservations"):
                 all_res = self.inventory_repo.list_reservations(product_id=product_id, warehouse_id=warehouse_id)
-                active_reserved = sum(
+                doc_reserved = sum(
                     int(r.get("reserved_qty", 0)) for r in all_res
-                    if r.get("status") in ("RESERVED", "PENDING_ADJUSTMENT")
+                    if r.get("status") == "RESERVED"
                 )
-            loc_avail = sum(int(loc.get("available_qty", 0)) for loc in valid_locations)
-            return max(0, loc_avail - active_reserved)
+                quarantine_reserved = sum(
+                    int(r.get("reserved_qty", 0)) for r in all_res
+                    if r.get("status") == "PENDING_ADJUSTMENT"
+                )
+            total_physical = sum(
+                int(loc["quantity"]) if "quantity" in loc and loc["quantity"] is not None else int(loc.get("available_qty", 0))
+                for loc in valid_locations
+            )
+            total_allocated = sum(int(loc.get("allocated_qty", 0)) for loc in valid_locations)
+            return max(0, total_physical - max(total_allocated, doc_reserved) - quarantine_reserved)

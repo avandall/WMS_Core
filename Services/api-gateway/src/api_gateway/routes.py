@@ -1,14 +1,26 @@
 from __future__ import annotations
 
-import concurrent.futures
-import grpc
-import os
 import asyncio
+import concurrent.futures
+import os
+
+import grpc
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Request
+from shared_utils.events import build_event
 
 from api_gateway.auth import CurrentUser, get_current_user
 from api_gateway.authz import require_permissions
 from api_gateway.errors import grpc_http_exception
+from api_gateway.gen.wms.ai.v1 import ai_pb2
+from api_gateway.gen.wms.audit.v1 import audit_pb2
+from api_gateway.gen.wms.customer.v1 import customer_pb2
+from api_gateway.gen.wms.documents.v1 import documents_pb2
+from api_gateway.gen.wms.identity.v1 import identity_pb2
+from api_gateway.gen.wms.inventory.v1 import inventory_pb2
+from api_gateway.gen.wms.product.v1 import product_pb2
+from api_gateway.gen.wms.reporting.v1 import reporting_pb2
+from api_gateway.gen.wms.warehouse.v1 import warehouse_pb2
 from api_gateway.grpc_clients import (
     ai_stub,
     audit_stub,
@@ -23,43 +35,33 @@ from api_gateway.grpc_clients import (
     warehouse_stub,
 )
 from api_gateway.permissions import Permission
-from api_gateway.saga import ConfirmExecutionSaga
 from api_gateway.presenters import (
     audit_event_to_dict,
     customer_to_dict,
     document_to_dict,
     parse_json,
     product_to_dict,
-    warehouse_to_dict,
     proposal_to_dict,
+    warehouse_to_dict,
 )
+from api_gateway.saga import ConfirmExecutionSaga
 from api_gateway.schemas import (
     AIQueryPayload,
+    ApproveProposalPayload,
+    CancelProposalPayload,
+    ConfirmExecutionPayload,
+    CreateProposalPayload,
     CustomerDebtPayload,
     CustomerPayload,
     DocumentPayload,
+    InspectQaPayload,
+    LoginPayload,
     PostDocumentPayload,
     ProductPayload,
+    RejectProposalPayload,
     WarehousePayload,
     WarehouseTransferPayload,
-    ConfirmExecutionPayload,
-    LoginPayload,
-    InspectQaPayload,
-    ApproveProposalPayload,
-    RejectProposalPayload,
-    CancelProposalPayload,
 )
-from api_gateway.gen.wms.customer.v1 import customer_pb2
-from api_gateway.gen.wms.inventory.v1 import inventory_pb2
-from api_gateway.gen.wms.product.v1 import product_pb2
-from api_gateway.gen.wms.warehouse.v1 import warehouse_pb2
-from api_gateway.gen.wms.documents.v1 import documents_pb2
-from api_gateway.gen.wms.audit.v1 import audit_pb2
-from api_gateway.gen.wms.reporting.v1 import reporting_pb2
-from api_gateway.gen.wms.ai.v1 import ai_pb2
-from api_gateway.gen.wms.identity.v1 import identity_pb2
-import redis.asyncio as aioredis
-from shared_utils.events import build_event
 
 
 class AsyncRedisStreamClient:
@@ -1387,7 +1389,7 @@ def ai_status(request: Request):
     status_code=202,
 )
 async def inventory_ingest(payload: dict):
-    from api_gateway.ingest_buffer import ingest_buffer, WalThresholdExceededError
+    from api_gateway.ingest_buffer import WalThresholdExceededError, ingest_buffer
     envelope = build_event(source="api-gateway", event_type="InventoryIngested", payload=payload)
     try:
         await ingest_buffer.ingest(envelope.to_json())
@@ -1714,8 +1716,46 @@ def change_password():
 
 
 # ============================================================================
-# Phase 7 (Cụm 3) / TASK-059: Maker-Checker Draft Proposals Endpoints
+# Phase 7 (Cụm 3) & Phase 9 (Cụm 1) / TASK-059 & TASK-073: Maker-Checker Draft Proposals Endpoints
 # ============================================================================
+
+@router.post(
+    "/proposals",
+    status_code=201,
+)
+def create_draft_proposal(
+    payload: CreateProposalPayload,
+    current_user: CurrentUser = Depends(get_current_user),
+    request: Request = None,
+):
+    with inventory_stub() as stub:
+        req = inventory_pb2.CreateDraftProposalRequest(
+            proposal_id=payload.proposal_id or "",
+            proposal_type=payload.proposal_type or "DraftAdjustmentProposal",
+            sku_code=payload.sku_code,
+            warehouse_id=payload.warehouse_id or 1,
+            location_code=payload.location_code or "",
+            position_id=payload.position_id or 0,
+            current_quantity=payload.current_quantity or 0,
+            proposed_quantity=payload.proposed_quantity or 0,
+            adjustment=payload.adjustment or 0,
+            reason=payload.reason or "",
+            requested_by=str(current_user.user_id),
+        )
+        resp = _grpc_call(
+            stub.CreateDraftProposal,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    if not resp.success:
+        raise HTTPException(status_code=400, detail=resp.message)
+    return {
+        "success": resp.success,
+        "message": resp.message,
+        "proposal": proposal_to_dict(resp.proposal) if resp.HasField("proposal") else None,
+    }
+
 
 @router.get(
     "/proposals",
