@@ -443,9 +443,10 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     approved_by=eff_user,
                     digital_signature=request.digital_signature or None,
                 )
+                msg = "Proposal already executed (idempotent)" if proposal.status == "EXECUTED" and tx_id == 0 else "Proposal approved and executed successfully"
                 return inventory_pb2.ApproveDraftProposalResponse(
                     success=True,
-                    message="Proposal approved and executed successfully",
+                    message=msg,
                     proposal=self._proposal_to_proto(proposal),
                     transaction_id=tx_id,
                 )
@@ -462,6 +463,48 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 context.set_code(grpc.StatusCode.INTERNAL)
                 context.set_details(sanitize_grpc_error(exc))
             return inventory_pb2.ApproveDraftProposalResponse(
+                success=False,
+                message=sanitize_grpc_error(exc),
+            )
+
+    def CancelDraftProposal(
+        self, request: inventory_pb2.CancelDraftProposalRequest, context: grpc.ServicerContext
+    ):
+        try:
+            with get_db_session() as db:
+                service = self._service(db)
+                eff_user = (request.cancelled_by or "").strip() or self._user_id(context)
+                proposal = service.cancel_draft_proposal(
+                    proposal_id=request.proposal_id,
+                    cancelled_by=eff_user,
+                    cancellation_reason=request.cancellation_reason or "Cancelled by creator",
+                )
+                return inventory_pb2.CancelDraftProposalResponse(
+                    success=True,
+                    message="Proposal cancelled successfully",
+                    proposal=self._proposal_to_proto(proposal),
+                )
+        except PermissionError as exc:
+            if context:
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.CancelDraftProposalResponse(
+                success=False,
+                message=str(exc),
+            )
+        except ValueError as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.CancelDraftProposalResponse(
+                success=False,
+                message=str(exc),
+            )
+        except Exception as exc:
+            if context:
+                context.set_code(grpc.StatusCode.INTERNAL)
+                context.set_details(sanitize_grpc_error(exc))
+            return inventory_pb2.CancelDraftProposalResponse(
                 success=False,
                 message=sanitize_grpc_error(exc),
             )
@@ -519,6 +562,9 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
             executed_at=p.executed_at.isoformat() if p.executed_at else "",
             executed_by=str(p.executed_by or ""),
             digital_signature=str(p.digital_signature or ""),
+            warehouse_id=int(getattr(p, "warehouse_id", 1) or 1),
+            location_code=str(getattr(p, "location_code", "") or ""),
+            position_id=int(getattr(p, "position_id", 0) or 0),
         )
 
 

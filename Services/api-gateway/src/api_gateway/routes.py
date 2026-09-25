@@ -47,6 +47,7 @@ from api_gateway.schemas import (
     InspectQaPayload,
     ApproveProposalPayload,
     RejectProposalPayload,
+    CancelProposalPayload,
 )
 from api_gateway.gen.wms.customer.v1 import customer_pb2
 from api_gateway.gen.wms.inventory.v1 import inventory_pb2
@@ -1816,3 +1817,40 @@ def reject_draft_proposal(
         "message": resp.message,
         "proposal": proposal_to_dict(resp.proposal) if resp.HasField("proposal") else None,
     }
+
+
+@router.post(
+    "/proposals/{id}/cancel",
+)
+def cancel_draft_proposal(
+    id: str,
+    payload: CancelProposalPayload | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+    request: Request = None,
+):
+    """
+    Cancel a draft proposal by its creator (Maker Cancel / TASK-070 / DOM-05).
+    Allows creator or admin to cancel pending draft proposals.
+    """
+    with inventory_stub() as stub:
+        req = inventory_pb2.CancelDraftProposalRequest(
+            proposal_id=id,
+            cancelled_by=str(current_user.user_id),
+            cancellation_reason=payload.cancellation_reason if payload else "Cancelled by creator",
+        )
+        resp = _grpc_call(
+            stub.CancelDraftProposal,
+            req,
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    if not resp.success:
+        if "Only creator" in resp.message:
+            raise HTTPException(status_code=403, detail=resp.message)
+        raise HTTPException(status_code=400, detail=resp.message)
+    return {
+        "success": resp.success,
+        "message": resp.message,
+        "proposal": proposal_to_dict(resp.proposal) if resp.HasField("proposal") else None,
+    }
+

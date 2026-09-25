@@ -255,7 +255,7 @@ def test_terminal_states_cannot_transition_or_re_execute(db_session):
     with pytest.raises(ValueError, match="cannot be approved in state REJECTED"):
         service.approve_draft_proposal("PROP-LOCK-001", approved_by="WM_MANAGER")
 
-    # 2. Executed proposal cannot be approved or rejected again
+    # 2. Executed proposal cannot be rejected, but approval is idempotent (TASK-070)
     p2 = DraftProposalModel(
         proposal_id="PROP-LOCK-002",
         proposal_type="DraftAdjustmentProposal",
@@ -269,8 +269,10 @@ def test_terminal_states_cannot_transition_or_re_execute(db_session):
     )
     repo.save_draft_proposal(p2)
 
-    with pytest.raises(ValueError, match="cannot be approved in state EXECUTED"):
-        service.approve_draft_proposal("PROP-LOCK-002", approved_by="WM_MANAGER")
+    # Idempotent approval must succeed with 0 stock delta instead of raising ValueError
+    executed_proposal, delta = service.approve_draft_proposal("PROP-LOCK-002", approved_by="WM_MANAGER")
+    assert executed_proposal.status == "EXECUTED"
+    assert delta == 0
 
     with pytest.raises(ValueError, match="cannot be rejected in state EXECUTED"):
         service.reject_draft_proposal("PROP-LOCK-002", rejected_by="WM_MANAGER", rejection_reason="Too late")
@@ -388,3 +390,121 @@ def test_api_gateway_proposal_endpoints_rbac_and_flow():
 
     # Clean up overrides
     app.dependency_overrides.clear()
+
+
+# ==============================================================================
+# TASK-070: Maker Cancel & Idempotent Approval Workflow (DOM-05 / TECH-02)
+# ==============================================================================
+
+def test_cancel_and_idempotent_proposal_workflow(db_session):
+    """
+    Acceptance Criteria (TASK-070 / DOM-05 / TECH-02):
+    1. Maker Cancel: Cho phép người tạo tự hủy đề xuất khi status == 'DRAFT_PROPOSAL'.
+       Người khác không phải creator không có quyền hủy (PermissionError / 403).
+    2. Idempotent Approve: Khi đề xuất đã ở trạng thái 'EXECUTED', gọi approve lần 2
+       trả về 200 OK idempotent (không quăng lỗi 400 Bad Request).
+    """
+    repo = InventoryRepo(db_session)
+    service = InventoryService(repo)
+
+    # 1. Test Maker Cancel: Creator cancels their own proposal
+    proposal_cancel = DraftProposalModel(
+        proposal_id="PROP-CANCEL-001",
+        proposal_type="DraftAdjustmentProposal",
+        sku_code="101",
+        current_quantity=50,
+        proposed_quantity=60,
+        adjustment=10,
+        reason="Mistake by AI Agent",
+        requested_by="AGENT_BOT_01",
+        status="DRAFT_PROPOSAL",
+    )
+    repo.save_draft_proposal(proposal_cancel)
+
+    # Non-creator attempts to cancel -> PermissionError
+    with pytest.raises(PermissionError) as exc_info:
+        service.cancel_draft_proposal(
+            proposal_id="PROP-CANCEL-001",
+            cancelled_by="OTHER_USER",
+            cancellation_reason="Trying to cancel someone else's proposal",
+        )
+    assert "Only creator 'AGENT_BOT_01' can cancel" in str(exc_info.value)
+
+    # Creator cancels their own proposal -> Success
+    cancelled_prop = service.cancel_draft_proposal(
+        proposal_id="PROP-CANCEL-001",
+        cancelled_by="AGENT_BOT_01",
+        cancellation_reason="Detected duplicate proposal",
+    )
+    assert cancelled_prop.status == "CANCELLED"
+    assert "Detected duplicate proposal" in cancelled_prop.rejection_reason
+
+    # Terminal state check: cannot approve a CANCELLED proposal
+    with pytest.raises(ValueError) as val_err:
+        service.approve_draft_proposal("PROP-CANCEL-001", approved_by="MANAGER_01")
+    assert "Proposal cannot be approved in state CANCELLED" in str(val_err.value)
+
+    # 2. Test Idempotent Approve:
+    proposal_exec = DraftProposalModel(
+        proposal_id="PROP-EXEC-002",
+        proposal_type="DraftAdjustmentProposal",
+        sku_code="101",
+        current_quantity=50,
+        proposed_quantity=70,
+        adjustment=20,
+        reason="Valid count adjustment",
+        requested_by="AGENT_BOT_02",
+        status="DRAFT_PROPOSAL",
+    )
+    repo.save_draft_proposal(proposal_exec)
+
+    # First approval -> transitions to EXECUTED
+    prop_approved, tx1 = service.approve_draft_proposal("PROP-EXEC-002", approved_by="MANAGER_01")
+    assert prop_approved.status == "EXECUTED"
+
+    # Second approval (e.g. network retry) -> Idempotent success without 400 Bad Request error
+    prop_retry, tx2 = service.approve_draft_proposal("PROP-EXEC-002", approved_by="MANAGER_01")
+    assert prop_retry.status == "EXECUTED"
+    assert prop_retry.proposal_id == "PROP-EXEC-002"
+
+    # 3. Test gRPC and Gateway Cancel Endpoint Flow
+    app = create_app()
+    client = TestClient(app)
+
+    creator_user = CurrentUser(user_id=10, role="user", email="creator@example.com")
+    app.dependency_overrides[get_current_user] = lambda: creator_user
+
+    mock_row_cancelled = inventory_pb2.DraftProposalRow(
+        proposal_id="PROP-CANCEL-001",
+        proposal_type="DraftAdjustmentProposal",
+        sku_code="101",
+        current_quantity=50,
+        proposed_quantity=60,
+        adjustment=10,
+        reason="Mistake",
+        requested_by="10",
+        status="CANCELLED",
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    mock_grpc_cancel_resp = inventory_pb2.CancelDraftProposalResponse(
+        success=True,
+        message="Proposal cancelled successfully",
+        proposal=mock_row_cancelled,
+    )
+
+    with patch("api_gateway.routes.inventory_stub") as mock_stub_factory:
+        mock_stub = MagicMock()
+        mock_stub_factory.return_value.__enter__.return_value = mock_stub
+        mock_stub.CancelDraftProposal.return_value = mock_grpc_cancel_resp
+
+        resp = client.post(
+            "/api/v1/proposals/PROP-CANCEL-001/cancel",
+            json={"cancellation_reason": "I made a mistake"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["proposal"]["status"] == "CANCELLED"
+
+    app.dependency_overrides.clear()
+

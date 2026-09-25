@@ -384,3 +384,42 @@ async def test_high_load_durability_bounded_retention(temp_storage):
     recovered_ids = {json.loads(e)["load_id"] for e in mock_redis.stored_events}
     assert len(recovered_ids) == 1500
 
+
+def test_cross_platform_wal_file_lock_contention(temp_storage, caplog):
+    """
+    TASK-071 (TECH-01): Verify that when a WAL segment is locked by another process
+    (e.g., Windows WinError 32 PermissionError), cleanup_committed_files() gracefully
+    handles the error without crashing, logs a warning, and retries/cleans up on the next cycle.
+    """
+    wal_dir, _ = temp_storage
+    wal_mgr = WalManager(wal_dir=wal_dir)
+
+    # 1. Create an old WAL segment file with committed events
+    old_wal = wal_mgr.wal_dir / "wal_20260101_000000_old.jsonl"
+    with open(old_wal, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"seq": 1, "data": '{"test": 1}'}) + "\n")
+        f.write(json.dumps({"seq": 2, "data": '{"test": 2}'}) + "\n")
+
+    # Set checkpoint committed_seq to 10 (> 2) so old_wal is eligible for cleanup
+    wal_mgr.commit(10)
+    assert old_wal.exists()
+
+    # 2. Simulate Windows file lock contention (PermissionError: [WinError 32])
+    with patch("pathlib.Path.unlink", side_effect=PermissionError("[WinError 32] The process cannot access the file")):
+        import logging
+        with caplog.at_level(logging.WARNING):
+            # Must NOT raise PermissionError or crash
+            wal_mgr.cleanup_committed_files()
+
+        # Check warning log was emitted
+        assert any(
+            "Cross-platform file lock contention on WAL segment" in record.message
+            for record in caplog.records
+        )
+        # File still exists because unlink failed gracefully
+        assert old_wal.exists()
+
+    # 3. Next cycle without lock contention: segment is successfully cleaned up
+    wal_mgr.cleanup_committed_files()
+    assert not old_wal.exists()
+

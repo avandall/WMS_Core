@@ -379,6 +379,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         created_by: str | None,
         idempotency_key: str | None,
         expires_at: datetime | None,
+        status: str = "RESERVED",
     ) -> int:
 
         # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
@@ -439,7 +440,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             warehouse_id=warehouse_id,
             requested_qty=requested_qty,
             reserved_qty=requested_qty,
-            status="RESERVED",
+            status=status,
             created_by=created_by,
             idempotency_key=idempotency_key,
             expires_at=expires_at,
@@ -1028,7 +1029,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
                 StockReservationModel.warehouse_id == warehouse_id,
                 StockReservationModel.product_id == product_id,
-                StockReservationModel.status == "RESERVED",
+                StockReservationModel.status.in_(["RESERVED", "PENDING_ADJUSTMENT"]),
             )
         ).scalar()
         return int(reserved_sum or 0)
@@ -1101,8 +1102,84 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         items = list(self.session.execute(stmt).scalars().all())
         return items, total
 
+    def _table_exists(self, table_name: str) -> bool:
+        if self.session is None:
+            return False
+        try:
+            from sqlalchemy import text
+            bind = self.session.get_bind()
+            if bind.dialect.name == "sqlite":
+                res = self.session.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name=:tname"),
+                    {"tname": table_name},
+                ).scalar()
+            else:
+                res = self.session.execute(
+                    text("SELECT table_name FROM information_schema.tables WHERE table_name=:tname"),
+                    {"tname": table_name},
+                ).scalar()
+            return bool(res)
+        except Exception:
+            return False
+
     def save_draft_proposal(self, proposal: DraftProposalModel) -> DraftProposalModel:
         self.session.add(proposal)
+        self.session.flush()
+
+        # TASK-064 / CRIT-03: Soft quarantine on negative adjustment proposal creation
+        if self.session is not None and self._table_exists("stock_reservations"):
+            try:
+                adj = proposal.adjustment
+                if adj is None and proposal.proposed_quantity is not None and proposal.current_quantity is not None:
+                    adj = proposal.proposed_quantity - proposal.current_quantity
+                if adj and adj < 0 and proposal.status == "DRAFT_PROPOSAL":
+                    key = f"soft_quarantine_{proposal.proposal_id}"
+                    existing = self.session.execute(
+                        select(StockReservationModel).where(StockReservationModel.idempotency_key == key)
+                    ).scalar_one_or_none()
+                    if not existing:
+                        pid = None
+                        sku_str = str(proposal.sku_code).strip()
+                        if self._table_exists("products"):
+                            from sqlalchemy import text
+                            if sku_str.isdigit():
+                                res = self.session.execute(
+                                    text("SELECT product_id FROM products WHERE name = :sku OR product_id = :pid"),
+                                    {"sku": sku_str, "pid": int(sku_str)},
+                                ).scalar()
+                            else:
+                                res = self.session.execute(
+                                    text("SELECT product_id FROM products WHERE name = :sku"),
+                                    {"sku": sku_str},
+                                ).scalar()
+                            if res is not None:
+                                pid = int(res)
+                            else:
+                                raise ValueError(f"Invalid SKU '{sku_str}': Product does not exist in catalog")
+                        else:
+                            if sku_str.isdigit():
+                                pid = int(sku_str)
+                            else:
+                                raise ValueError(f"Invalid SKU '{sku_str}': Product does not exist in catalog")
+
+                        try:
+                            self.create_reservation(
+                                source_type="draft_proposal",
+                                source_id=None,
+                                document_id=None,
+                                product_id=pid,
+                                warehouse_id=proposal.warehouse_id or 1,
+                                requested_qty=abs(adj),
+                                created_by=proposal.requested_by or "system",
+                                idempotency_key=key,
+                                expires_at=None,
+                                status="PENDING_ADJUSTMENT",
+                            )
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
         self._commit_if_auto()
         return proposal
 

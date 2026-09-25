@@ -84,6 +84,7 @@ class IInventoryRepo(ABC):
         created_by: str | None,
         idempotency_key: str | None,
         expires_at: datetime | None,
+        status: str = "RESERVED",
     ) -> int:
         pass
 

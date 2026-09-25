@@ -99,6 +99,11 @@ class InventoryServiceStub(object):
                 request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.RejectDraftProposalRequest.SerializeToString,
                 response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.RejectDraftProposalResponse.FromString,
                 _registered_method=True)
+        self.CancelDraftProposal = channel.unary_unary(
+                '/wms.inventory.v1.InventoryService/CancelDraftProposal',
+                request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.CancelDraftProposalRequest.SerializeToString,
+                response_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.CancelDraftProposalResponse.FromString,
+                _registered_method=True)
         self.ListDraftProposals = channel.unary_unary(
                 '/wms.inventory.v1.InventoryService/ListDraftProposals',
                 request_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.ListDraftProposalsRequest.SerializeToString,
@@ -181,13 +186,19 @@ class InventoryServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def ApproveDraftProposal(self, request, context):
-        """TASK-059: Maker-Checker Draft Proposal Management RPCs
+        """TASK-059 & TASK-070: Maker-Checker Draft Proposal Management RPCs
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RejectDraftProposal(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelDraftProposal(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -266,6 +277,11 @@ def add_InventoryServiceServicer_to_server(servicer, server):
                     servicer.RejectDraftProposal,
                     request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.RejectDraftProposalRequest.FromString,
                     response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.RejectDraftProposalResponse.SerializeToString,
+            ),
+            'CancelDraftProposal': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelDraftProposal,
+                    request_deserializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.CancelDraftProposalRequest.FromString,
+                    response_serializer=wms_dot_inventory_dot_v1_dot_inventory__pb2.CancelDraftProposalResponse.SerializeToString,
             ),
             'ListDraftProposals': grpc.unary_unary_rpc_method_handler(
                     servicer.ListDraftProposals,
@@ -624,6 +640,33 @@ class InventoryService(object):
             '/wms.inventory.v1.InventoryService/RejectDraftProposal',
             wms_dot_inventory_dot_v1_dot_inventory__pb2.RejectDraftProposalRequest.SerializeToString,
             wms_dot_inventory_dot_v1_dot_inventory__pb2.RejectDraftProposalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelDraftProposal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.inventory.v1.InventoryService/CancelDraftProposal',
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.CancelDraftProposalRequest.SerializeToString,
+            wms_dot_inventory_dot_v1_dot_inventory__pb2.CancelDraftProposalResponse.FromString,
             options,
             channel_credentials,
             insecure,

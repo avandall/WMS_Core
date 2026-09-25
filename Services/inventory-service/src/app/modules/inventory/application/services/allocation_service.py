@@ -86,6 +86,13 @@ class AllocationService:
                 f"No available stock to allocate for product {product_id} in warehouse {warehouse_id}"
             )
 
+        # Check ATP availability deducting active reservations (RESERVED and PENDING_ADJUSTMENT) [TASK-064 / CRIT-03]
+        atp_available = self.check_availability(warehouse_id=warehouse_id, product_id=product_id)
+        if quantity > atp_available:
+            raise InsufficientStockError(
+                f"Insufficient stock for FEFO allocation. ATP Available: {atp_available}, Requested: {quantity}"
+            )
+
         # 3. Sort using FEFO rule with mfg_date FIFO tiebreak
         def fefo_sort_key(loc: Dict[str, Any]) -> tuple:
             has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
@@ -144,3 +151,65 @@ class AllocationService:
         if not lot_number or not lot_number.strip():
             raise ValueError("lot_number must be a non-empty string")
         return self.inventory_repo.recall_query(lot_number.strip())
+
+    def check_availability(self, warehouse_id: int, product_id: int) -> int:
+        """
+        Calculates available-to-promise (ATP) stock for product in warehouse.
+        Deducts both RESERVED and PENDING_ADJUSTMENT reservations [TASK-064 / CRIT-03].
+        """
+        try:
+            locations = self.inventory_repo.get_inventory_locations(
+                warehouse_id=warehouse_id,
+                product_id=product_id,
+                status="AVAILABLE",
+            )
+        except Exception:
+            locations = []
+
+        now = datetime.now(timezone.utc)
+
+        def is_expired(loc: Dict[str, Any]) -> bool:
+            has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
+            return has_expiry and expiry_dt < now
+
+        valid_locations = [loc for loc in locations if not is_expired(loc)]
+        has_locations = len(valid_locations) > 0
+
+        active_reserved = 0
+        session = getattr(self.inventory_repo, "session", None)
+        if session is not None:
+            from sqlalchemy import func, select
+            from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+            from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
+
+            reserved_sum = session.execute(
+                select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
+                    StockReservationModel.warehouse_id == warehouse_id,
+                    StockReservationModel.product_id == product_id,
+                    StockReservationModel.status.in_(["RESERVED", "PENDING_ADJUSTMENT"]),
+                )
+            ).scalar() or 0
+            active_reserved = int(reserved_sum)
+
+            if has_locations:
+                loc_avail = sum(int(loc.get("available_qty", 0)) for loc in valid_locations)
+                return max(0, loc_avail - active_reserved)
+            else:
+                wh_row = session.execute(
+                    select(WarehouseInventoryModel).where(
+                        WarehouseInventoryModel.warehouse_id == warehouse_id,
+                        WarehouseInventoryModel.product_id == product_id,
+                    )
+                ).scalar_one_or_none()
+                if wh_row:
+                    return max(0, int(wh_row.physical_qty) - active_reserved)
+                return 0
+        else:
+            if hasattr(self.inventory_repo, "list_reservations"):
+                all_res = self.inventory_repo.list_reservations(product_id=product_id, warehouse_id=warehouse_id)
+                active_reserved = sum(
+                    int(r.get("reserved_qty", 0)) for r in all_res
+                    if r.get("status") in ("RESERVED", "PENDING_ADJUSTMENT")
+                )
+            loc_avail = sum(int(loc.get("available_qty", 0)) for loc in valid_locations)
+            return max(0, loc_avail - active_reserved)

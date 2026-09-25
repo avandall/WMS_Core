@@ -19,9 +19,10 @@ service InventoryService {
   // TASK-002: Bin/Location management RPCs
   rpc GetInventoryLocations(GetInventoryLocationsRequest) returns (GetInventoryLocationsResponse);
   rpc UpdateInventoryLocation(UpdateInventoryLocationRequest) returns (UpdateInventoryLocationResponse);
-  // TASK-059: Maker-Checker Draft Proposal Management RPCs
+  // TASK-059 & TASK-070: Maker-Checker Draft Proposal Management RPCs
   rpc ApproveDraftProposal(ApproveDraftProposalRequest) returns (ApproveDraftProposalResponse);
   rpc RejectDraftProposal(RejectDraftProposalRequest) returns (RejectDraftProposalResponse);
+  rpc CancelDraftProposal(CancelDraftProposalRequest) returns (CancelDraftProposalResponse);
   rpc ListDraftProposals(ListDraftProposalsRequest) returns (ListDraftProposalsResponse);
 }
 
@@ -273,6 +274,9 @@ message DraftProposalRow {
   string executed_at = 14;
   string executed_by = 15;
   string digital_signature = 16;
+  int64 warehouse_id = 17;
+  string location_code = 18;
+  int64 position_id = 19;
 }
 
 message ListDraftProposalsRequest {
@@ -310,3 +314,16 @@ message RejectDraftProposalResponse {
   string message = 2;
   DraftProposalRow proposal = 3;
 }
+
+message CancelDraftProposalRequest {
+  string proposal_id = 1;
+  string cancelled_by = 2;
+  string cancellation_reason = 3;
+}
+
+message CancelDraftProposalResponse {
+  bool success = 1;
+  string message = 2;
+  DraftProposalRow proposal = 3;
+}
+

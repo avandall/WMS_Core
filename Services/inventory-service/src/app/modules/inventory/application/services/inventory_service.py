@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from sqlalchemy import select
 
 from app.shared.core.logging import get_logger
 from app.modules.inventory.application.ports import (
@@ -441,6 +442,15 @@ class InventoryService:
 
     def get_total_quantity(self, product_id: int) -> int:
         return self.inventory_repo.get_quantity(product_id)
+
+    def get_quantity(self, product_id: int, warehouse_id: Optional[int] = None) -> int:
+        if warehouse_id is not None:
+            status = self.inventory_repo.get_availability(product_id=product_id, warehouse_id=warehouse_id)
+            return int(status.get("physical_qty", status.get("physical_quantity", 0)))
+        return self.inventory_repo.get_quantity(product_id)
+
+    def get_warehouse_quantity(self, warehouse_id: int, product_id: int) -> int:
+        return self.get_quantity(product_id=product_id, warehouse_id=warehouse_id)
 
     def get_inventory_status(self, product_id: int) -> Dict[str, Any]:
         total_quantity = self.inventory_repo.get_quantity(product_id)
@@ -979,6 +989,171 @@ class InventoryService:
     ):
         return self.inventory_repo.list_draft_proposals(status=status, limit=limit, offset=offset)
 
+    def create_draft_proposal(
+        self,
+        *,
+        proposal_id: str,
+        sku_code: str,
+        proposal_type: str = "DraftAdjustmentProposal",
+        current_quantity: Optional[int] = None,
+        proposed_quantity: Optional[int] = None,
+        adjustment: Optional[int] = None,
+        reason: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        warehouse_id: int = 1,
+        location_code: Optional[str] = None,
+        position_id: Optional[int] = None,
+        status: str = "DRAFT_PROPOSAL",
+    ):
+        """Create a draft proposal with automatic soft quarantine reservation if adjustment < 0 (TASK-063 & TASK-064)."""
+        from app.modules.inventory.infrastructure.models.draft_proposal import DraftProposalModel
+
+        if adjustment is None:
+            if proposed_quantity is not None and current_quantity is not None:
+                adjustment = proposed_quantity - current_quantity
+            else:
+                adjustment = 0
+
+        proposal = DraftProposalModel(
+            proposal_id=proposal_id,
+            proposal_type=proposal_type,
+            sku_code=sku_code,
+            warehouse_id=warehouse_id,
+            location_code=location_code,
+            position_id=position_id,
+            current_quantity=current_quantity,
+            proposed_quantity=proposed_quantity,
+            adjustment=adjustment,
+            reason=reason,
+            requested_by=requested_by,
+            status=status,
+        )
+        saved = self.inventory_repo.save_draft_proposal(proposal)
+        self._commit_if_needed()
+        return saved
+
+    def adjust_location_stock(
+        self,
+        *,
+        warehouse_id: int,
+        product_id: int,
+        quantity_delta: int,
+        position_id: Optional[int] = None,
+        location_code: Optional[str] = None,
+        allocated_delta: int = 0,
+        lpn: str = "",
+        status: str = "AVAILABLE",
+        lot_number: str = "",
+        mfg_date: Optional[Any] = None,
+        expiry_date: Optional[Any] = None,
+        owner_id: str = "DEFAULT_OWNER",
+    ) -> dict:
+        """
+        Adjusts stock at a specific warehouse location (bin) and synchronizes
+        the warehouse inventory summary (Dual Ledger Synchronization - TASK-063 / CRIT-01/02).
+        """
+        resolved_pos_id = position_id
+        session = getattr(self.inventory_repo, "session", None)
+        if (resolved_pos_id is None or resolved_pos_id <= 0) and location_code:
+            if session is not None:
+                try:
+                    from app.modules.inventory.infrastructure.models.position import PositionModel
+                    pos = session.execute(
+                        select(PositionModel).where(
+                            PositionModel.warehouse_id == warehouse_id,
+                            PositionModel.code == location_code,
+                        )
+                    ).scalar_one_or_none()
+                    if pos:
+                        resolved_pos_id = pos.id
+                except Exception:
+                    pass
+            if resolved_pos_id is None or resolved_pos_id <= 0:
+                if session is not None:
+                    try:
+                        from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+                        loc_pos = session.execute(
+                            select(InventoryLocationModel.position_id).where(
+                                InventoryLocationModel.warehouse_id == warehouse_id,
+                                InventoryLocationModel.product_id == product_id,
+                            ).limit(1)
+                        ).scalar_one_or_none()
+                        if loc_pos:
+                            resolved_pos_id = loc_pos
+                    except Exception:
+                        pass
+            if resolved_pos_id is None or resolved_pos_id <= 0:
+                digits = "".join(filter(str.isdigit, str(location_code)))
+                resolved_pos_id = int(digits) if digits else 1
+
+        resolved_pos_id = resolved_pos_id or 1
+        return self.inventory_repo.adjust_location_quantity(
+            warehouse_id=warehouse_id,
+            position_id=resolved_pos_id,
+            product_id=product_id,
+            quantity_delta=quantity_delta,
+            allocated_delta=allocated_delta,
+            lpn=lpn,
+            status=status,
+            lot_number=lot_number,
+            mfg_date=mfg_date,
+            expiry_date=expiry_date,
+            owner_id=owner_id,
+        )
+
+    @staticmethod
+    def _table_exists(session, table_name: str) -> bool:
+        if session is None:
+            return False
+        try:
+            from sqlalchemy import text
+            bind = session.get_bind()
+            if bind.dialect.name == "sqlite":
+                res = session.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name=:tname"),
+                    {"tname": table_name},
+                ).scalar()
+            else:
+                res = session.execute(
+                    text("SELECT table_name FROM information_schema.tables WHERE table_name=:tname"),
+                    {"tname": table_name},
+                ).scalar()
+            return bool(res)
+        except Exception:
+            return False
+
+    def resolve_sku_to_product_id(self, sku_code: str) -> int:
+        """
+        Resolves product_id from sku_code via catalog lookup (TASK-065 / CRIT-04).
+        Eliminates regex digits fallback and default=1.
+        Raises ValueError if the SKU does not exist in the product catalog.
+        """
+        sku_str = str(sku_code).strip()
+        if not sku_str:
+            raise ValueError("Invalid SKU: SKU cannot be empty")
+
+        session = getattr(self.inventory_repo, "session", None)
+        if session is not None and self._table_exists(session, "products"):
+            from sqlalchemy import text
+            if sku_str.isdigit():
+                res = session.execute(
+                    text("SELECT product_id FROM products WHERE name = :sku OR product_id = :pid"),
+                    {"sku": sku_str, "pid": int(sku_str)},
+                ).scalar()
+            else:
+                res = session.execute(
+                    text("SELECT product_id FROM products WHERE name = :sku"),
+                    {"sku": sku_str},
+                ).scalar()
+
+            if res is not None:
+                return int(res)
+            raise ValueError(f"Invalid SKU '{sku_str}': Product does not exist in catalog")
+
+        if sku_str.isdigit():
+            return int(sku_str)
+        raise ValueError(f"Invalid SKU '{sku_str}': Product does not exist in catalog")
+
     def approve_draft_proposal(
         self,
         proposal_id: str,
@@ -988,50 +1163,104 @@ class InventoryService:
         proposal = self.inventory_repo.get_draft_proposal(proposal_id)
         if proposal is None:
             raise ValueError(f"Draft proposal {proposal_id} not found")
+        if proposal.status == "EXECUTED":
+            # Idempotency check: Already approved and executed (TASK-070 / TECH-02)
+            return proposal, 0
         if proposal.status != "DRAFT_PROPOSAL":
             raise ValueError(f"Proposal cannot be approved in state {proposal.status}")
 
-        proposal.approve(approved_by=approved_by, digital_signature=digital_signature)
+        # Strict SKU catalog resolution (TASK-065 / CRIT-04)
+        product_id = self.resolve_sku_to_product_id(proposal.sku_code)
 
-        # Resolve product_id from sku_code
-        product_id = None
-        sku_str = str(proposal.sku_code).strip()
-        if sku_str.isdigit():
-            product_id = int(sku_str)
-        else:
-            session = getattr(self.inventory_repo, "session", None)
-            if session is not None:
-                try:
-                    from sqlalchemy import text
-                    res = session.execute(
-                        text("SELECT product_id FROM products WHERE name = :sku"),
-                        {"sku": sku_str}
-                    ).scalar()
-                    if res is not None:
-                        product_id = int(res)
-                except Exception:
-                    pass
-            if product_id is None:
-                digits = "".join(filter(str.isdigit, sku_str))
-                product_id = int(digits) if digits else 1
+        proposal.approve(approved_by=approved_by, digital_signature=digital_signature)
 
         adjustment = proposal.adjustment
         if adjustment is None:
             adjustment = (proposal.proposed_quantity or 0) - (proposal.current_quantity or 0)
+
+        # TASK-063: Use proposal.warehouse_id (never hardcode warehouse_id = 1)
+        warehouse_id = int(getattr(proposal, "warehouse_id", 1) or 1)
+        has_location_info = bool(getattr(proposal, "location_code", None) or getattr(proposal, "position_id", None))
+
+        # TASK-064: Check for soft quarantine reservation
+        soft_res = None
+        session = getattr(self.inventory_repo, "session", None)
+        if session is not None and self._table_exists(session, "stock_reservations"):
+            try:
+                from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+                soft_res = session.execute(
+                    select(StockReservationModel).where(
+                        StockReservationModel.idempotency_key == f"soft_quarantine_{proposal.proposal_id}"
+                    ).with_for_update()
+                ).scalar_one_or_none()
+            except Exception:
+                soft_res = None
 
         tx_id = 0
         if adjustment != 0:
             tx_type = "ADJUSTMENT_IN" if adjustment > 0 else "ADJUSTMENT_OUT"
             quantity = abs(adjustment)
             idempotency_key = f"proposal_{proposal.proposal_id}"
-            tx_id = self.confirm_inventory_transaction(
-                transaction_type=tx_type,
-                product_id=product_id,
-                warehouse_id=1,
-                quantity=quantity,
-                user_id=approved_by,
-                idempotency_key=idempotency_key,
-            )
+
+            if soft_res is not None and soft_res.status == "PENDING_ADJUSTMENT":
+                # Consume the soft quarantine reservation (TASK-064)
+                self.inventory_repo.consume_reservation(soft_res.id, soft_res.reserved_qty)
+                if has_location_info:
+                    # Dual ledger synchronization (TASK-063)
+                    self.adjust_location_stock(
+                        warehouse_id=warehouse_id,
+                        product_id=product_id,
+                        quantity_delta=adjustment,
+                        position_id=getattr(proposal, "position_id", None),
+                        location_code=getattr(proposal, "location_code", None),
+                    )
+                tx_record = self._write_transaction(
+                    transaction_type="RESERVATION_CONSUME",
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    quantity=quantity,
+                    idempotency_key=f"{idempotency_key}:consume",
+                    payload={
+                        "proposal_id": proposal.proposal_id,
+                        "reservation_id": soft_res.id,
+                        "warehouse_id": warehouse_id,
+                        "location_code": getattr(proposal, "location_code", None),
+                    },
+                )
+                tx_id = tx_record.get("id", 0) if isinstance(tx_record, dict) else 0
+            elif has_location_info:
+                # Update location stock directly and sync summary
+                self.adjust_location_stock(
+                    warehouse_id=warehouse_id,
+                    product_id=product_id,
+                    quantity_delta=adjustment,
+                    position_id=getattr(proposal, "position_id", None),
+                    location_code=getattr(proposal, "location_code", None),
+                )
+                tx_record = self._write_transaction(
+                    transaction_type=tx_type,
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    quantity=quantity,
+                    idempotency_key=idempotency_key,
+                    payload={
+                        "proposal_id": proposal.proposal_id,
+                        "warehouse_id": warehouse_id,
+                        "location_code": getattr(proposal, "location_code", None),
+                        "position_id": getattr(proposal, "position_id", None),
+                    },
+                )
+                tx_id = tx_record.get("id", 0) if isinstance(tx_record, dict) else 0
+            else:
+                # Fallback to direct warehouse inventory transaction
+                tx_id = self.confirm_inventory_transaction(
+                    transaction_type=tx_type,
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    quantity=quantity,
+                    user_id=approved_by,
+                    idempotency_key=idempotency_key,
+                )
 
         proposal.mark_executed(executed_by=approved_by)
         self._commit_if_needed()
@@ -1042,6 +1271,9 @@ class InventoryService:
             "entity_id": proposal.proposal_id,
             "proposal_id": proposal.proposal_id,
             "sku_code": proposal.sku_code,
+            "warehouse_id": warehouse_id,
+            "location_code": getattr(proposal, "location_code", None),
+            "position_id": getattr(proposal, "position_id", None),
             "product_id": product_id,
             "adjustment": adjustment,
             "approved_by": approved_by,
@@ -1069,6 +1301,22 @@ class InventoryService:
             raise ValueError(f"Proposal cannot be rejected in state {proposal.status}")
 
         proposal.reject(rejected_by=rejected_by, rejection_reason=rejection_reason)
+
+        # TASK-064 / CRIT-03: Release soft quarantine reservation on rejection
+        session = getattr(self.inventory_repo, "session", None)
+        if session is not None and self._table_exists(session, "stock_reservations"):
+            try:
+                from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+                soft_res = session.execute(
+                    select(StockReservationModel).where(
+                        StockReservationModel.idempotency_key == f"soft_quarantine_{proposal.proposal_id}"
+                    ).with_for_update()
+                ).scalar_one_or_none()
+                if soft_res is not None and soft_res.status == "PENDING_ADJUSTMENT":
+                    self.inventory_repo.release_reservation(soft_res.id)
+            except Exception:
+                pass
+
         self._commit_if_needed()
 
         reject_payload = {
@@ -1086,5 +1334,67 @@ class InventoryService:
             payload=reject_payload,
         )
         return proposal
+
+    def cancel_draft_proposal(
+        self,
+        proposal_id: str,
+        cancelled_by: str,
+        cancellation_reason: Optional[str] = None,
+    ):
+        """Cancel a draft proposal by its creator (Maker Cancel / TASK-070 / DOM-05)."""
+        proposal = self.inventory_repo.get_draft_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError(f"Draft proposal {proposal_id} not found")
+        if proposal.status != "DRAFT_PROPOSAL":
+            raise ValueError(f"Proposal cannot be cancelled in state {proposal.status}")
+
+        requested_by = str(getattr(proposal, "requested_by", "") or "").strip()
+        eff_cancelled_by = str(cancelled_by or "").strip()
+        if requested_by and eff_cancelled_by and requested_by != eff_cancelled_by:
+            raise PermissionError(f"Only creator '{requested_by}' can cancel this proposal, got '{eff_cancelled_by}'")
+
+        if hasattr(proposal, "cancel"):
+            proposal.cancel(cancelled_by=eff_cancelled_by, cancellation_reason=cancellation_reason or "")
+        else:
+            proposal.status = "CANCELLED"
+            proposal.rejection_reason = cancellation_reason or f"Cancelled by maker {eff_cancelled_by}"
+            if hasattr(proposal, "approved_by"):
+                proposal.approved_by = eff_cancelled_by
+            if hasattr(proposal, "approved_at"):
+                proposal.approved_at = datetime.now(timezone.utc)
+
+        # Release soft quarantine reservation on cancellation (TASK-064 / CRIT-03)
+        session = getattr(self.inventory_repo, "session", None)
+        if session is not None and self._table_exists(session, "stock_reservations"):
+            try:
+                from app.modules.inventory.infrastructure.models.stock_reservation import StockReservationModel
+                soft_res = session.execute(
+                    select(StockReservationModel).where(
+                        StockReservationModel.idempotency_key == f"soft_quarantine_{proposal.proposal_id}"
+                    ).with_for_update()
+                ).scalar_one_or_none()
+                if soft_res is not None and soft_res.status == "PENDING_ADJUSTMENT":
+                    self.inventory_repo.release_reservation(soft_res.id)
+            except Exception:
+                pass
+
+        self._commit_if_needed()
+
+        cancel_payload = {
+            "event_id": f"inventory:proposal-cancelled:{proposal.proposal_id}",
+            "entity_type": "draft_proposal",
+            "entity_id": proposal.proposal_id,
+            "proposal_id": proposal.proposal_id,
+            "cancelled_by": eff_cancelled_by,
+            "cancellation_reason": cancellation_reason,
+        }
+        self._record_outbox_event("ProposalCancelled", cancel_payload)
+        self._commit_if_needed()
+        self.event_publisher.publish(
+            event_type="ProposalCancelled",
+            payload=cancel_payload,
+        )
+        return proposal
+
 
 

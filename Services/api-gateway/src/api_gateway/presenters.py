@@ -118,4 +118,7 @@ def proposal_to_dict(p: Any) -> dict[str, Any]:
         "executed_at": p.executed_at,
         "executed_by": p.executed_by,
         "digital_signature": p.digital_signature,
+        "warehouse_id": int(getattr(p, "warehouse_id", 1) or 1),
+        "location_code": str(getattr(p, "location_code", "") or ""),
+        "position_id": int(getattr(p, "position_id", 0) or 0),
     }

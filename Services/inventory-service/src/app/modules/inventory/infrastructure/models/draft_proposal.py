@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import validates
 
 from app.shared.core.database import Base
@@ -12,17 +12,21 @@ class DraftProposalModel(Base):
     """
     __tablename__ = "draft_proposals"
 
-    VALID_STATUSES = {"DRAFT_PROPOSAL", "APPROVED", "REJECTED", "EXECUTED"}
+    VALID_STATUSES = {"DRAFT_PROPOSAL", "APPROVED", "REJECTED", "EXECUTED", "CANCELLED"}
     VALID_TRANSITIONS = {
-        "DRAFT_PROPOSAL": {"APPROVED", "REJECTED"},
-        "APPROVED": {"EXECUTED", "REJECTED"},
+        "DRAFT_PROPOSAL": {"APPROVED", "REJECTED", "CANCELLED"},
+        "APPROVED": {"EXECUTED", "REJECTED", "CANCELLED"},
         "REJECTED": set(),  # Terminal state: cannot transition back
         "EXECUTED": set(),  # Terminal state: cannot transition back
+        "CANCELLED": set(),  # Terminal state: cannot transition back
     }
 
     proposal_id = Column(String(64), primary_key=True)
     proposal_type = Column(String(64), nullable=False)
     sku_code = Column(String(64), nullable=False, index=True)
+    warehouse_id = Column(Integer, nullable=False, default=1, index=True)
+    location_code = Column(String(50), nullable=True, index=True)
+    position_id = Column(BigInteger, nullable=True)
     current_quantity = Column(Integer, nullable=True)
     proposed_quantity = Column(Integer, nullable=True)
     adjustment = Column(Integer, nullable=True)
@@ -46,6 +50,7 @@ class DraftProposalModel(Base):
 
     __table_args__ = (
         Index("ix_draft_proposals_status", "status"),
+        Index("ix_draft_proposals_wh_sku", "warehouse_id", "sku_code"),
     )
 
     @validates("status")
@@ -88,3 +93,12 @@ class DraftProposalModel(Base):
         self.status = "EXECUTED"
         self.executed_by = executed_by or executor
         self.executed_at = datetime.now(timezone.utc)
+
+    def cancel(self, canceller: str = "", cancelled_by: str = "", cancellation_reason: str = "") -> None:
+        """Cancel the proposal by its creator (Maker Cancel / TASK-070)."""
+        self.status = "CANCELLED"
+        self.rejection_reason = cancellation_reason or f"Cancelled by maker {cancelled_by or canceller}"
+        user = cancelled_by or canceller
+        if user:
+            self.approved_by = user
+            self.approved_at = datetime.now(timezone.utc)

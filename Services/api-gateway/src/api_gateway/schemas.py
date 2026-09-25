@@ -84,4 +84,9 @@ class RejectProposalPayload(BaseModel):
     rejection_reason: str = "Rejected by manager"
 
 
+class CancelProposalPayload(BaseModel):
+    cancellation_reason: str = "Cancelled by creator"
+
+
+
 

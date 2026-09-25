@@ -150,14 +150,20 @@ class WalManager:
         return [(seq, uncommitted[seq]) for seq in sorted(uncommitted.keys())]
 
     def cleanup_committed_files(self) -> None:
-        """Remove WAL segment files whose records are all strictly <= committed_seq."""
+        """Remove WAL segment files whose records are all strictly <= committed_seq.
+
+        Handles cross-platform file locking (Windows/Linux) safely:
+        - Ensures reader file handles are closed explicitly before unlinking.
+        - Catches PermissionError/OSError gracefully when another process holds a read lock (e.g. WinError 32).
+        """
         for log_file in sorted(self.wal_dir.glob("wal_*.jsonl")):
             # Don't delete the currently open active segment
             if log_file == self._active_file_path:
                 continue
             try:
                 all_committed = True
-                with open(log_file, "r", encoding="utf-8") as f:
+                f = open(log_file, "r", encoding="utf-8")
+                try:
                     for line in f:
                         line = line.strip()
                         if not line:
@@ -170,8 +176,20 @@ class WalManager:
                                 break
                         except json.JSONDecodeError:
                             continue
+                finally:
+                    f.close()
+
                 if all_committed:
-                    log_file.unlink(missing_ok=True)
+                    try:
+                        log_file.unlink(missing_ok=True)
+                    except (PermissionError, OSError) as pe:
+                        logger.warning(
+                            f"Cross-platform file lock contention on WAL segment {log_file.name}: {pe}. Retrying cleanup next cycle."
+                        )
+            except (PermissionError, OSError) as pe:
+                logger.warning(
+                    f"Unable to read or inspect WAL segment {log_file.name} due to lock contention: {pe}. Skipping this cycle."
+                )
             except Exception as e:
                 logger.warning(f"Failed to cleanup old WAL file {log_file}: {e}")
 
@@ -247,6 +265,8 @@ class DLQManager:
         try:
             file_path.unlink(missing_ok=True)
             logger.info(f"DLQ: Successfully replayed and purged {file_path.name}")
+        except (PermissionError, OSError) as pe:
+            logger.warning(f"File lock contention on DLQ file {file_path.name}: {pe}. Retrying cleanup next cycle.")
         except Exception as e:
             logger.warning(f"Failed to remove DLQ file {file_path}: {e}")
 
