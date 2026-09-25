@@ -50,6 +50,9 @@ class DocumentProduct:
         lot_number: str = "",
         mfg_date: Optional[datetime] = None,
         expiry_date: Optional[datetime] = None,
+        position_id: Optional[int] = None,
+        lpn: str = "",
+        owner_id: str = "DEFAULT_OWNER",
     ) -> None:
         self._validate_product_id(product_id)
         self._validate_quantity(quantity)
@@ -61,6 +64,9 @@ class DocumentProduct:
         self.lot_number = lot_number
         self.mfg_date = mfg_date
         self.expiry_date = expiry_date
+        self.position_id = position_id or 1
+        self.lpn = lpn or ""
+        self.owner_id = owner_id or "DEFAULT_OWNER"
 
         self.requested_qty: int = quantity
         self.reserved_qty: int = 0

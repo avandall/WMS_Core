@@ -46,6 +46,7 @@ class AllocationService:
         status: str = "AVAILABLE",
         min_shelf_life_days: int = 30,
         min_remaining_shelf_life_days: Optional[int] = None,
+        owner_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         TASK-077 / DOM-04: Allocates requested quantity using FEFO rules with
@@ -63,6 +64,7 @@ class AllocationService:
             quantity=quantity,
             status=status,
             min_shelf_life_days=effective_days,
+            owner_id=owner_id,
         )
 
     def allocate_fefo(
@@ -74,6 +76,7 @@ class AllocationService:
         status: str = "AVAILABLE",
         min_shelf_life_days: int = 0,
         min_remaining_shelf_life_days: Optional[int] = None,
+        owner_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Allocates requested quantity of product_id in warehouse_id using FEFO rules.
@@ -84,6 +87,7 @@ class AllocationService:
         - Locations with NO expiry date placed AFTER locations WITH expiry date
         - Tie-breaking by FIFO: mfg_date ASC (earliest manufacture date first)
         - Fallback tie-breaker by location id ASC (DB insert order)
+        - Supports 3PL multi-tenancy (TASK-082 / CRIT-04): isolates inventory by owner_id
         """
         if quantity <= 0:
             raise InvalidQuantityError("Allocation quantity must be greater than zero")
@@ -103,6 +107,7 @@ class AllocationService:
                 warehouse_id=warehouse_id,
                 product_id=product_id,
                 status=status,
+                owner_id=owner_id,
                 for_update=True,
             )
         except TypeError:
@@ -110,6 +115,7 @@ class AllocationService:
                 warehouse_id=warehouse_id,
                 product_id=product_id,
                 status=status,
+                owner_id=owner_id,
             )
 
         # 2. Filter available_qty > 0 and compliant with MRSL (expiry_date >= now + timedelta(days=effective_min_days))
@@ -135,6 +141,7 @@ class AllocationService:
             product_id=product_id,
             min_shelf_life_days=effective_min_days,
             locations=locations,
+            owner_id=owner_id,
         )
         if quantity > atp_available:
             raise InsufficientStockError(
@@ -158,6 +165,7 @@ class AllocationService:
             alloc_amount = min(remaining_qty, avail)
 
             if alloc_amount > 0:
+                target_owner = loc.get("owner_id") or owner_id or "DEFAULT_OWNER"
                 updated_loc = self.inventory_repo.adjust_location_quantity(
                     warehouse_id=loc["warehouse_id"],
                     position_id=loc["position_id"],
@@ -167,11 +175,13 @@ class AllocationService:
                     lpn=loc.get("lpn", ""),
                     status=loc.get("status", "AVAILABLE"),
                     lot_number=loc.get("lot_number", ""),
+                    owner_id=target_owner,
                 )
 
                 allocations.append({
                     "location_id": updated_loc["id"],
                     "warehouse_id": updated_loc["warehouse_id"],
+                    "owner_id": updated_loc.get("owner_id", target_owner),
                     "position_id": updated_loc["position_id"],
                     "product_id": updated_loc["product_id"],
                     "lpn": updated_loc.get("lpn", ""),
@@ -207,12 +217,14 @@ class AllocationService:
         min_shelf_life_days: int = 30,
         min_remaining_shelf_life_days: Optional[int] = None,
         locations: Optional[List[Dict[str, Any]]] = None,
+        owner_id: Optional[str] = None,
     ) -> int:
         """
         Calculates available-to-promise (ATP) stock for product in warehouse.
-        Formula (TASK-072 / CRIT-01 & TASK-077 / DOM-04):
+        Formula (TASK-072 / CRIT-01 & TASK-077 / DOM-04 & TASK-082 / CRIT-04):
         ATP = max(0, Total Valid Physical - max(Total Allocated Loc, Doc Reservations) - Quarantine Reserved)
         Excludes lots with remaining shelf life < min_shelf_life_days.
+        Supports 3PL multi-tenancy: isolates ATP calculation by owner_id.
         """
         if locations is None:
             try:
@@ -220,6 +232,7 @@ class AllocationService:
                     warehouse_id=warehouse_id,
                     product_id=product_id,
                     status="AVAILABLE",
+                    owner_id=owner_id,
                 )
             except Exception:
                 locations = []
@@ -254,22 +267,24 @@ class AllocationService:
             )
             from sqlalchemy import func, select
 
-            doc_sum = session.execute(
-                select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
-                    StockReservationModel.warehouse_id == warehouse_id,
-                    StockReservationModel.product_id == product_id,
-                    StockReservationModel.status == "RESERVED",
-                )
-            ).scalar() or 0
+            doc_query = select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
+                StockReservationModel.warehouse_id == warehouse_id,
+                StockReservationModel.product_id == product_id,
+                StockReservationModel.status == "RESERVED",
+            )
+            if owner_id:
+                doc_query = doc_query.where(StockReservationModel.owner_id == owner_id)
+            doc_sum = session.execute(doc_query).scalar() or 0
             doc_reserved = int(doc_sum)
 
-            quarantine_sum = session.execute(
-                select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
-                    StockReservationModel.warehouse_id == warehouse_id,
-                    StockReservationModel.product_id == product_id,
-                    StockReservationModel.status == "PENDING_ADJUSTMENT",
-                )
-            ).scalar() or 0
+            quarantine_query = select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
+                StockReservationModel.warehouse_id == warehouse_id,
+                StockReservationModel.product_id == product_id,
+                StockReservationModel.status == "PENDING_ADJUSTMENT",
+            )
+            if owner_id:
+                quarantine_query = quarantine_query.where(StockReservationModel.owner_id == owner_id)
+            quarantine_sum = session.execute(quarantine_query).scalar() or 0
             quarantine_reserved = int(quarantine_sum)
 
             if has_locations:
@@ -294,11 +309,11 @@ class AllocationService:
                 all_res = self.inventory_repo.list_reservations(product_id=product_id, warehouse_id=warehouse_id)
                 doc_reserved = sum(
                     int(r.get("reserved_qty", 0)) for r in all_res
-                    if r.get("status") == "RESERVED"
+                    if r.get("status") == "RESERVED" and (not owner_id or r.get("owner_id") == owner_id)
                 )
                 quarantine_reserved = sum(
                     int(r.get("reserved_qty", 0)) for r in all_res
-                    if r.get("status") == "PENDING_ADJUSTMENT"
+                    if r.get("status") == "PENDING_ADJUSTMENT" and (not owner_id or r.get("owner_id") == owner_id)
                 )
             total_physical = sum(
                 int(loc["quantity"]) if "quantity" in loc and loc["quantity"] is not None else int(loc.get("available_qty", 0))

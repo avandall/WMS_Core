@@ -51,6 +51,8 @@ from api_gateway.schemas import (
     CancelProposalPayload,
     ConfirmExecutionPayload,
     CreateProposalPayload,
+    CreateWavePayload,
+    CreateCycleCountPayload,
     CustomerDebtPayload,
     CustomerPayload,
     DocumentPayload,
@@ -59,6 +61,7 @@ from api_gateway.schemas import (
     PostDocumentPayload,
     ProductPayload,
     RejectProposalPayload,
+    VerifyPackingPayload,
     WarehousePayload,
     WarehouseTransferPayload,
 )
@@ -965,6 +968,200 @@ def delete_document(document_id: int, request: Request):
             timeout=GRPC_TIMEOUT_DEFAULT,
         )
     return {"message": resp.message}
+
+
+# ---- Wave, Cycle Count & Packing (Phase 10 / TASK-084) ----
+@router.post(
+    "/waves",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_DOCUMENTS))],
+)
+def create_wave(payload: CreateWavePayload, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.CreateWave,
+            documents_pb2.CreateWaveRequest(
+                wave_id=payload.wave_id,
+                carrier=payload.carrier,
+                dispatch_cutoff=payload.dispatch_cutoff,
+                max_orders=payload.max_orders,
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    return {
+        "wave_id": resp.wave_id,
+        "carrier": resp.carrier,
+        "dispatch_cutoff": resp.dispatch_cutoff,
+        "max_orders": resp.max_orders,
+        "status": resp.status,
+        "order_count": resp.order_count,
+        "created_at": resp.created_at,
+    }
+
+
+@router.get(
+    "/waves/{wave_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],
+)
+def get_wave(wave_id: str, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.GetWave,
+            documents_pb2.GetWaveRequest(wave_id=wave_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    if not resp.wave_id:
+        raise HTTPException(status_code=404, detail="Wave not found")
+    return {
+        "wave_id": resp.wave_id,
+        "carrier": resp.carrier,
+        "dispatch_cutoff": resp.dispatch_cutoff,
+        "max_orders": resp.max_orders,
+        "status": resp.status,
+        "order_count": resp.order_count,
+        "created_at": resp.created_at,
+    }
+
+
+@router.post(
+    "/cycle-counts",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_DOCUMENTS))],
+)
+def create_cycle_count(payload: CreateCycleCountPayload, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.CreateCycleCount,
+            documents_pb2.CreateCycleCountRequest(
+                cycle_count_id=payload.cycle_count_id,
+                warehouse_id=payload.warehouse_id,
+                title=payload.title,
+                items=[
+                    documents_pb2.CycleCountItemProto(
+                        item_id=i.item_id,
+                        product_id=i.product_id,
+                        location_id=i.location_id,
+                        system_qty=i.system_qty,
+                        counted_qty=i.counted_qty if i.counted_qty is not None else 0,
+                        lot_number=i.lot_number,
+                        unit_cost=i.unit_cost,
+                    )
+                    for i in payload.items
+                ],
+                assigned_to=payload.assigned_to or "",
+                discrepancy_qty_threshold=payload.discrepancy_qty_threshold,
+                discrepancy_value_threshold=payload.discrepancy_value_threshold,
+                created_by=payload.created_by,
+                note=payload.note or "",
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    return {
+        "cycle_count_id": resp.cycle_count_id,
+        "warehouse_id": resp.warehouse_id,
+        "title": resp.title,
+        "status": resp.status,
+        "assigned_to": resp.assigned_to,
+        "discrepancy_qty_threshold": resp.discrepancy_qty_threshold,
+        "discrepancy_value_threshold": resp.discrepancy_value_threshold,
+        "created_by": resp.created_by,
+        "note": resp.note,
+        "items": [
+            {
+                "item_id": i.item_id,
+                "product_id": i.product_id,
+                "location_id": i.location_id,
+                "system_qty": i.system_qty,
+                "counted_qty": i.counted_qty,
+                "lot_number": i.lot_number,
+                "unit_cost": i.unit_cost,
+            }
+            for i in resp.items
+        ],
+        "created_at": resp.created_at,
+    }
+
+
+@router.get(
+    "/cycle-counts/{cycle_count_id}",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.VIEW_DOCUMENTS))],
+)
+def get_cycle_count(cycle_count_id: str, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.GetCycleCount,
+            documents_pb2.GetCycleCountRequest(cycle_count_id=cycle_count_id),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+            idempotent=True,
+        )
+    if not resp.cycle_count_id:
+        raise HTTPException(status_code=404, detail="Cycle count sheet not found")
+    return {
+        "cycle_count_id": resp.cycle_count_id,
+        "warehouse_id": resp.warehouse_id,
+        "title": resp.title,
+        "status": resp.status,
+        "assigned_to": resp.assigned_to,
+        "discrepancy_qty_threshold": resp.discrepancy_qty_threshold,
+        "discrepancy_value_threshold": resp.discrepancy_value_threshold,
+        "created_by": resp.created_by,
+        "note": resp.note,
+        "items": [
+            {
+                "item_id": i.item_id,
+                "product_id": i.product_id,
+                "location_id": i.location_id,
+                "system_qty": i.system_qty,
+                "counted_qty": i.counted_qty,
+                "lot_number": i.lot_number,
+                "unit_cost": i.unit_cost,
+            }
+            for i in resp.items
+        ],
+        "created_at": resp.created_at,
+    }
+
+
+@router.post(
+    "/packing/verify",
+    dependencies=[Depends(get_current_user), Depends(require_permissions(Permission.MANAGE_DOCUMENTS))],
+)
+def verify_packing(payload: VerifyPackingPayload, request: Request):
+    with documents_stub() as stub:
+        resp = _grpc_call(
+            stub.VerifyPacking,
+            documents_pb2.VerifyPackingRequest(
+                carton_id=payload.carton_id,
+                order_id=payload.order_id,
+                measured_weight_g=payload.measured_weight_g,
+                packaging_tare_weight_g=payload.packaging_tare_weight_g,
+                items=[
+                    documents_pb2.PackItemProto(
+                        product_id=i.product_id,
+                        sku=i.sku,
+                        quantity=i.quantity,
+                        unit_weight_g=i.unit_weight_g,
+                    )
+                    for i in payload.items
+                ],
+                override_tolerance_g=payload.override_tolerance_g,
+            ),
+            request=request,
+            timeout=GRPC_TIMEOUT_DEFAULT,
+        )
+    return {
+        "carton_id": resp.carton_id,
+        "theoretical_weight_g": resp.theoretical_weight_g,
+        "measured_weight_g": resp.measured_weight_g,
+        "deviation_g": resp.deviation_g,
+        "is_valid": resp.is_valid,
+        "allowed_tolerance_g": resp.allowed_tolerance_g,
+        "message": resp.message,
+        "status": resp.status,
+    }
 
 
 # ---- Audit ----

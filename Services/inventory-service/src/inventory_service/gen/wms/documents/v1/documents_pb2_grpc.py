@@ -124,6 +124,31 @@ class DocumentsServiceStub(object):
                 request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressRequest.SerializeToString,
                 response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressResponse.FromString,
                 _registered_method=True)
+        self.CreateWave = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/CreateWave',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateWaveRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.WaveResponse.FromString,
+                _registered_method=True)
+        self.GetWave = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/GetWave',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.GetWaveRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.WaveResponse.FromString,
+                _registered_method=True)
+        self.CreateCycleCount = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/CreateCycleCount',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateCycleCountRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CycleCountResponse.FromString,
+                _registered_method=True)
+        self.GetCycleCount = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/GetCycleCount',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.GetCycleCountRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CycleCountResponse.FromString,
+                _registered_method=True)
+        self.VerifyPacking = channel.unary_unary(
+                '/wms.documents.v1.DocumentsService/VerifyPacking',
+                request_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.VerifyPackingRequest.SerializeToString,
+                response_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.VerifyPackingResponse.FromString,
+                _registered_method=True)
 
 
 class DocumentsServiceServicer(object):
@@ -240,6 +265,37 @@ class DocumentsServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CreateWave(self, request, context):
+        """Phase 10: Wave, CycleCount & Packing
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetWave(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateCycleCount(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCycleCount(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def VerifyPacking(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DocumentsServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -332,6 +388,31 @@ def add_DocumentsServiceServicer_to_server(servicer, server):
                     servicer.RevertToInProgress,
                     request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressRequest.FromString,
                     response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressResponse.SerializeToString,
+            ),
+            'CreateWave': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateWave,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateWaveRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.WaveResponse.SerializeToString,
+            ),
+            'GetWave': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetWave,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.GetWaveRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.WaveResponse.SerializeToString,
+            ),
+            'CreateCycleCount': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateCycleCount,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.CreateCycleCountRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CycleCountResponse.SerializeToString,
+            ),
+            'GetCycleCount': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCycleCount,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.GetCycleCountRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.CycleCountResponse.SerializeToString,
+            ),
+            'VerifyPacking': grpc.unary_unary_rpc_method_handler(
+                    servicer.VerifyPacking,
+                    request_deserializer=wms_dot_documents_dot_v1_dot_documents__pb2.VerifyPackingRequest.FromString,
+                    response_serializer=wms_dot_documents_dot_v1_dot_documents__pb2.VerifyPackingResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -820,6 +901,141 @@ class DocumentsService(object):
             '/wms.documents.v1.DocumentsService/RevertToInProgress',
             wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressRequest.SerializeToString,
             wms_dot_documents_dot_v1_dot_documents__pb2.RevertToInProgressResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateWave(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/CreateWave',
+            wms_dot_documents_dot_v1_dot_documents__pb2.CreateWaveRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.WaveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetWave(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/GetWave',
+            wms_dot_documents_dot_v1_dot_documents__pb2.GetWaveRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.WaveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateCycleCount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/CreateCycleCount',
+            wms_dot_documents_dot_v1_dot_documents__pb2.CreateCycleCountRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.CycleCountResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCycleCount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/GetCycleCount',
+            wms_dot_documents_dot_v1_dot_documents__pb2.GetCycleCountRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.CycleCountResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def VerifyPacking(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/wms.documents.v1.DocumentsService/VerifyPacking',
+            wms_dot_documents_dot_v1_dot_documents__pb2.VerifyPackingRequest.SerializeToString,
+            wms_dot_documents_dot_v1_dot_documents__pb2.VerifyPackingResponse.FromString,
             options,
             channel_credentials,
             insecure,

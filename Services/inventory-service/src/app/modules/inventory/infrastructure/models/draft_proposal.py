@@ -25,6 +25,7 @@ class DraftProposalModel(Base):
     proposal_type = Column(String(64), nullable=False)
     sku_code = Column(String(64), nullable=False, index=True)
     warehouse_id = Column(Integer, nullable=False, default=1, index=True)
+    owner_id = Column(String(100), nullable=False, default="DEFAULT_OWNER", index=True)
     location_code = Column(String(50), nullable=True, index=True)
     position_id = Column(BigInteger, nullable=True)
     current_quantity = Column(Integer, nullable=True)

@@ -959,9 +959,11 @@ class InventoryService:
         status: str = "AVAILABLE",
         min_shelf_life_days: int = 30,
         min_remaining_shelf_life_days: Optional[int] = None,
+        owner_id: Optional[str] = None,
     ) -> List[dict]:
         """
         TASK-077 / DOM-04: Allocates stock using FEFO with Minimum Remaining Shelf Life (MRSL) filtering.
+        Supports 3PL multi-tenancy (TASK-082 / CRIT-04).
         """
         from app.modules.inventory.application.services.allocation_service import AllocationService
 
@@ -973,6 +975,7 @@ class InventoryService:
             status=status,
             min_shelf_life_days=min_shelf_life_days,
             min_remaining_shelf_life_days=min_remaining_shelf_life_days,
+            owner_id=owner_id,
         )
 
     def allocate_fefo(
@@ -984,6 +987,7 @@ class InventoryService:
         status: str = "AVAILABLE",
         min_shelf_life_days: int = 0,
         min_remaining_shelf_life_days: Optional[int] = None,
+        owner_id: Optional[str] = None,
     ) -> List[dict]:
         from app.modules.inventory.application.services.allocation_service import AllocationService
 
@@ -995,6 +999,7 @@ class InventoryService:
             status=status,
             min_shelf_life_days=min_shelf_life_days,
             min_remaining_shelf_life_days=min_remaining_shelf_life_days,
+            owner_id=owner_id,
         )
 
     def recall_query(self, lot_number: str) -> dict:
@@ -1034,8 +1039,9 @@ class InventoryService:
         location_code: Optional[str] = None,
         position_id: Optional[int] = None,
         status: str = "DRAFT_PROPOSAL",
+        owner_id: str = "DEFAULT_OWNER",
     ):
-        """Create a draft proposal with automatic soft quarantine reservation if adjustment < 0 (TASK-063 & TASK-064)."""
+        """Create a draft proposal with automatic soft quarantine reservation if adjustment < 0 (TASK-063, TASK-064 & TASK-082)."""
         from app.modules.inventory.infrastructure.models.draft_proposal import DraftProposalModel
 
         if adjustment is None:
@@ -1054,6 +1060,7 @@ class InventoryService:
             proposal_type=proposal_type,
             sku_code=sku_code,
             warehouse_id=warehouse_id,
+            owner_id=owner_id,
             location_code=location_code,
             position_id=position_id,
             current_quantity=current_quantity,

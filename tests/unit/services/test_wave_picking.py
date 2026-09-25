@@ -23,9 +23,21 @@ from app.shared.domain.business_exceptions import (
 )
 
 
+@pytest.fixture(autouse=True)
+def setup_sqlite_tables():
+    from app.shared.core.database import Base, engine
+    from app.modules.documents.infrastructure.models.picking_wave import PickingWaveModel
+    from app.modules.documents.infrastructure.models.cycle_count_sheet import CycleCountSheetModel
+    from app.modules.documents.infrastructure.models.carton_package import CartonPackageModel
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+
+
 @pytest.fixture
 def wave_service() -> WaveService:
     return WaveService()
+
 
 
 @pytest.fixture

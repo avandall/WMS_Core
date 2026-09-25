@@ -16,6 +16,7 @@ from app.modules.inventory.application.services.allocation_service import Alloca
 from app.modules.inventory.application.services.inventory_service import InventoryService
 from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
 from app.shared.core.database import Base, import_all_models
+from app.modules.products.infrastructure.models.product import ProductModel
 from app.shared.domain.business_exceptions import InsufficientStockError
 
 
@@ -279,3 +280,151 @@ def test_inventory_service_delegates_allocate_inventory_fefo(db_session):
     )
     assert len(allocations) == 1
     assert allocations[0]["lot_number"] == "LOT-INCLUDED"
+
+
+def test_3pl_multi_tenant_fefo_allocation(db_session):
+    """
+    TASK-082 Acceptance Criteria:
+    - Viết test xuất kho cho hàng của khách hàng 'SAMSUNG_VN' và 'UNILEVER',
+      xác nhận phân bổ FEFO thành công không bị văng lỗi thiếu hàng DEFAULT_OWNER.
+    """
+    repo = InventoryRepo(db_session)
+    alloc_service = AllocationService(repo)
+
+    now = datetime.now(timezone.utc)
+    product_id = 2001
+    warehouse_id = 1
+
+    # Bin 1: 50 units for SAMSUNG_VN (expiring in 60 days)
+    repo.adjust_location_quantity(
+        warehouse_id=warehouse_id,
+        position_id=1,
+        product_id=product_id,
+        quantity_delta=50,
+        lpn="LPN-SAM-01",
+        lot_number="LOT-SAM-1",
+        expiry_date=now + timedelta(days=60),
+        owner_id="SAMSUNG_VN",
+    )
+
+    # Bin 2: 40 units for UNILEVER (expiring in 45 days)
+    repo.adjust_location_quantity(
+        warehouse_id=warehouse_id,
+        position_id=2,
+        product_id=product_id,
+        quantity_delta=40,
+        lpn="LPN-UNI-01",
+        lot_number="LOT-UNI-1",
+        expiry_date=now + timedelta(days=45),
+        owner_id="UNILEVER",
+    )
+    db_session.commit()
+
+    # 1. Allocate 30 units for SAMSUNG_VN
+    sam_allocations = alloc_service.allocate_fefo(
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        quantity=30,
+        owner_id="SAMSUNG_VN",
+    )
+    assert len(sam_allocations) == 1
+    assert sam_allocations[0]["owner_id"] == "SAMSUNG_VN"
+    assert sam_allocations[0]["position_id"] == 1
+    assert sam_allocations[0]["allocated_qty"] == 30
+
+    # 2. Allocate 25 units for UNILEVER
+    uni_allocations = alloc_service.allocate_fefo(
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        quantity=25,
+        owner_id="UNILEVER",
+    )
+    assert len(uni_allocations) == 1
+    assert uni_allocations[0]["owner_id"] == "UNILEVER"
+    assert uni_allocations[0]["position_id"] == 2
+    assert uni_allocations[0]["allocated_qty"] == 25
+
+    # 3. Attempting to allocate 20 units for UNILEVER when only 15 left must raise InsufficientStockError
+    with pytest.raises(InsufficientStockError) as exc_info:
+        alloc_service.allocate_fefo(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            quantity=20,
+            owner_id="UNILEVER",
+        )
+    assert "Insufficient stock for FEFO allocation" in str(exc_info.value)
+
+
+def test_3pl_multi_tenant_soft_quarantine_isolation(db_session):
+    """
+    TASK-082 Acceptance Criteria:
+    - Bảng draft_proposals và stock_reservations hỗ trợ owner_id.
+    - Soft quarantine của khách hàng SAMSUNG_VN không làm khóa nhầm tồn kho của UNILEVER.
+    """
+    repo = InventoryRepo(db_session)
+    alloc_service = AllocationService(repo)
+    inv_service = InventoryService(inventory_repo=repo)
+
+    now = datetime.now(timezone.utc)
+    product_id = 2002
+    warehouse_id = 1
+
+    from app.modules.products.infrastructure.models.product import ProductModel
+    db_session.add(ProductModel(product_id=product_id, name=str(product_id)))
+    db_session.commit()
+
+    # Bin 1: 50 units for SAMSUNG_VN
+    repo.adjust_location_quantity(
+        warehouse_id=warehouse_id,
+        position_id=1,
+        product_id=product_id,
+        quantity_delta=50,
+        lpn="LPN-SAM-02",
+        lot_number="LOT-SAM-2",
+        expiry_date=now + timedelta(days=90),
+        owner_id="SAMSUNG_VN",
+    )
+
+    # Bin 2: 50 units for UNILEVER
+    repo.adjust_location_quantity(
+        warehouse_id=warehouse_id,
+        position_id=2,
+        product_id=product_id,
+        quantity_delta=50,
+        lpn="LPN-UNI-02",
+        lot_number="LOT-UNI-2",
+        expiry_date=now + timedelta(days=90),
+        owner_id="UNILEVER",
+    )
+    db_session.commit()
+
+    # Create negative draft proposal for SAMSUNG_VN (20 units quarantined)
+    proposal = inv_service.create_draft_proposal(
+        proposal_id="PROP-SAM-3PL-001",
+        sku_code=str(product_id),
+        warehouse_id=warehouse_id,
+        position_id=1,
+        location_code="BIN-SAM",
+        adjustment=-20,
+        reason="Damaged pallet inspection",
+        owner_id="SAMSUNG_VN",
+    )
+    assert proposal.owner_id == "SAMSUNG_VN"
+    db_session.commit()
+
+    # Check ATP:
+    # UNILEVER ATP must remain 50 (NOT 30!)
+    uni_atp = alloc_service.check_availability(
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        owner_id="UNILEVER",
+    )
+    assert uni_atp == 50, f"Expected UNILEVER ATP 50, but got {uni_atp}"
+
+    # SAMSUNG_VN ATP must be 30 (50 - 20 quarantined)
+    sam_atp = alloc_service.check_availability(
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        owner_id="SAMSUNG_VN",
+    )
+    assert sam_atp == 30, f"Expected SAMSUNG_VN ATP 30, but got {sam_atp}"

@@ -14,6 +14,7 @@ class StockReservationModel(Base):
     document_id = Column(BigInteger, nullable=True, index=True)
     product_id = Column(BigInteger, nullable=False, index=True)
     warehouse_id = Column(Integer, nullable=False, index=True)
+    owner_id = Column(String(100), nullable=False, default="DEFAULT_OWNER", index=True)
     requested_qty = Column(Integer, nullable=False)
     reserved_qty = Column(Integer, nullable=False, default=0)
     released_qty = Column(Integer, nullable=False, default=0)

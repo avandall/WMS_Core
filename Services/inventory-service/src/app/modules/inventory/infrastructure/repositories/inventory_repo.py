@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from sqlalchemy import func, select
@@ -380,15 +380,17 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         idempotency_key: str | None,
         expires_at: datetime | None,
         status: str = "RESERVED",
+        owner_id: str = "DEFAULT_OWNER",
     ) -> int:
 
         # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
-        warehouse_row = self.session.execute(
-            select(WarehouseInventoryModel).where(
-                WarehouseInventoryModel.product_id == product_id,
-                WarehouseInventoryModel.warehouse_id == warehouse_id,
-            ).with_for_update()
-        ).scalar_one_or_none()
+        wh_lock_query = select(WarehouseInventoryModel).where(
+            WarehouseInventoryModel.product_id == product_id,
+            WarehouseInventoryModel.warehouse_id == warehouse_id,
+        )
+        if owner_id:
+            wh_lock_query = wh_lock_query.where(WarehouseInventoryModel.owner_id == owner_id)
+        warehouse_row = self.session.execute(wh_lock_query.with_for_update()).scalars().first()
 
         # Step 2 (Lock Ordering): Check idempotency on StockReservationModel SECOND with FOR UPDATE
         if idempotency_key:
@@ -403,28 +405,79 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         if not warehouse_row:
             raise InsufficientStockError(f"No inventory found for product {product_id} in warehouse {warehouse_id}")
 
-        # ATP Check: Only stock with status 'AVAILABLE' is available for sale reservations
-        loc_available = self.session.execute(
-            select(func.coalesce(func.sum(InventoryLocationModel.quantity - InventoryLocationModel.allocated_qty), 0))
+        # ATP Check (TASK-080 & TASK-082):
+        # 1. Filter out expired stock (expiry_date > now_utc or expiry_date IS NULL)
+        # 2. available_qty = max(0, valid_physical - max(allocated_loc, doc_res) - quarantine_res)
+        # 3. 3PL isolation by owner_id if specified
+        now_utc = datetime.now(timezone.utc)
+
+        # Valid physical quantity (status='AVAILABLE' and not expired)
+        valid_phys_query = (
+            select(func.coalesce(func.sum(InventoryLocationModel.quantity), 0))
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status == "AVAILABLE",
+                (InventoryLocationModel.expiry_date.is_(None) | (InventoryLocationModel.expiry_date > now_utc)),
+            )
+        )
+        if owner_id and owner_id != "DEFAULT_OWNER":
+            valid_phys_query = valid_phys_query.where(InventoryLocationModel.owner_id == owner_id)
+        valid_physical = self.session.execute(valid_phys_query).scalar() or 0
+
+        # Allocated quantity across locations
+        alloc_loc_query = (
+            select(func.coalesce(func.sum(InventoryLocationModel.allocated_qty), 0))
             .where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.product_id == product_id,
                 InventoryLocationModel.status == "AVAILABLE",
             )
-        ).scalar() or 0
+        )
+        if owner_id and owner_id != "DEFAULT_OWNER":
+            alloc_loc_query = alloc_loc_query.where(InventoryLocationModel.owner_id == owner_id)
+        allocated_loc = self.session.execute(alloc_loc_query).scalar() or 0
 
-        has_locations = self.session.execute(
+        # Active reservations (RESERVED) and soft quarantine (PENDING_ADJUSTMENT)
+        doc_res_query = (
+            select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0))
+            .where(
+                StockReservationModel.warehouse_id == warehouse_id,
+                StockReservationModel.product_id == product_id,
+                StockReservationModel.status == "RESERVED",
+            )
+        )
+        if owner_id and owner_id != "DEFAULT_OWNER":
+            doc_res_query = doc_res_query.where(StockReservationModel.owner_id == owner_id)
+        doc_res = self.session.execute(doc_res_query).scalar() or 0
+
+        quarantine_res_query = (
+            select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0))
+            .where(
+                StockReservationModel.warehouse_id == warehouse_id,
+                StockReservationModel.product_id == product_id,
+                StockReservationModel.status == "PENDING_ADJUSTMENT",
+            )
+        )
+        if owner_id and owner_id != "DEFAULT_OWNER":
+            quarantine_res_query = quarantine_res_query.where(StockReservationModel.owner_id == owner_id)
+        quarantine_res = self.session.execute(quarantine_res_query).scalar() or 0
+
+        has_loc_query = (
             select(InventoryLocationModel.id)
             .where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.product_id == product_id,
-            ).limit(1)
-        ).scalar() is not None
+            )
+        )
+        if owner_id and owner_id != "DEFAULT_OWNER":
+            has_loc_query = has_loc_query.where(InventoryLocationModel.owner_id == owner_id)
+        has_locations = self.session.execute(has_loc_query.limit(1)).scalar() is not None
 
         if has_locations:
-            available_qty = max(0, int(loc_available) - int(warehouse_row.reserved_qty))
+            available_qty = max(0, int(valid_physical) - max(int(allocated_loc), int(doc_res)) - int(quarantine_res))
         else:
-            available_qty = warehouse_row.physical_qty - warehouse_row.reserved_qty
+            available_qty = max(0, int(warehouse_row.physical_qty) - int(doc_res) - int(quarantine_res))
 
         if requested_qty > available_qty:
             raise InsufficientStockError(
@@ -438,6 +491,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             document_id=document_id,
             product_id=product_id,
             warehouse_id=warehouse_id,
+            owner_id=owner_id,
             requested_qty=requested_qty,
             reserved_qty=requested_qty,
             status=status,
@@ -461,22 +515,24 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 StockReservationModel.warehouse_id,
                 StockReservationModel.status,
                 StockReservationModel.reserved_qty,
+                StockReservationModel.owner_id,
             ).where(StockReservationModel.id == reservation_id)
         ).first()
         if not meta:
             raise KeyError(f"Reservation {reservation_id} not found")
 
-        prod_id, wh_id, current_status, current_reserved_qty = meta
+        prod_id, wh_id, current_status, current_reserved_qty, res_owner = meta
         if current_status in ("RELEASED", "CONSUMED") or current_reserved_qty == 0:
             return  # Already released, consumed, or zero reserved quantity
 
         # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
-        warehouse_row = self.session.execute(
-            select(WarehouseInventoryModel).where(
-                WarehouseInventoryModel.product_id == prod_id,
-                WarehouseInventoryModel.warehouse_id == wh_id,
-            ).with_for_update()
-        ).scalar_one_or_none()
+        wh_lock_query = select(WarehouseInventoryModel).where(
+            WarehouseInventoryModel.product_id == prod_id,
+            WarehouseInventoryModel.warehouse_id == wh_id,
+        )
+        if res_owner:
+            wh_lock_query = wh_lock_query.where(WarehouseInventoryModel.owner_id == res_owner)
+        warehouse_row = self.session.execute(wh_lock_query.with_for_update()).scalars().first()
 
         # Step 2 (Lock Ordering): Lock StockReservationModel SECOND
         reservation = self.session.execute(
@@ -508,20 +564,22 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             select(
                 StockReservationModel.product_id,
                 StockReservationModel.warehouse_id,
+                StockReservationModel.owner_id,
             ).where(StockReservationModel.id == reservation_id)
         ).first()
         if not meta:
             raise KeyError(f"Reservation {reservation_id} not found")
 
-        prod_id, wh_id = meta
+        prod_id, wh_id, res_owner = meta
 
         # Step 1 (Lock Ordering): Lock WarehouseInventoryModel FIRST
-        warehouse_row = self.session.execute(
-            select(WarehouseInventoryModel).where(
-                WarehouseInventoryModel.product_id == prod_id,
-                WarehouseInventoryModel.warehouse_id == wh_id,
-            ).with_for_update()
-        ).scalar_one_or_none()
+        wh_lock_query = select(WarehouseInventoryModel).where(
+            WarehouseInventoryModel.product_id == prod_id,
+            WarehouseInventoryModel.warehouse_id == wh_id,
+        )
+        if res_owner:
+            wh_lock_query = wh_lock_query.where(WarehouseInventoryModel.owner_id == res_owner)
+        warehouse_row = self.session.execute(wh_lock_query.with_for_update()).scalars().first()
 
         # Step 2 (Lock Ordering): Lock StockReservationModel SECOND
         reservation = self.session.execute(
@@ -606,13 +664,14 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             for r in rows
         ]
 
-    def calculate_available_stock(self, product_id: int, warehouse_id: int) -> dict:
-        warehouse_row = self.session.execute(
-            select(WarehouseInventoryModel).where(
-                WarehouseInventoryModel.product_id == product_id,
-                WarehouseInventoryModel.warehouse_id == warehouse_id,
-            )
-        ).scalar_one_or_none()
+    def calculate_available_stock(self, product_id: int, warehouse_id: int, owner_id: Optional[str] = None) -> dict:
+        wh_query = select(WarehouseInventoryModel).where(
+            WarehouseInventoryModel.product_id == product_id,
+            WarehouseInventoryModel.warehouse_id == warehouse_id,
+        )
+        if owner_id:
+            wh_query = wh_query.where(WarehouseInventoryModel.owner_id == owner_id)
+        warehouse_row = self.session.execute(wh_query).scalars().first()
 
         if not warehouse_row:
             return {
@@ -623,22 +682,28 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "available_qty": 0,
             }
 
-        loc_available = self.session.execute(
+        loc_query = (
             select(func.coalesce(func.sum(InventoryLocationModel.quantity - InventoryLocationModel.allocated_qty), 0))
             .where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.product_id == product_id,
                 InventoryLocationModel.status == "AVAILABLE",
             )
-        ).scalar() or 0
+        )
+        if owner_id:
+            loc_query = loc_query.where(InventoryLocationModel.owner_id == owner_id)
+        loc_available = self.session.execute(loc_query).scalar() or 0
 
-        has_locations = self.session.execute(
+        has_loc_query = (
             select(InventoryLocationModel.id)
             .where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.product_id == product_id,
-            ).limit(1)
-        ).scalar() is not None
+            )
+        )
+        if owner_id:
+            has_loc_query = has_loc_query.where(InventoryLocationModel.owner_id == owner_id)
+        has_locations = self.session.execute(has_loc_query.limit(1)).scalar() is not None
 
         calc_available = max(0, int(loc_available) - int(warehouse_row.reserved_qty)) if has_locations else int(warehouse_row.physical_qty - warehouse_row.reserved_qty)
 
@@ -650,9 +715,9 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "available_qty": int(calc_available),
         }
 
-    def get_availability(self, product_id: int, warehouse_id: int) -> dict:
+    def get_availability(self, product_id: int, warehouse_id: int, owner_id: Optional[str] = None) -> dict:
         """Alias for calculate_available_stock."""
-        return self.calculate_available_stock(product_id=product_id, warehouse_id=warehouse_id)
+        return self.calculate_available_stock(product_id=product_id, warehouse_id=warehouse_id, owner_id=owner_id)
 
     # Phase 9: Inventory transaction ledger methods
     def write_transaction(
@@ -1146,14 +1211,15 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "customers": customers,
         }
 
-    def _get_active_reserved_qty(self, warehouse_id: int, product_id: int) -> int:
-        reserved_sum = self.session.execute(
-            select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
-                StockReservationModel.warehouse_id == warehouse_id,
-                StockReservationModel.product_id == product_id,
-                StockReservationModel.status.in_(["RESERVED", "PENDING_ADJUSTMENT"]),
-            )
-        ).scalar()
+    def _get_active_reserved_qty(self, warehouse_id: int, product_id: int, owner_id: Optional[str] = None) -> int:
+        reserved_query = select(func.coalesce(func.sum(StockReservationModel.reserved_qty), 0)).where(
+            StockReservationModel.warehouse_id == warehouse_id,
+            StockReservationModel.product_id == product_id,
+            StockReservationModel.status.in_(["RESERVED", "PENDING_ADJUSTMENT"]),
+        )
+        if owner_id:
+            reserved_query = reserved_query.where(StockReservationModel.owner_id == owner_id)
+        reserved_sum = self.session.execute(reserved_query).scalar()
         return int(reserved_sum or 0)
 
     def sync_warehouse_inventory_summary(self, warehouse_id: int, product_id: int, owner_id: str = "DEFAULT_OWNER") -> None:
@@ -1174,7 +1240,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             )
         ).scalar() or 0
 
-        active_reserved = self._get_active_reserved_qty(warehouse_id, product_id)
+        active_reserved = self._get_active_reserved_qty(warehouse_id, product_id, owner_clean)
         effective_reserved = max(int(total_allocated_loc), int(active_reserved))
 
         wh_inv = self.session.execute(
@@ -1296,6 +1362,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                                 idempotency_key=key,
                                 expires_at=None,
                                 status="PENDING_ADJUSTMENT",
+                                owner_id=getattr(proposal, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER",
                             )
                         except Exception:
                             pass

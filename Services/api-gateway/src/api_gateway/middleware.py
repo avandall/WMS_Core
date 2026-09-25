@@ -98,6 +98,33 @@ async def request_id_middleware(request: Request, call_next):
 
 
 _rate_state: dict[str, tuple[float, int]] = {}
+_last_cleanup_time: float = 0.0
+_CLEANUP_INTERVAL_SEC: float = 60.0
+
+
+def cleanup_stale_rate_limits(now: float | None = None) -> int:
+    """Evict stale entries periodically without scanning on every request path (TECH-01)."""
+    global _last_cleanup_time
+    curr = now if now is not None else time.monotonic()
+    _last_cleanup_time = curr
+    window = 1.0
+    stale_keys = [k for k, (start, _) in _rate_state.items() if curr - start >= window]
+    for k in stale_keys:
+        _rate_state.pop(k, None)
+    return len(stale_keys)
+
+
+async def rate_limit_cleanup_background_loop(interval_sec: float = 60.0) -> None:
+    """Asynchronous background loop that purges expired rate-limit buckets every 60s."""
+    import asyncio
+    while True:
+        try:
+            await asyncio.sleep(interval_sec)
+            cleanup_stale_rate_limits()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
 
 
 def _rate_limit_client(request: Request) -> str:
@@ -123,11 +150,12 @@ async def rate_limit_middleware(request: Request, call_next):
     window = 1.0
     client = f"{_rate_limit_client(request)}:{request.url.path}"
 
-    # Evict stale entries to prevent unbounded memory growth.
-    # Only keep entries whose time window is still active.
-    stale_keys = [k for k, (start, _) in _rate_state.items() if now - start >= window]
-    for k in stale_keys:
-        _rate_state.pop(k, None)
+    # Do NOT scan stale_keys O(N) on request path.
+    # Stale eviction is decoupled to periodic background intervals (every 60s)
+    # ensuring zero CPU contention for thousands of concurrent RF Scanners (TECH-01).
+    global _last_cleanup_time
+    if now - _last_cleanup_time >= _CLEANUP_INTERVAL_SEC:
+        cleanup_stale_rate_limits(now)
 
     start, count = _rate_state.get(client, (now, 0))
     if now - start >= window:

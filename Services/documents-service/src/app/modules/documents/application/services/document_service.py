@@ -196,6 +196,25 @@ class DocumentService:
         document.transaction_type = transaction_type or "SALES_RETURN_RECEIPT"
         document.reason_code = reason_code
         self.document_repo.save(document)
+
+        # TASK-083 / CRIT-05: Automatically create QUARANTINED stock on receiving location
+        if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
+            for item in document.items:
+                pos_id = getattr(item, "position_id", 1) or 1
+                lot_num = getattr(item, "lot_number", "") or ""
+                lpn_val = getattr(item, "lpn", "") or ""
+                owner_val = getattr(item, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER"
+                self.inventory_repo.adjust_location_quantity(
+                    warehouse_id=to_warehouse_id,
+                    position_id=pos_id,
+                    product_id=item.product_id,
+                    quantity_delta=item.quantity,
+                    status="QUARANTINED",
+                    lot_number=lot_num,
+                    lpn=lpn_val,
+                    owner_id=owner_val,
+                )
+
         self._commit_if_needed()
         self._publish_document_uploaded(document, request_id)
         return document
@@ -325,23 +344,40 @@ class DocumentService:
             # Promote QUARANTINED inventory to AVAILABLE if inventory_repo is present
             if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
                 for item in document.items:
+                    pos_id = getattr(item, "position_id", 1) or 1
+                    lot_num = getattr(item, "lot_number", "") or ""
+                    lpn_val = getattr(item, "lpn", "") or ""
+                    owner_val = getattr(item, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER"
                     try:
                         self.inventory_repo.adjust_location_quantity(
                             warehouse_id=wh_id,
-                            position_id=getattr(item, "position_id", 1) or 1,
+                            position_id=pos_id,
                             product_id=item.product_id,
                             quantity_delta=-item.quantity,
                             status="QUARANTINED",
+                            lot_number=lot_num,
+                            lpn=lpn_val,
+                            owner_id=owner_val,
                         )
                         self.inventory_repo.adjust_location_quantity(
                             warehouse_id=wh_id,
-                            position_id=getattr(item, "position_id", 1) or 1,
+                            position_id=pos_id,
                             product_id=item.product_id,
                             quantity_delta=item.quantity,
                             status="AVAILABLE",
+                            lot_number=lot_num,
+                            lpn=lpn_val,
+                            owner_id=owner_val,
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        import logging
+                        logging.getLogger(__name__).critical(
+                            "QA inspection failed to promote stock for doc %s, product %s: %s",
+                            document_id, item.product_id, exc, exc_info=True
+                        )
+                        if self.session is not None and hasattr(self.session, "rollback"):
+                            self.session.rollback()
+                        raise
 
             # Generate Putaway tasks
             putaway_tasks = [
@@ -363,23 +399,40 @@ class DocumentService:
             # Transition location inventory to REJECTED
             if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
                 for item in document.items:
+                    pos_id = getattr(item, "position_id", 1) or 1
+                    lot_num = getattr(item, "lot_number", "") or ""
+                    lpn_val = getattr(item, "lpn", "") or ""
+                    owner_val = getattr(item, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER"
                     try:
                         self.inventory_repo.adjust_location_quantity(
                             warehouse_id=wh_id,
-                            position_id=getattr(item, "position_id", 1) or 1,
+                            position_id=pos_id,
                             product_id=item.product_id,
                             quantity_delta=-item.quantity,
                             status="QUARANTINED",
+                            lot_number=lot_num,
+                            lpn=lpn_val,
+                            owner_id=owner_val,
                         )
                         self.inventory_repo.adjust_location_quantity(
                             warehouse_id=wh_id,
-                            position_id=getattr(item, "position_id", 1) or 1,
+                            position_id=pos_id,
                             product_id=item.product_id,
                             quantity_delta=item.quantity,
                             status="REJECTED",
+                            lot_number=lot_num,
+                            lpn=lpn_val,
+                            owner_id=owner_val,
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        import logging
+                        logging.getLogger(__name__).critical(
+                            "QA inspection failed to reject stock for doc %s, product %s: %s",
+                            document_id, item.product_id, exc, exc_info=True
+                        )
+                        if self.session is not None and hasattr(self.session, "rollback"):
+                            self.session.rollback()
+                        raise
 
             # Auto-create Return to Vendor (RTV / PURCHASE_RETURN) document
             try:
@@ -487,7 +540,9 @@ class DocumentService:
         try:
             with configured_grpc_channel(inventory_addr) as channel:
                 stub = inventory_pb2_grpc.InventoryServiceStub(channel)
-                for item in document.items:
+                # TASK-081 [CRIT-03]: Deterministic lock ordering sorted by int(product_id) to eliminate AB-BA Deadlock
+                sorted_items = sorted(document.items, key=lambda it: int(it.product_id))
+                for item in sorted_items:
                     event_id = f"doc_{document_id}_product_{item.product_id}"
                     try:
                         resp = stub.ReserveStock(
@@ -990,6 +1045,9 @@ class DocumentService:
             lot_number = item_data.get("lot_number", "")
             mfg_date = item_data.get("mfg_date")
             expiry_date = item_data.get("expiry_date")
+            position_id = item_data.get("position_id", 1) or 1
+            lpn = item_data.get("lpn", "") or ""
+            owner_id = item_data.get("owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER"
 
             document_items.append(
                 DocumentProduct(
@@ -999,6 +1057,9 @@ class DocumentService:
                     lot_number=lot_number,
                     mfg_date=mfg_date,
                     expiry_date=expiry_date,
+                    position_id=int(position_id),
+                    lpn=str(lpn),
+                    owner_id=str(owner_id),
                 )
             )
 

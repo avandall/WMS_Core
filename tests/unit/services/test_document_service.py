@@ -423,5 +423,310 @@ def test_partial_fulfillment_releases_remainder(document_service, mock_document_
     assert executed_doc.items[0].reserved_qty == 80
 
 
+def test_reserve_request_stock_sorts_items_by_product_id(document_service, mock_document_repo):
+    """
+    TASK-081 Acceptance Criteria:
+    - Trong DocumentService.reserve_request_stock(), document.items được sắp xếp theo int(item.product_id)
+      trước khi gửi gRPC ReserveStock để ngăn chặn Deadlock AB-BA.
+    """
+    from unittest.mock import MagicMock, patch
+
+    # Items provided in REVERSE order: SKU 300, then SKU 100, then SKU 200
+    item1 = DocumentProduct(product_id=300, quantity=5, unit_price=10.0)
+    item2 = DocumentProduct(product_id=100, quantity=10, unit_price=20.0)
+    item3 = DocumentProduct(product_id=200, quantity=15, unit_price=30.0)
+
+    doc = Document(
+        document_id=777,
+        doc_type=DocumentType.SALE,
+        from_warehouse_id=1,
+        items=[item1, item2, item3],
+        created_by="tester",
+    )
+    doc.status = DocumentStatus.POSTED
+    mock_document_repo._store[777] = doc
+
+    called_product_ids = []
+
+    def mock_reserve_stock(req, timeout=10):
+        called_product_ids.append(req.product_id)
+        mock_resp = MagicMock()
+        mock_resp.success = True
+        mock_resp.reservation_id = 9000 + req.product_id
+        return mock_resp
+
+    mock_stub = MagicMock()
+    mock_stub.ReserveStock.side_effect = mock_reserve_stock
+
+    with patch("shared_utils.security.grpc.configured_grpc_channel") as mock_channel_ctx:
+        mock_channel = MagicMock()
+        mock_channel_ctx.return_value.__enter__.return_value = mock_channel
+        with patch("documents_service.gen.wms.inventory.v1.inventory_pb2_grpc.InventoryServiceStub", return_value=mock_stub):
+            reserved_doc = document_service.reserve_request_stock(document_id=777)
+
+    assert reserved_doc.status == DocumentStatus.RESERVED
+    # Verification: gRPC calls must strictly follow sorted order [100, 200, 300]
+    assert called_product_ids == [100, 200, 300], f"Expected sorted lock acquisition [100, 200, 300], got {called_product_ids}"
+
+
+def test_sales_return_initializes_quarantined_stock_and_qa_promotes_to_available(mock_document_repo):
+    """
+    TASK-083 Acceptance Criteria:
+    - Khi tạo chứng từ SALES_RETURN, hệ thống tự động tạo tồn kho với status='QUARANTINED'.
+    - Khi inspect_qa_document(passed=True), hệ thống trừ QUARANTINED và cộng AVAILABLE.
+    """
+    mock_inv_repo = MagicMock()
+    mock_session = MagicMock()
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        inventory_repo=mock_inv_repo,
+        session=mock_session,
+    )
+
+    # 1. Create SALES_RETURN document
+    doc = service.create_sales_return_document(
+        to_warehouse_id=2,
+        items=[{
+            "product_id": 501,
+            "quantity": 10,
+            "unit_price": 45.0,
+            "position_id": 15,
+            "lot_number": "LOT-RET-501",
+            "owner_id": "3PL-CLIENT-A",
+        }],
+        created_by="receiving_clerk",
+        note="Customer return defective batch",
+    )
+
+    # Verify Document properties
+    assert doc.doc_type == DocumentType.SALES_RETURN
+    assert doc.to_warehouse_id == 2
+    assert len(doc.items) == 1
+    assert doc.items[0].product_id == 501
+    assert doc.items[0].quantity == 10
+
+    # Verify inventory was initialized with status='QUARANTINED'
+    mock_inv_repo.adjust_location_quantity.assert_called_once_with(
+        warehouse_id=2,
+        position_id=15,
+        product_id=501,
+        quantity_delta=10,
+        status="QUARANTINED",
+        lot_number="LOT-RET-501",
+        lpn="",
+        owner_id="3PL-CLIENT-A",
+    )
+    mock_inv_repo.adjust_location_quantity.reset_mock()
+
+    # 2. QA Inspect Passed
+    inspected = service.inspect_qa_document(
+        document_id=doc.document_id,
+        inspected_by="qa_inspector",
+        passed=True,
+        note="Inspection passed - repackaged",
+    )
+
+    assert inspected.status == DocumentStatus.QA_INSPECTED
+    # Verify inventory adjusted: -10 QUARANTINED, +10 AVAILABLE
+    assert mock_inv_repo.adjust_location_quantity.call_count == 2
+    mock_inv_repo.adjust_location_quantity.assert_any_call(
+        warehouse_id=2,
+        position_id=15,
+        product_id=501,
+        quantity_delta=-10,
+        status="QUARANTINED",
+        lot_number="LOT-RET-501",
+        lpn="",
+        owner_id="3PL-CLIENT-A",
+    )
+    mock_inv_repo.adjust_location_quantity.assert_any_call(
+        warehouse_id=2,
+        position_id=15,
+        product_id=501,
+        quantity_delta=10,
+        status="AVAILABLE",
+        lot_number="LOT-RET-501",
+        lpn="",
+        owner_id="3PL-CLIENT-A",
+    )
+
+
+def test_sales_return_qa_inspection_failure_raises_and_rollbacks(mock_document_repo):
+    """
+    TASK-083 Acceptance Criteria:
+    - Trong inspect_qa_document, xóa bỏ khối except Exception: pass.
+    - Nếu lỗi xảy ra trong quá trình cập nhật tồn kho, ném lỗi rõ ràng và rollback transaction.
+    """
+    from app.shared.domain.business_exceptions import InsufficientStockError
+
+    mock_inv_repo = MagicMock()
+    mock_session = MagicMock()
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        inventory_repo=mock_inv_repo,
+        session=mock_session,
+    )
+
+    doc = service.create_sales_return_document(
+        to_warehouse_id=1,
+        items=[{"product_id": 502, "quantity": 5, "unit_price": 20.0, "position_id": 3}],
+        created_by="clerk",
+    )
+
+    # Simulate InsufficientStockError during QA inventory promotion
+    mock_inv_repo.adjust_location_quantity.side_effect = InsufficientStockError("Quarantined location not found")
+
+    with pytest.raises(InsufficientStockError) as exc_info:
+        service.inspect_qa_document(
+            document_id=doc.document_id,
+            inspected_by="qa_inspector",
+            passed=True,
+        )
+
+    assert "Quarantined location not found" in str(exc_info.value)
+    # Verify rollback was called on failure
+    mock_session.rollback.assert_called_once()
+
+
+def test_sales_return_qa_inspection_rejected_transitions_to_rejected(mock_document_repo):
+    """
+    TASK-083: Khi QA Failed, QUARANTINED được trừ và REJECTED được cộng.
+    """
+    mock_inv_repo = MagicMock()
+    mock_session = MagicMock()
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        inventory_repo=mock_inv_repo,
+        session=mock_session,
+    )
+
+    doc = service.create_sales_return_document(
+        to_warehouse_id=1,
+        items=[{"product_id": 503, "quantity": 8, "unit_price": 30.0, "position_id": 4, "lot_number": "LOT-REJ"}],
+        created_by="clerk",
+    )
+    mock_inv_repo.adjust_location_quantity.reset_mock()
+
+    inspected = service.inspect_qa_document(
+        document_id=doc.document_id,
+        inspected_by="qa_inspector",
+        passed=False,
+        note="Item physically broken",
+    )
+
+    assert inspected.status == DocumentStatus.CANCELLED
+    assert "QA Inspection Failed" in inspected.cancellation_reason
+    # Verify inventory was transitioned to REJECTED
+    assert mock_inv_repo.adjust_location_quantity.call_count == 2
+    mock_inv_repo.adjust_location_quantity.assert_any_call(
+        warehouse_id=1,
+        position_id=4,
+        product_id=503,
+        quantity_delta=-8,
+        status="QUARANTINED",
+        lot_number="LOT-REJ",
+        lpn="",
+        owner_id="DEFAULT_OWNER",
+    )
+    mock_inv_repo.adjust_location_quantity.assert_any_call(
+        warehouse_id=1,
+        position_id=4,
+        product_id=503,
+        quantity_delta=8,
+        status="REJECTED",
+        lot_number="LOT-REJ",
+        lpn="",
+        owner_id="DEFAULT_OWNER",
+    )
+
+
+def test_sales_return_e2e_with_real_inventory_repo(mock_document_repo):
+    """
+    TASK-083 Acceptance Criteria:
+    - Viết test end-to-end: Tạo đơn trả hàng -> QA kiểm định Passed ->
+      Tồn kho AVAILABLE tăng chính xác theo số lượng hàng trả về.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.shared.core.database import Base, import_all_models
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+    from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    inv_repo = InventoryRepo(session)
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        inventory_repo=inv_repo,
+        session=session,
+    )
+
+    product_id = 999
+    warehouse_id = 1
+    position_id = 10
+    return_qty = 20
+
+    # 1. Create SALES_RETURN document
+    doc = service.create_sales_return_document(
+        to_warehouse_id=warehouse_id,
+        items=[{
+            "product_id": product_id,
+            "quantity": return_qty,
+            "unit_price": 50.0,
+            "position_id": position_id,
+            "lot_number": "LOT-RET-REAL",
+        }],
+        created_by="return_officer",
+        note="Customer returning unopened boxes",
+    )
+
+    # Check that location has 20 QUARANTINED and 0 AVAILABLE
+    quarantined_row = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=warehouse_id,
+        position_id=position_id,
+        product_id=product_id,
+        status="QUARANTINED",
+    ).first()
+    assert quarantined_row is not None
+    assert quarantined_row.quantity == 20
+
+    available_before = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=warehouse_id,
+        position_id=position_id,
+        product_id=product_id,
+        status="AVAILABLE",
+    ).first()
+    assert available_before is None or available_before.quantity == 0
+
+    # 2. Perform QA Inspection Passed
+    inspected = service.inspect_qa_document(
+        document_id=doc.document_id,
+        inspected_by="qa_specialist",
+        passed=True,
+        note="Quality validated - goods pristine",
+    )
+
+    assert inspected.status == DocumentStatus.QA_INSPECTED
+
+    # Check that QUARANTINED is now 0 and AVAILABLE is 20!
+    session.refresh(quarantined_row)
+    assert quarantined_row.quantity == 0
+
+    available_after = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=warehouse_id,
+        position_id=position_id,
+        product_id=product_id,
+        status="AVAILABLE",
+    ).first()
+    assert available_after is not None
+    assert available_after.quantity == return_qty
+    session.close()
+
+
+
 
 

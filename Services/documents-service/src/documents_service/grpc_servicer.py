@@ -1,16 +1,19 @@
-from __future__ import annotations
-
+from datetime import datetime, timezone
 import grpc
 
 from shared_utils.events import get_publisher
 from shared_utils.security import sanitize_grpc_error
 
-
 from app.modules.documents.application.services.document_service import DocumentService
+from app.modules.documents.application.services.wave_service import WaveService
+from app.modules.documents.application.services.cycle_count_service import CycleCountService
+from app.modules.documents.domain.entities.cycle_count import CycleCountItem
+from app.modules.documents.application.services.packing_service import PackingService, PackItem
 from app.modules.documents.infrastructure.repositories.document_repo import DocumentRepo
 from app.shared.core.database import get_db_session
 
 from documents_service.gen.wms.documents.v1 import documents_pb2, documents_pb2_grpc
+
 
 
 class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
@@ -367,6 +370,192 @@ class DocumentsServiceServicer(documents_pb2_grpc.DocumentsServiceServicer):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(sanitize_grpc_error(exc))
             return documents_pb2.RevertToInProgressResponse(message=str(exc))
+
+    # Phase 10: Wave Picking
+    def CreateWave(self, request: documents_pb2.CreateWaveRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                service = WaveService(session=db)
+                try:
+                    cutoff = datetime.fromisoformat(request.dispatch_cutoff)
+                except Exception:
+                    cutoff = datetime.now(timezone.utc)
+                wave = service.create_wave(
+                    wave_id=request.wave_id,
+                    carrier=request.carrier,
+                    dispatch_cutoff=cutoff,
+                    max_orders=request.max_orders or 50,
+                )
+                return documents_pb2.WaveResponse(
+                    wave_id=wave.wave_id,
+                    carrier=wave.carrier,
+                    dispatch_cutoff=wave.dispatch_cutoff.isoformat() if hasattr(wave.dispatch_cutoff, "isoformat") else str(wave.dispatch_cutoff),
+                    max_orders=wave.max_orders,
+                    status=wave.status.value if hasattr(wave.status, "value") else str(wave.status),
+                    order_count=len(wave.orders),
+                    created_at=wave.created_at.isoformat() if hasattr(wave.created_at, "isoformat") else str(wave.created_at),
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return documents_pb2.WaveResponse(wave_id=request.wave_id)
+
+    def GetWave(self, request: documents_pb2.GetWaveRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                service = WaveService(session=db)
+                wave = service.get_wave(request.wave_id)
+                return documents_pb2.WaveResponse(
+                    wave_id=wave.wave_id,
+                    carrier=wave.carrier,
+                    dispatch_cutoff=wave.dispatch_cutoff.isoformat() if hasattr(wave.dispatch_cutoff, "isoformat") else str(wave.dispatch_cutoff),
+                    max_orders=wave.max_orders,
+                    status=wave.status.value if hasattr(wave.status, "value") else str(wave.status),
+                    order_count=len(wave.orders),
+                    created_at=wave.created_at.isoformat() if hasattr(wave.created_at, "isoformat") else str(wave.created_at),
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.NOT_FOUND if "not found" in str(exc).lower() else grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return documents_pb2.WaveResponse(wave_id=request.wave_id)
+
+    # Phase 10: Cycle Counting
+    def CreateCycleCount(self, request: documents_pb2.CreateCycleCountRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                service = CycleCountService(session=db)
+                items = [
+                    CycleCountItem(
+                        item_id=i.item_id,
+                        product_id=int(i.product_id),
+                        location_id=i.location_id,
+                        system_qty=int(i.system_qty),
+                        counted_qty=int(i.counted_qty) if i.counted_qty > 0 else None,
+                        lot_number=i.lot_number or "",
+                        unit_cost=float(i.unit_cost) if i.unit_cost else 0.0,
+                    )
+                    for i in request.items
+                ]
+                sheet = service.create_cycle_count_sheet(
+                    cycle_count_id=request.cycle_count_id,
+                    warehouse_id=int(request.warehouse_id),
+                    title=request.title,
+                    items=items,
+                    assigned_to=request.assigned_to or None,
+                    discrepancy_qty_threshold=request.discrepancy_qty_threshold,
+                    discrepancy_value_threshold=request.discrepancy_value_threshold,
+                    created_by=request.created_by or "system",
+                    note=request.note or None,
+                )
+                return documents_pb2.CycleCountResponse(
+                    cycle_count_id=sheet.cycle_count_id,
+                    warehouse_id=sheet.warehouse_id,
+                    title=sheet.title,
+                    status=sheet.status.value if hasattr(sheet.status, "value") else str(sheet.status),
+                    assigned_to=sheet.assigned_to or "",
+                    discrepancy_qty_threshold=sheet.discrepancy_qty_threshold,
+                    discrepancy_value_threshold=sheet.discrepancy_value_threshold,
+                    created_by=sheet.created_by or "",
+                    note=sheet.note or "",
+                    items=[
+                        documents_pb2.CycleCountItemProto(
+                            item_id=item.item_id,
+                            product_id=int(item.product_id),
+                            location_id=str(item.location_id),
+                            system_qty=int(item.system_qty),
+                            counted_qty=int(item.counted_qty) if item.counted_qty is not None else 0,
+                            lot_number=str(item.lot_number or ""),
+                            unit_cost=float(item.unit_cost or 0.0),
+                        )
+                        for item in sheet.items
+                    ],
+                    created_at=sheet.created_at.isoformat() if hasattr(sheet.created_at, "isoformat") else str(sheet.created_at),
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return documents_pb2.CycleCountResponse(cycle_count_id=request.cycle_count_id)
+
+    def GetCycleCount(self, request: documents_pb2.GetCycleCountRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                service = CycleCountService(session=db)
+                sheet = service.get_sheet(request.cycle_count_id)
+                return documents_pb2.CycleCountResponse(
+                    cycle_count_id=sheet.cycle_count_id,
+                    warehouse_id=sheet.warehouse_id,
+                    title=sheet.title,
+                    status=sheet.status.value if hasattr(sheet.status, "value") else str(sheet.status),
+                    assigned_to=sheet.assigned_to or "",
+                    discrepancy_qty_threshold=sheet.discrepancy_qty_threshold,
+                    discrepancy_value_threshold=sheet.discrepancy_value_threshold,
+                    created_by=sheet.created_by or "",
+                    note=sheet.note or "",
+                    items=[
+                        documents_pb2.CycleCountItemProto(
+                            item_id=item.item_id,
+                            product_id=int(item.product_id),
+                            location_id=str(item.location_id),
+                            system_qty=int(item.system_qty),
+                            counted_qty=int(item.counted_qty) if item.counted_qty is not None else 0,
+                            lot_number=str(item.lot_number or ""),
+                            unit_cost=float(item.unit_cost or 0.0),
+                        )
+                        for item in sheet.items
+                    ],
+                    created_at=sheet.created_at.isoformat() if hasattr(sheet.created_at, "isoformat") else str(sheet.created_at),
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.NOT_FOUND if "not found" in str(exc).lower() else grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return documents_pb2.CycleCountResponse(cycle_count_id=request.cycle_count_id)
+
+    # Phase 10: Packing & Check-Weigher
+    def VerifyPacking(self, request: documents_pb2.VerifyPackingRequest, context: grpc.ServicerContext):
+        try:
+            with get_db_session() as db:
+                tolerance = float(request.override_tolerance_g) if request.override_tolerance_g > 0 else 50.0
+                service = PackingService(tolerance_g=tolerance, session=db)
+                if request.items and not service._repo.exists(request.carton_id):
+                    service.create_carton(
+                        carton_id=request.carton_id,
+                        order_id=request.order_id or request.carton_id,
+                        items=[
+                            PackItem(
+                                product_id=str(i.product_id),
+                                sku=str(i.sku),
+                                quantity=int(i.quantity),
+                                unit_weight_g=float(i.unit_weight_g),
+                            )
+                            for i in request.items
+                        ],
+                        packaging_tare_weight_g=float(request.packaging_tare_weight_g) if request.packaging_tare_weight_g > 0 else 100.0,
+                    )
+                result = service.verify_check_weigher(
+                    carton_id=request.carton_id,
+                    measured_weight_g=float(request.measured_weight_g),
+                    override_tolerance_g=tolerance if request.override_tolerance_g > 0 else None,
+                )
+                carton = service.get_carton(request.carton_id)
+                return documents_pb2.VerifyPackingResponse(
+                    carton_id=result.carton_id,
+                    theoretical_weight_g=result.theoretical_weight_g,
+                    measured_weight_g=result.measured_weight_g,
+                    deviation_g=result.deviation_g,
+                    is_valid=result.is_valid,
+                    allowed_tolerance_g=result.allowed_tolerance_g,
+                    message=result.message,
+                    status=carton.status.value if hasattr(carton.status, "value") else str(carton.status),
+                )
+        except Exception as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(sanitize_grpc_error(exc))
+            return documents_pb2.VerifyPackingResponse(
+                carton_id=request.carton_id,
+                message=str(exc),
+                is_valid=False,
+            )
+
 
 
 add_DocumentsServiceServicer_to_server = documents_pb2_grpc.add_DocumentsServiceServicer_to_server

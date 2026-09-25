@@ -120,5 +120,51 @@ class CancelProposalPayload(BaseModel):
     cancellation_reason: str = "Cancelled by creator"
 
 
+class CreateWavePayload(BaseModel):
+    wave_id: str
+    carrier: str
+    dispatch_cutoff: str
+    max_orders: int = 50
+
+
+class CycleCountItemPayload(BaseModel):
+    item_id: str
+    product_id: int
+    location_id: str
+    system_qty: int = 0
+    counted_qty: int | None = None
+    lot_number: str = ""
+    unit_cost: float = 0.0
+
+
+class CreateCycleCountPayload(BaseModel):
+    cycle_count_id: str
+    warehouse_id: int
+    title: str
+    items: list[CycleCountItemPayload] = Field(default_factory=list)
+    assigned_to: str | None = None
+    discrepancy_qty_threshold: int = 0
+    discrepancy_value_threshold: float = 0.0
+    created_by: str = "system"
+    note: str | None = None
+
+
+class PackItemPayload(BaseModel):
+    product_id: str
+    sku: str
+    quantity: int
+    unit_weight_g: float
+
+
+class VerifyPackingPayload(BaseModel):
+    carton_id: str
+    order_id: str = ""
+    measured_weight_g: float
+    packaging_tare_weight_g: float = 100.0
+    items: list[PackItemPayload] = Field(default_factory=list)
+    override_tolerance_g: float = 0.0
+
+
+
 
 

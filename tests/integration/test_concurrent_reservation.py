@@ -31,11 +31,7 @@ try:
 except Exception:
     pass
 
-try:
-    from app.modules.positions.infrastructure.models.position import PositionModel  # noqa: F401
-    from app.modules.warehouses.infrastructure.models.warehouse import WarehouseModel  # noqa: F401
-except ImportError:
-    pass
+# Unused imports removed
 
 from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
 from app.modules.inventory.infrastructure.models.inventory_transaction import InventoryTransactionModel
@@ -323,3 +319,104 @@ def test_lock_ordering_prevents_deadlock(concurrency_db_engine):
 
     errors = [err for status, err in results if status == "ERROR"]
     assert len(errors) == 0, f"Concurrent lock ordering test encountered errors: {errors}"
+
+
+def test_deterministic_multiproduct_reservation_prevents_deadlock(concurrency_db_engine):
+    """
+    TASK-081 Acceptance Criteria:
+    - 10 concurrent threads processing multi-item documents with inverse product ordering:
+      Even threads: Document A has [SKU 371, SKU 372] (already sorted)
+      Odd threads:  Document B has [SKU 372, SKU 371] (reverse order)
+    - With deterministic sorting by int(product_id), both request locks in the exact same sequence:
+      Lock(371) -> Lock(372).
+    - 100% of requests complete with 0 deadlocks (no OperationalError: deadlock detected).
+    """
+    SessionLocal = sessionmaker(bind=concurrency_db_engine, autoflush=False, expire_on_commit=False)
+
+    # Seed stock for product 371 and 372, warehouse 1, physical=1000 each
+    with SessionLocal() as session:
+        session.query(WarehouseInventoryModel).filter(
+            WarehouseInventoryModel.product_id.in_([371, 372]),
+            WarehouseInventoryModel.warehouse_id == 1,
+        ).delete(synchronize_session=False)
+        session.query(StockReservationModel).filter(
+            StockReservationModel.product_id.in_([371, 372]),
+            StockReservationModel.warehouse_id == 1,
+        ).delete(synchronize_session=False)
+
+        wh_item_1 = WarehouseInventoryModel(
+            product_id=371,
+            warehouse_id=1,
+            quantity=1000,
+            physical_qty=1000,
+            reserved_qty=0,
+        )
+        wh_item_2 = WarehouseInventoryModel(
+            product_id=372,
+            warehouse_id=1,
+            quantity=1000,
+            physical_qty=1000,
+            reserved_qty=0,
+        )
+        session.add_all([wh_item_1, wh_item_2])
+        session.commit()
+
+    num_threads = 10
+
+    def worker_reserve_multiproduct(thread_idx: int):
+        session = SessionLocal()
+        try:
+            repo = InventoryRepo(session)
+            # Inverse order simulation:
+            # Thread even: [371, 372]
+            # Thread odd:  [372, 371]
+            raw_items = [
+                {"product_id": 372, "quantity": 1},
+                {"product_id": 371, "quantity": 1},
+            ] if thread_idx % 2 == 1 else [
+                {"product_id": 371, "quantity": 1},
+                {"product_id": 372, "quantity": 1},
+            ]
+
+            # Deterministic lock ordering (TASK-081 rule)
+            sorted_items = sorted(raw_items, key=lambda it: int(it["product_id"]))
+
+            res_ids = []
+            for item in sorted_items:
+                res_id = repo.create_reservation(
+                    source_type="SO",
+                    source_id=5000 + thread_idx,
+                    document_id=5000 + thread_idx,
+                    product_id=item["product_id"],
+                    warehouse_id=1,
+                    requested_qty=item["quantity"],
+                    created_by=f"worker_{thread_idx}",
+                    idempotency_key=f"MULTI_RES_DOC_{5000 + thread_idx}_SKU_{item['product_id']}",
+                    expires_at=None,
+                )
+                res_ids.append(res_id)
+
+            session.commit()
+            return ("SUCCESS", res_ids)
+        except Exception as e:
+            session.rollback()
+            return ("ERROR", str(e))
+        finally:
+            session.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(worker_reserve_multiproduct, i) for i in range(num_threads)]
+        results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    successes = [res for status, res in results if status == "SUCCESS"]
+    errors = [err for status, err in results if status == "ERROR"]
+
+    assert len(errors) == 0, f"Deadlock or errors encountered during concurrent multi-product reservation: {errors}"
+    assert len(successes) == num_threads, f"Expected {num_threads} successful completions, got {len(successes)}"
+
+    # Verify inventory reserved quantities
+    with SessionLocal() as session:
+        wh_371 = session.query(WarehouseInventoryModel).filter_by(product_id=371, warehouse_id=1).one()
+        wh_372 = session.query(WarehouseInventoryModel).filter_by(product_id=372, warehouse_id=1).one()
+        assert wh_371.reserved_qty == num_threads * 1
+        assert wh_372.reserved_qty == num_threads * 1

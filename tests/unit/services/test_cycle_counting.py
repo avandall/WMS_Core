@@ -26,9 +26,18 @@ from app.shared.domain.business_exceptions import (
 class TestCycleCounting:
     """Test suite for CycleCountSheet domain logic and CycleCountService."""
 
+    @pytest.fixture(autouse=True)
+    def setup_sqlite_tables(self):
+        from app.shared.core.database import Base, engine
+        from app.modules.documents.infrastructure.models.cycle_count_sheet import CycleCountSheetModel
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+
+
     @pytest.fixture
     def service(self) -> CycleCountService:
         return CycleCountService()
+
 
     @pytest.fixture
     def sample_items(self) -> list[CycleCountItem]:

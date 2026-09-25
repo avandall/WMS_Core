@@ -13,6 +13,7 @@ Acceptance Criteria:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import pytest
 from app.modules.inventory.application.services.allocation_service import (
     AllocationService,
@@ -245,3 +246,141 @@ def test_atp_with_both_doc_reservation_and_soft_quarantine(atp_session):
 
     atp = alloc_service.check_availability(warehouse_id=1, product_id=501)
     assert atp == 45, f"Expected ATP 45, got {atp}"
+
+
+def test_repo_create_reservation_eliminates_double_reservation_deficit(atp_session):
+    """
+    TASK-080 Acceptance Criteria:
+    - Kho có 100 sản phẩm (40 sản phẩm đã reserve & allocate cho Đơn 1).
+    - Đơn 2 yêu cầu 50 sản phẩm được chấp thuận thành công (thay vì bị từ chối với available=20 dưới công thức cũ).
+    """
+    repo = InventoryRepo(atp_session)
+
+    # 1. Order 1 reserves 40 units and is allocated at bin
+    res1_id = repo.create_reservation(
+        source_type="document",
+        source_id=4001,
+        document_id=4001,
+        product_id=501,
+        warehouse_id=1,
+        requested_qty=40,
+        created_by="SALES_AGENT",
+        idempotency_key="order_4001_res",
+        expires_at=None,
+        status="RESERVED",
+    )
+    assert res1_id > 0
+    repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=1,
+        product_id=501,
+        quantity_delta=0,
+        allocated_delta=40,
+        status="AVAILABLE",
+    )
+    atp_session.commit()
+
+    # 2. Order 2 requests 50 units via create_reservation
+    # Under old formula: available = (100 - 40) - 40 = 20 < 50 => would raise InsufficientStockError!
+    # Under new ATP formula: available = 100 - max(40, 40) - 0 = 60 >= 50 => SUCCEEDS!
+    res2_id = repo.create_reservation(
+        source_type="document",
+        source_id=4002,
+        document_id=4002,
+        product_id=501,
+        warehouse_id=1,
+        requested_qty=50,
+        created_by="SALES_AGENT",
+        idempotency_key="order_4002_res",
+        expires_at=None,
+        status="RESERVED",
+    )
+    assert res2_id > 0
+
+    # 3. Order 3 requests 15 units:
+    # Now valid_physical=100, doc_res=90, allocated_loc=40 => available = 100 - max(40, 90) = 10 < 15
+    # Must raise InsufficientStockError!
+    with pytest.raises(InsufficientStockError) as exc_info:
+        repo.create_reservation(
+            source_type="document",
+            source_id=4003,
+            document_id=4003,
+            product_id=501,
+            warehouse_id=1,
+            requested_qty=15,
+            created_by="SALES_AGENT",
+            idempotency_key="order_4003_res",
+            expires_at=None,
+            status="RESERVED",
+        )
+    assert "Insufficient available stock" in str(exc_info.value)
+
+
+def test_repo_create_reservation_excludes_expired_stock(atp_session):
+    """
+    TASK-080 Acceptance Criteria:
+    - Lô hàng đã hết date không được tính vào tồn kho khả dụng để đặt trước trong create_reservation.
+    """
+    repo = InventoryRepo(atp_session)
+    now = datetime.now(timezone.utc)
+
+    # Seed Position 2
+    pos2 = PositionModel(id=2, warehouse_id=1, code="BIN-A02", type="STORAGE", is_active=1)
+    atp_session.add(pos2)
+    atp_session.commit()
+
+    # Product 502:
+    # Bin 1: 50 units EXPIRED (5 days ago)
+    repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=1,
+        product_id=502,
+        quantity_delta=50,
+        status="AVAILABLE",
+        lot_number="LOT-EXP-PAST",
+        expiry_date=now - timedelta(days=5),
+    )
+    # Bin 2: 30 units VALID (expiring in 30 days)
+    repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=2,
+        product_id=502,
+        quantity_delta=30,
+        status="AVAILABLE",
+        lot_number="LOT-VALID-FUTURE",
+        expiry_date=now + timedelta(days=30),
+    )
+    atp_session.commit()
+
+    # Physical total is 80 units, but only 30 units are valid and unexpired.
+    # Requesting 40 units must FAIL because only 30 units are available.
+    with pytest.raises(InsufficientStockError) as exc_info:
+        repo.create_reservation(
+            source_type="document",
+            source_id=5001,
+            document_id=5001,
+            product_id=502,
+            warehouse_id=1,
+            requested_qty=40,
+            created_by="SALES_AGENT",
+            idempotency_key="order_5001_res",
+            expires_at=None,
+            status="RESERVED",
+        )
+    assert "Insufficient available stock" in str(exc_info.value)
+    assert "Available: 30" in str(exc_info.value)
+
+    # Requesting 25 units must SUCCEED!
+    res_id = repo.create_reservation(
+        source_type="document",
+        source_id=5002,
+        document_id=5002,
+        product_id=502,
+        warehouse_id=1,
+        requested_qty=25,
+        created_by="SALES_AGENT",
+        idempotency_key="order_5002_res",
+        expires_at=None,
+        status="RESERVED",
+    )
+    assert res_id > 0
