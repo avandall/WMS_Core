@@ -2,12 +2,13 @@ import json
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.shared.domain.business_exceptions import (
     InvalidQuantityError,
     InsufficientStockError,
+    LocationFrozenError,
 )
 from app.modules.inventory.domain.entities.inventory import InventoryItem
 from app.shared.core.transaction import TransactionalRepository
@@ -54,23 +55,26 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         self.adjust_warehouse_quantity(product_id, 1, quantity)
 
     def adjust_warehouse_quantity(
-        self, product_id: int, warehouse_id: int, quantity_delta: int
+        self, product_id: int, warehouse_id: int, quantity_delta: int, owner_id: str = "DEFAULT_OWNER"
     ) -> None:
+        owner_clean = owner_id or "DEFAULT_OWNER"
         row = self.session.execute(
             select(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.product_id == product_id,
                 WarehouseInventoryModel.warehouse_id == warehouse_id,
+                WarehouseInventoryModel.owner_id == owner_clean,
             ).with_for_update()
         ).scalar_one_or_none()
 
         if row is None:
             if quantity_delta < 0:
                 raise InsufficientStockError(
-                    f"Insufficient warehouse stock for product {product_id} in warehouse {warehouse_id}"
+                    f"Insufficient warehouse stock for product {product_id} in warehouse {warehouse_id} (owner: {owner_clean})"
                 )
             row = WarehouseInventoryModel(
                 product_id=product_id,
                 warehouse_id=warehouse_id,
+                owner_id=owner_clean,
                 quantity=quantity_delta,
                 # Phase 2: keep physical_qty in sync with quantity for new rows
                 physical_qty=quantity_delta,
@@ -80,7 +84,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             next_quantity = row.quantity + quantity_delta
             if next_quantity < 0:
                 raise InsufficientStockError(
-                    f"Insufficient warehouse stock. Available: {row.quantity}, Requested: {abs(quantity_delta)}"
+                    f"Insufficient warehouse stock for owner {owner_clean}. Available: {row.quantity}, Requested: {abs(quantity_delta)}"
                 )
             row.quantity = next_quantity
             # Phase 2: keep physical_qty in sync with quantity on every update
@@ -682,8 +686,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "available_qty": 0,
             }
 
-        loc_query = (
-            select(func.coalesce(func.sum(InventoryLocationModel.quantity - InventoryLocationModel.allocated_qty), 0))
+        loc_physical_query = (
+            select(func.coalesce(func.sum(InventoryLocationModel.quantity), 0))
             .where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.product_id == product_id,
@@ -691,8 +695,20 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             )
         )
         if owner_id:
-            loc_query = loc_query.where(InventoryLocationModel.owner_id == owner_id)
-        loc_available = self.session.execute(loc_query).scalar() or 0
+            loc_physical_query = loc_physical_query.where(InventoryLocationModel.owner_id == owner_id)
+        loc_physical = self.session.execute(loc_physical_query).scalar() or 0
+
+        loc_allocated_query = (
+            select(func.coalesce(func.sum(InventoryLocationModel.allocated_qty), 0))
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status == "AVAILABLE",
+            )
+        )
+        if owner_id:
+            loc_allocated_query = loc_allocated_query.where(InventoryLocationModel.owner_id == owner_id)
+        loc_allocated = self.session.execute(loc_allocated_query).scalar() or 0
 
         has_loc_query = (
             select(InventoryLocationModel.id)
@@ -705,7 +721,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             has_loc_query = has_loc_query.where(InventoryLocationModel.owner_id == owner_id)
         has_locations = self.session.execute(has_loc_query.limit(1)).scalar() is not None
 
-        calc_available = max(0, int(loc_available) - int(warehouse_row.reserved_qty)) if has_locations else int(warehouse_row.physical_qty - warehouse_row.reserved_qty)
+        calc_available = max(0, int(loc_physical) - max(int(loc_allocated), int(warehouse_row.reserved_qty))) if has_locations else int(warehouse_row.physical_qty - warehouse_row.reserved_qty)
 
         return {
             "product_id": product_id,
@@ -852,6 +868,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         status: Optional[str] = None,
         lot_number: Optional[str] = None,
         owner_id: Optional[str] = None,
+        is_counting: Optional[bool] = None,
         for_update: bool = False,
     ) -> List[dict]:
         query = (
@@ -874,6 +891,8 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             query = query.where(InventoryLocationModel.status == status)
         if lot_number is not None:
             query = query.where(InventoryLocationModel.lot_number == lot_number)
+        if is_counting is not None:
+            query = query.where(InventoryLocationModel.is_counting == is_counting)
 
         query = query.order_by(
             InventoryLocationModel.warehouse_id,
@@ -896,6 +915,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 "quantity": int(loc.quantity),
                 "allocated_qty": int(loc.allocated_qty),
                 "status": loc.status,
+                "is_counting": bool(getattr(loc, "is_counting", False)),
                 "available_qty": int(loc.quantity - loc.allocated_qty),
                 "x_coordinate": float(pos.x_coordinate or 0.0) if pos else 0.0,
                 "y_coordinate": float(pos.y_coordinate or 0.0) if pos else 0.0,
@@ -925,6 +945,10 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         lpn_clean = lpn or ""
         lot_clean = lot_number or ""
         owner_clean = owner_id or "DEFAULT_OWNER"
+        if quantity_delta != 0 and self.is_position_counting(warehouse_id, position_id):
+            raise LocationFrozenError(
+                f"Position {position_id} in warehouse {warehouse_id} is frozen for cycle counting"
+            )
         row = self.session.execute(
             select(InventoryLocationModel).where(
                 InventoryLocationModel.warehouse_id == warehouse_id,
@@ -996,8 +1020,55 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
             "quantity": int(row.quantity),
             "allocated_qty": int(row.allocated_qty),
             "status": row.status,
+            "is_counting": bool(getattr(row, "is_counting", False)),
             "available_qty": int(row.quantity - row.allocated_qty),
         }
+
+    def is_position_counting(self, warehouse_id: int, position_id: int) -> bool:
+        """TASK-096: Checks whether a position is frozen for cycle counting (PositionModel or InventoryLocationModel)."""
+        pos = self.session.execute(
+            select(PositionModel).where(
+                PositionModel.warehouse_id == warehouse_id,
+                PositionModel.id == position_id,
+            )
+        ).scalar_one_or_none()
+        if pos and getattr(pos, "is_counting", False):
+            return True
+        loc_counting = self.session.execute(
+            select(InventoryLocationModel).where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.position_id == position_id,
+                InventoryLocationModel.is_counting == True,
+            )
+        ).first()
+        return loc_counting is not None
+
+    def set_location_counting(self, warehouse_id: int, position_ids: List[int], is_counting: bool) -> None:
+        """TASK-089 & TASK-096: Sets freeze lock flag on physical positions and inventory locations during cycle counting."""
+        if not position_ids:
+            return
+        # 1. Update physical PositionModel (locks both empty and occupied bins)
+        self.session.execute(
+            update(PositionModel)
+            .where(
+                PositionModel.warehouse_id == warehouse_id,
+                PositionModel.id.in_(position_ids),
+            )
+            .values(is_counting=is_counting)
+            .execution_options(synchronize_session="fetch")
+        )
+        # 2. Update InventoryLocationModel
+        self.session.execute(
+            update(InventoryLocationModel)
+            .where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.position_id.in_(position_ids),
+            )
+            .values(is_counting=is_counting)
+            .execution_options(synchronize_session="fetch")
+        )
+        self.session.expire_all()
+        self._commit_if_auto()
 
     def move_location_stock(
         self,
@@ -1023,6 +1094,16 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
         dest_warehouse_id = to_warehouse_id or from_warehouse_id
         if from_warehouse_id == dest_warehouse_id and from_position_id == to_position_id:
             raise ValueError("Source and destination locations cannot be the same")
+
+        # TASK-096: Guard against moving stock into or out of frozen counting locations
+        if self.is_position_counting(from_warehouse_id, from_position_id):
+            raise LocationFrozenError(
+                f"Source position {from_position_id} in warehouse {from_warehouse_id} is frozen for cycle counting"
+            )
+        if self.is_position_counting(dest_warehouse_id, to_position_id):
+            raise LocationFrozenError(
+                f"Destination position {to_position_id} in warehouse {dest_warehouse_id} is frozen for cycle counting"
+            )
 
         lpn_clean = lpn or ""
         lot_clean = lot_number or ""
@@ -1229,6 +1310,16 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.owner_id == owner_clean,
                 InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status != "IN_TRANSIT",
+            )
+        ).scalar() or 0
+
+        total_in_transit = self.session.execute(
+            select(func.coalesce(func.sum(InventoryLocationModel.quantity), 0)).where(
+                InventoryLocationModel.warehouse_id == warehouse_id,
+                InventoryLocationModel.owner_id == owner_clean,
+                InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status == "IN_TRANSIT",
             )
         ).scalar() or 0
 
@@ -1237,6 +1328,7 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 InventoryLocationModel.warehouse_id == warehouse_id,
                 InventoryLocationModel.owner_id == owner_clean,
                 InventoryLocationModel.product_id == product_id,
+                InventoryLocationModel.status != "IN_TRANSIT",
             )
         ).scalar() or 0
 
@@ -1260,13 +1352,14 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
                 physical_qty=total_physical,
                 reserved_qty=effective_reserved,
                 incoming_qty=0,
-                in_transit_qty=0,
+                in_transit_qty=total_in_transit,
             )
             self.session.add(wh_inv)
         else:
             wh_inv.quantity = total_physical
             wh_inv.physical_qty = total_physical
             wh_inv.reserved_qty = effective_reserved
+            wh_inv.in_transit_qty = total_in_transit
         self.session.flush()
 
     def get_draft_proposal(self, proposal_id: str) -> Optional[DraftProposalModel]:

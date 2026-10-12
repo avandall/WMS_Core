@@ -1,21 +1,24 @@
 from typing import List, Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.documents.application.services.packing_service import (
+    CartonManifestItem,
     CartonPackage,
     PackItem,
     PackingStatus,
     WeightVerificationResult,
 )
 from app.modules.documents.infrastructure.models.carton_package import (
+    CartonManifestItemModel,
     CartonPackageModel,
 )
 from app.shared.core.transaction import TransactionalRepository
 
 
 class PackingRepository(TransactionalRepository):
-    """PostgreSQL-backed repository for Carton Packages and check-weigher records."""
+    """PostgreSQL-backed repository for Carton Packages, manifests, and check-weigher records."""
 
     def __init__(self, session: Session, auto_commit: bool = True):
         super().__init__(session, auto_commit=auto_commit)
@@ -102,11 +105,14 @@ class PackingRepository(TransactionalRepository):
                 message=vrd.get("message", ""),
             )
 
+        manifest_rows = self.get_manifest_by_carton(model.carton_id)
+
         return CartonPackage(
             carton_id=model.carton_id,
             order_id=model.order_id,
             packaging_tare_weight_g=model.packaging_tare_weight_g,
             items=items,
+            manifest_items=manifest_rows,
             status=PackingStatus(model.status),
             measured_weight_g=model.measured_weight_g,
             verification_result=vr,
@@ -121,3 +127,114 @@ class PackingRepository(TransactionalRepository):
         if model:
             self.session.delete(model)
             self._commit_if_auto()
+
+    def save_manifest_items(
+        self, carton_id: str, manifest_items: List[CartonManifestItem]
+    ) -> None:
+        """Persists detailed carton manifest items into relational table."""
+        for item in manifest_items:
+            m = CartonManifestItemModel(
+                carton_id=carton_id,
+                package_id=item.package_id or carton_id,
+                document_id=item.document_id,
+                product_id=item.product_id,
+                sku=item.sku,
+                quantity=item.quantity,
+                lot_number=item.lot_number,
+                unit_weight_g=item.unit_weight_g,
+            )
+            self.session.add(m)
+        self._commit_if_auto()
+
+    def get_manifest_by_carton(self, carton_id: str) -> List[CartonManifestItem]:
+        """Queries relational manifest lines by carton barcode / SSCC."""
+        rows = self.session.execute(
+            select(CartonManifestItemModel)
+            .where(CartonManifestItemModel.carton_id == carton_id)
+            .order_by(CartonManifestItemModel.id)
+        ).scalars().all()
+        return [
+            CartonManifestItem(
+                id=int(r.id),
+                carton_id=r.carton_id,
+                package_id=r.package_id,
+                document_id=r.document_id,
+                product_id=int(r.product_id),
+                sku=r.sku or "",
+                quantity=int(r.quantity),
+                lot_number=r.lot_number or "",
+                unit_weight_g=float(r.unit_weight_g or 0.0),
+            )
+            for r in rows
+        ]
+
+    def get_manifest_by_document(
+        self, document_id: int | str
+    ) -> List[CartonManifestItem]:
+        """Queries relational manifest lines across cartons for a given document."""
+        doc_id_int: Optional[int] = None
+        try:
+            doc_id_int = int(document_id)
+        except (ValueError, TypeError):
+            pass
+
+        query = select(CartonManifestItemModel).outerjoin(
+            CartonPackageModel,
+            CartonManifestItemModel.carton_id == CartonPackageModel.carton_id,
+        )
+        if doc_id_int is not None:
+            query = query.where(
+                (CartonManifestItemModel.document_id == doc_id_int)
+                | (CartonPackageModel.order_id == str(document_id))
+            )
+        else:
+            query = query.where(CartonPackageModel.order_id == str(document_id))
+
+        rows = self.session.execute(
+            query.order_by(CartonManifestItemModel.id)
+        ).scalars().all()
+        return [
+            CartonManifestItem(
+                id=int(r.id),
+                carton_id=r.carton_id,
+                package_id=r.package_id,
+                document_id=r.document_id,
+                product_id=int(r.product_id),
+                sku=r.sku or "",
+                quantity=int(r.quantity),
+                lot_number=r.lot_number or "",
+                unit_weight_g=float(r.unit_weight_g or 0.0),
+            )
+            for r in rows
+        ]
+
+    def get_packed_quantity_for_document(
+        self, document_id: int | str, product_id: int
+    ) -> int:
+        """Sums already packed quantity for a specific product under a document."""
+        doc_id_int: Optional[int] = None
+        try:
+            doc_id_int = int(document_id)
+        except (ValueError, TypeError):
+            pass
+
+        query = select(
+            func.coalesce(func.sum(CartonManifestItemModel.quantity), 0)
+        ).outerjoin(
+            CartonPackageModel,
+            CartonManifestItemModel.carton_id == CartonPackageModel.carton_id,
+        ).where(
+            CartonManifestItemModel.product_id == product_id
+        )
+
+        if doc_id_int is not None:
+            query = query.where(
+                (CartonManifestItemModel.document_id == doc_id_int)
+                | (CartonPackageModel.order_id == str(document_id))
+            )
+        else:
+            query = query.where(CartonPackageModel.order_id == str(document_id))
+
+        result = self.session.execute(query).scalar()
+        return int(result or 0)
+

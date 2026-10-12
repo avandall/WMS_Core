@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -28,6 +29,7 @@ class PositionModel(Base):
     capacity = Column(Integer)
     zone = Column(String(50))
     is_active = Column(Integer, nullable=False, default=1, index=True)
+    is_counting = Column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     # Physical WMS address & attributes (TASK-029)

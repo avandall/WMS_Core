@@ -269,6 +269,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 req_user = (request.user_id or "").strip()
                 ctx_user = self._user_id(context)
                 eff_user_id = req_user if (req_user and req_user != "system") else ctx_user
+                owner_id_val = getattr(request, "owner_id", None) or "DEFAULT_OWNER"
 
                 tx_id = service.confirm_inventory_transaction(
                     transaction_type=request.transaction_type,
@@ -279,6 +280,7 @@ class InventoryServiceServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     user_id=eff_user_id,
                     idempotency_key=request.idempotency_key or None,
                     source_warehouse_id=int(request.source_warehouse_id) if request.source_warehouse_id else 0,
+                    owner_id=owner_id_val,
                 )
                 return inventory_pb2.ConfirmInventoryTransactionResponse(
                     success=True,

@@ -2,10 +2,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Purge any previously imported 'app' module to avoid cross-service namespace collisions
-for mod in list(sys.modules.keys()):
-    if mod == "app" or mod.startswith("app."):
-        del sys.modules[mod]
 
 doc_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "documents-service" / "src")
 if doc_src not in sys.path:
@@ -29,11 +25,15 @@ from app.shared.domain.business_exceptions import EntityNotFoundError, Validatio
 def mock_document_repo():
     repo = MagicMock(spec=IDocumentRepo)
     repo._store = {}
+    repo._next_id = 100
 
     def mock_get(doc_id):
         return repo._store.get(doc_id)
 
     def mock_save(doc):
+        if getattr(doc, "document_id", 0) == 0:
+            doc.document_id = repo._next_id
+            repo._next_id += 1
         repo._store[doc.document_id] = doc
 
     repo.get.side_effect = mock_get
@@ -724,6 +724,262 @@ def test_sales_return_e2e_with_real_inventory_repo(mock_document_repo):
     ).first()
     assert available_after is not None
     assert available_after.quantity == return_qty
+    session.close()
+
+
+def test_inter_warehouse_transfer_in_transit_lifecycle(mock_document_repo):
+    """
+    TASK-088 Acceptance Criteria:
+    - Khi xác nhận xuất chứng từ TRANSFER, hệ thống tạo bản ghi tồn kho với status='IN_TRANSIT' gắn với to_warehouse_id.
+    - Hệ thống tự động sinh một chứng từ TRANSFER_RECEIPT tại to_warehouse_id với trạng thái PENDING_ARRIVAL và reference_doc_id trỏ về chứng từ xuất gốc.
+    - Khi chứng từ TRANSFER_RECEIPT được hoàn tất (confirm_execution), hàng được chuyển từ IN_TRANSIT sang AVAILABLE tại ô kệ đích.
+    - Viết test mô phỏng toàn bộ hành trình chuyển kho: Xuất kho A -> Kiểm tra tồn kho In-Transit -> Nhập kho B -> Kiểm tra tồn kho thực tế Kho B.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.shared.core.database import Base, import_all_models
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+    from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+    from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
+
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    inv_repo = InventoryRepo(session)
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        inventory_repo=inv_repo,
+        session=session,
+    )
+
+    from_wh = 1
+    to_wh = 2
+    product_id = 555
+    lot_number = "LOT-TRANS-01"
+    pos_wh_a = 101
+    pos_wh_b = 202
+    transfer_qty = 40
+
+    # 1. Seed initial inventory at Warehouse A: 100 units AVAILABLE
+    inv_repo.adjust_location_quantity(
+        warehouse_id=from_wh,
+        position_id=pos_wh_a,
+        product_id=product_id,
+        quantity_delta=100,
+        status="AVAILABLE",
+        lot_number=lot_number,
+    )
+
+    loc_a = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=from_wh,
+        position_id=pos_wh_a,
+        product_id=product_id,
+        status="AVAILABLE",
+    ).first()
+    assert loc_a.quantity == 100
+
+    # 2. Create TRANSFER document from Warehouse A to Warehouse B
+    transfer_doc = service.create_transfer_document(
+        from_warehouse_id=from_wh,
+        to_warehouse_id=to_wh,
+        items=[{
+            "product_id": product_id,
+            "quantity": transfer_qty,
+            "unit_price": 75.0,
+            "position_id": pos_wh_a,
+            "lot_number": lot_number,
+        }],
+        created_by="logistics_operator",
+        note="Replenishing regional distribution hub",
+    )
+    assert transfer_doc.document_id is not None
+    transfer_doc.status = DocumentStatus.IN_PROGRESS
+    mock_document_repo._store[transfer_doc.document_id] = transfer_doc
+
+    # 3. Confirm execution of transfer document at Warehouse A
+    executed_transfer = service.confirm_execution(
+        document_id=transfer_doc.document_id,
+        items=[{"product_id": product_id, "quantity": transfer_qty}],
+    )
+    assert executed_transfer.status == DocumentStatus.EXECUTED
+
+    # Verify Warehouse A has been deducted: 100 - 40 = 60
+    session.refresh(loc_a)
+    assert loc_a.quantity == 60
+
+    # Verify Warehouse B now has IN_TRANSIT inventory record
+    in_transit_row = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=to_wh,
+        product_id=product_id,
+        status="IN_TRANSIT",
+    ).first()
+    assert in_transit_row is not None
+    assert in_transit_row.quantity == 40
+    assert in_transit_row.lpn == f"IN_TRANSIT_{from_wh}_{to_wh}"
+
+    # Verify Warehouse B summary shows in_transit_qty == 40 and physical_qty == 0
+    wh_b_inv = session.query(WarehouseInventoryModel).filter_by(
+        warehouse_id=to_wh,
+        product_id=product_id,
+    ).first()
+    assert wh_b_inv is not None
+    assert wh_b_inv.in_transit_qty == 40
+    assert wh_b_inv.physical_qty == 0
+
+    # Verify auto-generated TRANSFER_RECEIPT (ASN) document exists
+    receipt_docs = [
+        d for d in mock_document_repo._store.values()
+        if d.doc_type == DocumentType.TRANSFER_RECEIPT and getattr(d, "reference_doc_id", None) == transfer_doc.document_id
+    ]
+    assert len(receipt_docs) == 1
+    receipt_doc = receipt_docs[0]
+    assert receipt_doc.to_warehouse_id == to_wh
+    assert receipt_doc.from_warehouse_id == from_wh
+    assert receipt_doc.status == DocumentStatus.PENDING_ARRIVAL
+    assert receipt_doc.items[0].quantity == transfer_qty
+    assert receipt_doc.items[0].product_id == product_id
+
+    # 4. Now goods arrive at Warehouse B! Confirm execution of TRANSFER_RECEIPT at destination bin pos_wh_b
+    receipt_doc.items[0].position_id = pos_wh_b
+    executed_receipt = service.confirm_execution(
+        document_id=receipt_doc.document_id,
+        items=[{"product_id": product_id, "quantity": transfer_qty}],
+    )
+    assert executed_receipt.status == DocumentStatus.EXECUTED
+
+    # Verify IN_TRANSIT at Warehouse B is now 0
+    session.refresh(in_transit_row)
+    assert in_transit_row.quantity == 0
+
+    # Verify AVAILABLE at Warehouse B target bin pos_wh_b is now 40
+    target_loc_b = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=to_wh,
+        position_id=pos_wh_b,
+        product_id=product_id,
+        status="AVAILABLE",
+    ).first()
+    assert target_loc_b is not None
+    assert target_loc_b.quantity == 40
+
+    # Verify Warehouse B summary now has physical_qty == 40, in_transit_qty == 0
+    session.refresh(wh_b_inv)
+    assert wh_b_inv.physical_qty == 40
+    assert wh_b_inv.in_transit_qty == 0
+    session.close()
+
+
+def test_inter_warehouse_transfer_short_shipment_reconciliation(mock_document_repo):
+    """TASK-098 / DOM-08: Test short-shipment reconciliation during inter-warehouse transfer receipt.
+    
+    Verifies that when goods shipped = 50 but received = 45:
+    - 50 units deducted from IN_TRANSIT (in_transit becomes 0)
+    - 45 units credited to AVAILABLE at destination location
+    - 5 units logged as SHORT_SHIPMENT in TransitDiscrepancyModel
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.shared.core.database import Base, import_all_models
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+    from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+    from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
+    from app.modules.inventory.infrastructure.models.transit_discrepancy import TransitDiscrepancyModel
+
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    inv_repo = InventoryRepo(session)
+    service = DocumentService(
+        document_repo=mock_document_repo,
+        inventory_repo=inv_repo,
+        session=session,
+    )
+
+    from_wh = 1
+    to_wh = 2
+    product_id = 777
+    lot_number = "LOT-SHORT-01"
+    pos_wh_a = 101
+    pos_wh_b = 202
+    shipped_qty = 50
+    received_qty = 45
+
+    # 1. Seed initial inventory at Warehouse A
+    inv_repo.adjust_location_quantity(
+        warehouse_id=from_wh,
+        position_id=pos_wh_a,
+        product_id=product_id,
+        quantity_delta=100,
+        status="AVAILABLE",
+        lot_number=lot_number,
+    )
+
+    # 2. Create and execute TRANSFER doc
+    transfer_doc = service.create_transfer_document(
+        from_warehouse_id=from_wh,
+        to_warehouse_id=to_wh,
+        items=[{
+            "product_id": product_id,
+            "quantity": shipped_qty,
+            "unit_price": 50.0,
+            "position_id": pos_wh_a,
+            "lot_number": lot_number,
+        }],
+        created_by="logistics_user",
+    )
+    transfer_doc.status = DocumentStatus.IN_PROGRESS
+    mock_document_repo._store[transfer_doc.document_id] = transfer_doc
+
+    service.confirm_execution(
+        document_id=transfer_doc.document_id,
+        items=[{"product_id": product_id, "quantity": shipped_qty}],
+    )
+
+    # Find auto-generated TRANSFER_RECEIPT
+    receipt_doc = [
+        d for d in mock_document_repo._store.values()
+        if d.doc_type == DocumentType.TRANSFER_RECEIPT and getattr(d, "reference_doc_id", None) == transfer_doc.document_id
+    ][0]
+    receipt_doc.items[0].position_id = pos_wh_b
+
+    # 3. Confirm receipt with SHORT SHIPMENT (received 45 out of 50)
+    service.confirm_execution(
+        document_id=receipt_doc.document_id,
+        items=[{"product_id": product_id, "quantity": received_qty}],
+    )
+
+    # In-transit must be fully cleared to 0
+    in_transit_row = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=to_wh,
+        product_id=product_id,
+        status="IN_TRANSIT",
+    ).first()
+    assert in_transit_row.quantity == 0
+
+    # Destination bin must have exactly 45 AVAILABLE
+    available_row = session.query(InventoryLocationModel).filter_by(
+        warehouse_id=to_wh,
+        position_id=pos_wh_b,
+        product_id=product_id,
+        status="AVAILABLE",
+    ).first()
+    assert available_row.quantity == 45
+
+    # Discrepancy record must exist in TransitDiscrepancyModel
+    discrepancy = session.query(TransitDiscrepancyModel).filter_by(
+        document_id=receipt_doc.document_id,
+        product_id=product_id,
+    ).first()
+    assert discrepancy is not None
+    assert discrepancy.shipped_quantity == 50
+    assert discrepancy.received_quantity == 45
+    assert discrepancy.discrepancy_quantity == 5
+    assert discrepancy.discrepancy_type == "SHORT_SHIPMENT"
     session.close()
 
 

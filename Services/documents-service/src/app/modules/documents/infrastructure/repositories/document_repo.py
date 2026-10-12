@@ -65,6 +65,7 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
                 "execution_started_at": getattr(document, "execution_started_at", None),
                 "completed_at": getattr(document, "completed_at", None),
                 "assigned_to": getattr(document, "assigned_to", None),
+                "reference_doc_id": getattr(document, "reference_doc_id", None),
             }
             # Only pass document_id explicitly when it is already a real DB id
             # (i.e., was loaded from DB or assigned by a test mock).
@@ -100,6 +101,7 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
             model.execution_started_at = getattr(document, "execution_started_at", None)
             model.completed_at = getattr(document, "completed_at", None)
             model.assigned_to = getattr(document, "assigned_to", None)
+            model.reference_doc_id = getattr(document, "reference_doc_id", None)
 
             # Clear existing items before re-adding
             model.items.clear()
@@ -213,4 +215,5 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
         document.execution_started_at = getattr(model, "execution_started_at", None)
         document.completed_at = getattr(model, "completed_at", None)
         document.assigned_to = getattr(model, "assigned_to", None)
+        document.reference_doc_id = getattr(model, "reference_doc_id", None)
         return document

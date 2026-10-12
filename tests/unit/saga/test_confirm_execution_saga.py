@@ -147,3 +147,147 @@ def test_saga_compensation_dlq_stack_on_revert_failure(mock_request, caplog):
         assert dlq_item["document_id"] == 202
         assert "Documents DB lock timeout" in dlq_item["error"]
         assert "Failed to revert document 202 status to IN_PROGRESS" in caplog.text
+
+
+def test_saga_transfers_owner_id_to_inventory_service(mock_request):
+    """TASK-095: Verify ConfirmExecutionSaga extracts doc.owner_id and forwards it to inventory-service."""
+    saga = ConfirmExecutionSaga(document_id=301)
+
+    mock_doc = MagicMock()
+    mock_doc.doc_type = "SALE"
+    mock_doc.transaction_type = "SALES_SHIPMENT"
+    mock_doc.status = "APPROVED"
+    mock_doc.from_warehouse_id = 1
+    mock_doc.to_warehouse_id = 0
+    mock_doc.reason_code = ""
+    mock_doc.owner_id = "CLIENT_A"
+
+    mock_doc_stub = MagicMock()
+    mock_doc_stub.GetDocument.return_value = mock_doc
+    mock_doc_stub.ConfirmExecution.return_value = documents_pb2.ConfirmExecutionResponse(
+        message="Confirmed"
+    )
+
+    mock_inv_stub = MagicMock()
+    mock_inv_stub.ConfirmInventoryTransaction.return_value = MagicMock(success=True, transaction_id=99)
+    mock_inv_stub.ListReservations.return_value = MagicMock(reservations=[])
+
+    payload = ConfirmExecutionPayload(
+        items=[
+            ConfirmItemPayload(product_id=10, quantity=5),
+        ]
+    )
+
+    with patch("api_gateway.saga.confirm_execution_saga.documents_stub") as mock_ds, \
+         patch("api_gateway.saga.confirm_execution_saga.inventory_stub") as mock_is:
+
+        mock_ds.return_value.__enter__.return_value = mock_doc_stub
+        mock_is.return_value.__enter__.return_value = mock_inv_stub
+
+        res = saga.execute(payload, mock_request)
+
+        assert saga.state == SagaState.COMPLETED
+        mock_inv_stub.ConfirmInventoryTransaction.assert_called_once()
+        inv_call_req = mock_inv_stub.ConfirmInventoryTransaction.call_args[0][0]
+        assert inv_call_req.owner_id == "CLIENT_A"
+        assert len(saga.executed_steps) == 1
+        assert saga.executed_steps[0].owner_id == "CLIENT_A"
+
+
+def test_saga_compensation_preserves_owner_id(mock_request):
+    """TASK-095: Verify compensation step sends exact owner_id from executed step."""
+    saga = ConfirmExecutionSaga(document_id=302)
+    saga.executed_steps.append(
+        ExecutedInventoryStep(
+            transaction_type="SALES_SHIPMENT",
+            product_id=15,
+            warehouse_id=1,
+            quantity=8,
+            is_outbound=True,
+            owner_id="CLIENT_A",
+        )
+    )
+
+    mock_doc_stub = MagicMock()
+    mock_doc_stub.RevertToInProgress.return_value = MagicMock()
+
+    mock_inv_stub = MagicMock()
+    mock_inv_stub.ConfirmInventoryTransaction.return_value = MagicMock(success=True)
+
+    with patch("api_gateway.saga.confirm_execution_saga.documents_stub") as mock_ds, \
+         patch("api_gateway.saga.confirm_execution_saga.inventory_stub") as mock_is:
+
+        mock_ds.return_value.__enter__.return_value = mock_doc_stub
+        mock_is.return_value.__enter__.return_value = mock_inv_stub
+
+        saga.compensate(mock_request)
+
+        mock_inv_stub.ConfirmInventoryTransaction.assert_called_once()
+        comp_call_req = mock_inv_stub.ConfirmInventoryTransaction.call_args[0][0]
+        assert comp_call_req.owner_id == "CLIENT_A"
+        assert comp_call_req.transaction_type == "ADJUSTMENT_IN"
+
+
+def test_inventory_service_confirm_transaction_isolates_3pl_owner_id():
+    """TASK-095: Confirming outbound transaction for CLIENT_A reduces only CLIENT_A stock, CLIENT_B is untouched."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.shared.core.database import Base, import_all_models
+    from shared_utils.outbox.models import OutboxEventModel
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+    from app.modules.inventory.application.services.inventory_service import InventoryService
+    from app.modules.inventory.infrastructure.models.warehouse_inventory import WarehouseInventoryModel
+
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    OutboxEventModel.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # Pre-populate stock for both owners
+    inv_a = WarehouseInventoryModel(
+        warehouse_id=1,
+        product_id=50,
+        owner_id="CLIENT_A",
+        quantity=10,
+        physical_qty=10,
+    )
+    inv_b = WarehouseInventoryModel(
+        warehouse_id=1,
+        product_id=50,
+        owner_id="CLIENT_B",
+        quantity=10,
+        physical_qty=10,
+    )
+    session.add_all([inv_a, inv_b])
+    session.commit()
+
+    repo = InventoryRepo(session)
+    service = InventoryService(repo)
+
+    # Confirm outbound shipment of 4 units for CLIENT_A
+    service.confirm_inventory_transaction(
+        transaction_type="SALES_SHIPMENT",
+        product_id=50,
+        warehouse_id=1,
+        quantity=4,
+        owner_id="CLIENT_A",
+    )
+
+    session.expire_all()
+    updated_a = session.query(WarehouseInventoryModel).filter_by(
+        warehouse_id=1, product_id=50, owner_id="CLIENT_A"
+    ).one()
+    updated_b = session.query(WarehouseInventoryModel).filter_by(
+        warehouse_id=1, product_id=50, owner_id="CLIENT_B"
+    ).one()
+
+    # Assert CLIENT_A decremented by 4 (10 - 4 = 6)
+    assert updated_a.quantity == 6
+    assert updated_a.physical_qty == 6
+
+    # Assert CLIENT_B remained unchanged (10)
+    assert updated_b.quantity == 10
+    assert updated_b.physical_qty == 10
+    session.close()

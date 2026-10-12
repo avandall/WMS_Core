@@ -19,6 +19,7 @@ class DocumentType(str, Enum):
     IMPORT = "IMPORT"
     EXPORT = "EXPORT"
     TRANSFER = "TRANSFER"
+    TRANSFER_RECEIPT = "TRANSFER_RECEIPT"
     SALE = "SALE"
     PURCHASE_RETURN = "PURCHASE_RETURN"
     SALES_RETURN = "SALES_RETURN"
@@ -32,6 +33,7 @@ class DocumentStatus(str, Enum):
     RESERVED = "RESERVED"
     PARTIALLY_RESERVED = "PARTIALLY_RESERVED"
     IN_PROGRESS = "IN_PROGRESS"
+    PENDING_ARRIVAL = "PENDING_ARRIVAL"
     EXECUTED = "EXECUTED"
     PARTIALLY_EXECUTED = "PARTIALLY_EXECUTED"
     COMPLETED = "COMPLETED"
@@ -115,6 +117,7 @@ class Document(DomainEntity):
         created_by: str = "",
         note: Optional[str] = None,
         customer_id: Optional[int] = None,
+        reference_doc_id: Optional[int] = None,
     ) -> None:
         self._validate_document_id(document_id)
         self._validate_document_type(doc_type)
@@ -137,6 +140,7 @@ class Document(DomainEntity):
         self.created_by = created_by
         self.note = note
         self.approved_by = None
+        self.reference_doc_id = reference_doc_id
 
         self.transaction_type: Optional[str] = None
         self.reason_code: Optional[str] = None
@@ -164,7 +168,7 @@ class Document(DomainEntity):
         from_warehouse_id: Optional[int],
         to_warehouse_id: Optional[int],
     ) -> None:
-        if doc_type in (DocumentType.IMPORT, DocumentType.SALES_RETURN):
+        if doc_type in (DocumentType.IMPORT, DocumentType.SALES_RETURN, DocumentType.TRANSFER_RECEIPT):
             if to_warehouse_id is None:
                 raise ValidationError(f"{doc_type.value} documents require a destination warehouse")
         elif doc_type in (DocumentType.EXPORT, DocumentType.SALE, DocumentType.PURCHASE_RETURN):
@@ -269,6 +273,7 @@ class Document(DomainEntity):
             "customer_id": self.customer_id,
             "from_warehouse_id": self.from_warehouse_id,
             "to_warehouse_id": self.to_warehouse_id,
+            "reference_doc_id": getattr(self, "reference_doc_id", None),
             "items": self._item_snapshots(),
         }
 

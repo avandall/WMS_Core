@@ -128,7 +128,9 @@ class AllocationService:
 
         candidate_locations = [
             loc for loc in locations
-            if loc.get("available_qty", 0) > 0 and not is_shelf_life_insufficient(loc)
+            if loc.get("available_qty", 0) > 0
+            and not is_shelf_life_insufficient(loc)
+            and not loc.get("is_counting", False)
         ]
         if not candidate_locations:
             raise InsufficientStockError(
@@ -156,53 +158,107 @@ class AllocationService:
 
         candidate_locations.sort(key=fefo_sort_key)
 
-        # 4. Perform allocation
-        allocations: List[Dict[str, Any]] = []
-        remaining_qty = quantity
-
-        for loc in candidate_locations:
-            avail = loc["available_qty"]
-            alloc_amount = min(remaining_qty, avail)
-
-            if alloc_amount > 0:
-                target_owner = loc.get("owner_id") or owner_id or "DEFAULT_OWNER"
-                updated_loc = self.inventory_repo.adjust_location_quantity(
-                    warehouse_id=loc["warehouse_id"],
-                    position_id=loc["position_id"],
-                    product_id=loc["product_id"],
-                    quantity_delta=0,
-                    allocated_delta=alloc_amount,
-                    lpn=loc.get("lpn", ""),
-                    status=loc.get("status", "AVAILABLE"),
-                    lot_number=loc.get("lot_number", ""),
-                    owner_id=target_owner,
-                )
-
-                allocations.append({
-                    "location_id": updated_loc["id"],
-                    "warehouse_id": updated_loc["warehouse_id"],
-                    "owner_id": updated_loc.get("owner_id", target_owner),
-                    "position_id": updated_loc["position_id"],
-                    "product_id": updated_loc["product_id"],
-                    "lpn": updated_loc.get("lpn", ""),
-                    "lot_number": updated_loc.get("lot_number", ""),
-                    "mfg_date": updated_loc.get("mfg_date"),
-                    "expiry_date": updated_loc.get("expiry_date"),
-                    "allocated_qty": alloc_amount,
-                })
-
-                remaining_qty -= alloc_amount
-
-            if remaining_qty == 0:
-                break
-
-        if remaining_qty > 0:
-            total_allocated = quantity - remaining_qty
+        candidate_available = sum(loc.get("available_qty", 0) for loc in candidate_locations)
+        if quantity > candidate_available:
             raise InsufficientStockError(
-                f"Insufficient stock for FEFO allocation. Requested: {quantity}, Allocated: {total_allocated}, Shortage: {remaining_qty}"
+                f"Insufficient stock for FEFO allocation. Candidate available: {candidate_available}, Requested: {quantity}"
             )
 
-        return allocations
+        # 4. Perform atomic allocation (TASK-094: All-or-Nothing Unit of Work)
+        allocations: List[Dict[str, Any]] = []
+        remaining_qty = quantity
+        session = getattr(self.inventory_repo, "session", None)
+        prev_auto_commit = getattr(self.inventory_repo, "_auto_commit", True)
+
+        if hasattr(self.inventory_repo, "set_auto_commit"):
+            self.inventory_repo.set_auto_commit(False)
+
+        try:
+            for loc in candidate_locations:
+                avail = loc["available_qty"]
+                alloc_amount = min(remaining_qty, avail)
+
+                if alloc_amount > 0:
+                    target_owner = loc.get("owner_id") or owner_id or "DEFAULT_OWNER"
+                    updated_loc = self.inventory_repo.adjust_location_quantity(
+                        warehouse_id=loc["warehouse_id"],
+                        position_id=loc["position_id"],
+                        product_id=loc["product_id"],
+                        quantity_delta=0,
+                        allocated_delta=alloc_amount,
+                        lpn=loc.get("lpn", ""),
+                        status=loc.get("status", "AVAILABLE"),
+                        lot_number=loc.get("lot_number", ""),
+                        owner_id=target_owner,
+                    )
+
+                    allocations.append({
+                        "location_id": updated_loc["id"],
+                        "warehouse_id": updated_loc["warehouse_id"],
+                        "owner_id": updated_loc.get("owner_id", target_owner),
+                        "position_id": updated_loc["position_id"],
+                        "product_id": updated_loc["product_id"],
+                        "lpn": updated_loc.get("lpn", ""),
+                        "lot_number": updated_loc.get("lot_number", ""),
+                        "mfg_date": updated_loc.get("mfg_date"),
+                        "expiry_date": updated_loc.get("expiry_date"),
+                        "allocated_qty": alloc_amount,
+                    })
+
+                    remaining_qty -= alloc_amount
+
+                if remaining_qty == 0:
+                    break
+
+            if remaining_qty > 0:
+                # Partial allocation shortage detected -> Atomic rollback
+                if session is not None:
+                    session.rollback()
+                for alloc in allocations:
+                    self.inventory_repo.adjust_location_quantity(
+                        warehouse_id=alloc["warehouse_id"],
+                        position_id=alloc["position_id"],
+                        product_id=alloc["product_id"],
+                        quantity_delta=0,
+                        allocated_delta=-alloc["allocated_qty"],
+                        lpn=alloc.get("lpn", ""),
+                        status="AVAILABLE",
+                        lot_number=alloc.get("lot_number", ""),
+                        owner_id=alloc.get("owner_id", "DEFAULT_OWNER"),
+                    )
+                total_allocated = quantity - remaining_qty
+                raise InsufficientStockError(
+                    f"Insufficient stock for FEFO allocation. Requested: {quantity}, Allocated: {total_allocated}, Shortage: {remaining_qty}"
+                )
+
+            # Successfully allocated full quantity -> Commit if auto_commit was previously active
+            if prev_auto_commit and session is not None:
+                session.commit()
+
+            return allocations
+
+        except Exception:
+            if session is not None:
+                session.rollback()
+            for alloc in allocations:
+                try:
+                    self.inventory_repo.adjust_location_quantity(
+                        warehouse_id=alloc["warehouse_id"],
+                        position_id=alloc["position_id"],
+                        product_id=alloc["product_id"],
+                        quantity_delta=0,
+                        allocated_delta=-alloc["allocated_qty"],
+                        lpn=alloc.get("lpn", ""),
+                        status="AVAILABLE",
+                        lot_number=alloc.get("lot_number", ""),
+                        owner_id=alloc.get("owner_id", "DEFAULT_OWNER"),
+                    )
+                except Exception:
+                    pass
+            raise
+        finally:
+            if hasattr(self.inventory_repo, "set_auto_commit"):
+                self.inventory_repo.set_auto_commit(prev_auto_commit)
 
     def recall_query(self, lot_number: str) -> Dict[str, Any]:
         """Query all inventory locations holding the specified lot and all customers/orders receiving it."""
@@ -252,8 +308,12 @@ class AllocationService:
             has_expiry, expiry_dt = _parse_datetime(loc.get("expiry_date"))
             return has_expiry and expiry_dt < threshold
 
-        valid_locations = [loc for loc in locations if not is_shelf_life_insufficient(loc)]
+        valid_locations = [
+            loc for loc in locations
+            if not is_shelf_life_insufficient(loc) and not loc.get("is_counting", False)
+        ]
         has_locations = len(valid_locations) > 0
+        has_any_location_records = len(locations) > 0
 
         doc_reserved = 0
         quarantine_reserved = 0
@@ -294,6 +354,8 @@ class AllocationService:
                 )
                 total_allocated = sum(int(loc.get("allocated_qty", 0)) for loc in valid_locations)
                 return max(0, total_physical - max(total_allocated, doc_reserved) - quarantine_reserved)
+            elif has_any_location_records:
+                return 0
             else:
                 wh_row = session.execute(
                     select(WarehouseInventoryModel).where(
@@ -315,9 +377,13 @@ class AllocationService:
                     int(r.get("reserved_qty", 0)) for r in all_res
                     if r.get("status") == "PENDING_ADJUSTMENT" and (not owner_id or r.get("owner_id") == owner_id)
                 )
-            total_physical = sum(
-                int(loc["quantity"]) if "quantity" in loc and loc["quantity"] is not None else int(loc.get("available_qty", 0))
-                for loc in valid_locations
-            )
-            total_allocated = sum(int(loc.get("allocated_qty", 0)) for loc in valid_locations)
-            return max(0, total_physical - max(total_allocated, doc_reserved) - quarantine_reserved)
+            if has_locations:
+                total_physical = sum(
+                    int(loc["quantity"]) if "quantity" in loc and loc["quantity"] is not None else int(loc.get("available_qty", 0))
+                    for loc in valid_locations
+                )
+                total_allocated = sum(int(loc.get("allocated_qty", 0)) for loc in valid_locations)
+                return max(0, total_physical - max(total_allocated, doc_reserved) - quarantine_reserved)
+            elif has_any_location_records:
+                return 0
+            return 0

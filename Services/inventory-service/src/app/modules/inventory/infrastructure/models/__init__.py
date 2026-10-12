@@ -6,6 +6,7 @@ from .movement_ledger import InventoryMovementLedgerModel
 from .position import PositionModel
 from .stock_reservation import StockReservationModel
 from .warehouse_inventory import WarehouseInventoryModel
+from .transit_discrepancy import TransitDiscrepancyModel
 
 __all__ = [
     "DraftProposalModel",
@@ -16,5 +17,6 @@ __all__ = [
     "PositionModel",
     "StockReservationModel",
     "WarehouseInventoryModel",
+    "TransitDiscrepancyModel",
 ]
 

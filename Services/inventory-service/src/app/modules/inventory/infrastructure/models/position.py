@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, Integer, String
+from sqlalchemy import Boolean, Column, Float, Integer, String
 from app.shared.core.database import Base
 
 
@@ -14,6 +14,7 @@ class InventoryPositionModel(Base):
     capacity = Column(Integer, nullable=True)
     zone = Column(String(50), nullable=True)
     is_active = Column(Integer, nullable=False, default=1)
+    is_counting = Column(Boolean, nullable=False, default=False, index=True)
 
     # Physical address & dimensions (TASK-029 & TASK-055)
     aisle = Column(String(50), nullable=True)

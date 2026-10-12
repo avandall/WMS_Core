@@ -184,6 +184,12 @@ class IInventoryRepo(ABC):
         pass
 
     @abstractmethod
+    def set_location_counting(
+        self, warehouse_id: int, position_ids: list[int], is_counting: bool
+    ) -> None:
+        pass
+
+    @abstractmethod
     def recall_query(self, lot_number: str) -> dict[str, Any]:
         pass
 

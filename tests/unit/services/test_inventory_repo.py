@@ -9,10 +9,6 @@ Covers:
 import sys
 from pathlib import Path
 
-# Purge any previously imported 'app' module to avoid cross-service namespace collisions
-for mod in list(sys.modules.keys()):
-    if mod == "app" or mod.startswith("app."):
-        del sys.modules[mod]
 
 inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
 if inv_src not in sys.path:

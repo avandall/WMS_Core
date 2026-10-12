@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, Index, Integer, String, UniqueConstraint
 
 from app.shared.core.database import Base
 
@@ -19,6 +19,7 @@ class InventoryLocationModel(Base):
     quantity = Column(Integer, nullable=False, default=0)
     allocated_qty = Column(Integer, nullable=False, default=0)
     status = Column(String(50), nullable=False, default="AVAILABLE", index=True)
+    is_counting = Column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

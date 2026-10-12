@@ -272,3 +272,100 @@ def test_fifo_fallback_uses_mfg_date(db_session):
     assert allocations[2]["lot_number"] == "LOT-NO-MFG"
     assert allocations[2]["allocated_qty"] == 5
 
+
+def test_allocation_service_skips_counting_locations(db_session):
+    """TASK-089: AllocationService excludes locations undergoing cycle count (is_counting=True)."""
+    repo = InventoryRepo(db_session)
+    alloc_service = AllocationService(repo)
+
+    now = datetime.now(timezone.utc)
+    exp = now + timedelta(days=90)
+
+    # Bin 1: position_id=101, qty=50, is_counting=False
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=101, product_id=600, quantity_delta=50, lpn="LPN-101",
+        lot_number="LOT-FREE", expiry_date=exp
+    )
+
+    # Bin 2: position_id=102, qty=100, will be frozen for cycle count
+    repo.adjust_location_quantity(
+        warehouse_id=1, position_id=102, product_id=600, quantity_delta=100, lpn="LPN-102",
+        lot_number="LOT-FROZEN", expiry_date=exp
+    )
+
+    # Freeze Bin 2
+    repo.set_location_counting(warehouse_id=1, position_ids=[102], is_counting=True)
+
+    # check_availability should only see available stock from Bin 1 (50 units)
+    avail_stock = alloc_service.check_availability(warehouse_id=1, product_id=600)
+    assert avail_stock == 50
+
+    # If Bin 1 is also frozen, available stock drops to 0
+    repo.set_location_counting(warehouse_id=1, position_ids=[101], is_counting=True)
+    assert alloc_service.check_availability(warehouse_id=1, product_id=600) == 0
+
+    # Unfreeze Bin 1
+    repo.set_location_counting(warehouse_id=1, position_ids=[101], is_counting=False)
+    assert alloc_service.check_availability(warehouse_id=1, product_id=600) == 50
+
+    # Allocate 40: should succeed from Bin 1 only
+    allocations = alloc_service.allocate_fefo(warehouse_id=1, product_id=600, quantity=40)
+    assert len(allocations) == 1
+    assert allocations[0]["position_id"] == 101
+    assert allocations[0]["allocated_qty"] == 40
+
+    # Allocate more than 50 (e.g. 60): should raise InsufficientStockError because 100 units are frozen in Bin 2
+    with pytest.raises(InsufficientStockError):
+        alloc_service.allocate_fefo(warehouse_id=1, product_id=600, quantity=60)
+
+    # Unfreeze Bin 2
+    repo.set_location_counting(warehouse_id=1, position_ids=[102], is_counting=False)
+
+    # Now check_availability includes Bin 2 (100) + remaining in Bin 1 (10) = 110
+    assert alloc_service.check_availability(warehouse_id=1, product_id=600) == 110
+
+
+def test_fefo_allocation_shortage_rollback(db_session):
+    """TASK-094: Partial allocation shortage must be rolled back atomically with 0 allocated_qty leaked."""
+    repo = InventoryRepo(db_session)
+    alloc_service = AllocationService(repo)
+
+    now = datetime.now(timezone.utc)
+    exp = now + timedelta(days=90)
+
+    # Bin 1: qty=6, allocated=0
+    repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=201,
+        product_id=700,
+        quantity_delta=6,
+        allocated_delta=0,
+        lpn="LPN-201",
+        lot_number="LOT-SHORT-1",
+        expiry_date=exp,
+    )
+    # Bin 2: qty=2, allocated=0
+    repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=202,
+        product_id=700,
+        quantity_delta=2,
+        allocated_delta=0,
+        lpn="LPN-202",
+        lot_number="LOT-SHORT-2",
+        expiry_date=exp,
+    )
+
+    # Total available = 8, Request = 10 -> Must raise InsufficientStockError
+    with pytest.raises(InsufficientStockError):
+        alloc_service.allocate_fefo(warehouse_id=1, product_id=700, quantity=10)
+
+    # Verify atomic rollback: Neither Bin 1 nor Bin 2 should have leaked allocated_qty
+    locs = repo.get_inventory_locations(warehouse_id=1, product_id=700)
+    for loc in locs:
+        assert loc["allocated_qty"] == 0, f"Location {loc['position_id']} leaked allocated_qty: {loc['allocated_qty']}"
+        assert loc["available_qty"] in (6, 2)
+
+
+
+

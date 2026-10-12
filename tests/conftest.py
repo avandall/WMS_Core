@@ -36,7 +36,7 @@ try:
 except Exception:
     pass
 
-for sub_mod in ["modules", "shared", "shared.core", "api"]:
+for sub_mod in ["modules", "shared", "shared.core", "api", "api.v1", "api.v1.endpoints"]:
     try:
         mod_name = f"app.{sub_mod}"
         mod = __import__(mod_name, fromlist=["*"])

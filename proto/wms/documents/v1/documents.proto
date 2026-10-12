@@ -64,6 +64,7 @@ message Document {
   string posted_at = 12;
   string transaction_type = 13;
   string reason_code = 14;
+  string owner_id = 15;
 }
 
 message CreateDocumentRequest {

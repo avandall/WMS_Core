@@ -98,6 +98,40 @@ class CycleCountService:
                 except Exception:
                     pass
 
+    def _set_locations_counting(self, sheet: CycleCountSheet, is_counting: bool) -> None:
+        """TASK-089: Sets freeze lock flag on inventory locations during cycle counting."""
+        if self._inventory_repo is None:
+            return
+        position_ids: set[int] = set()
+        for it in sheet.items:
+            try:
+                position_ids.add(int(it.location_id))
+            except (ValueError, TypeError):
+                pass
+        if not position_ids:
+            return
+        if hasattr(self._inventory_repo, "set_location_counting"):
+            self._inventory_repo.set_location_counting(
+                warehouse_id=sheet.warehouse_id,
+                position_ids=list(position_ids),
+                is_counting=is_counting,
+            )
+        elif hasattr(self._inventory_repo, "session") and self._inventory_repo.session:
+            from sqlalchemy import update
+            from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+            self._inventory_repo.session.execute(
+                update(InventoryLocationModel)
+                .where(
+                    InventoryLocationModel.warehouse_id == sheet.warehouse_id,
+                    InventoryLocationModel.position_id.in_(list(position_ids)),
+                )
+                .values(is_counting=is_counting)
+            )
+            if hasattr(self._inventory_repo, "_commit_if_auto"):
+                self._inventory_repo._commit_if_auto()
+            elif hasattr(self._inventory_repo.session, "commit"):
+                self._inventory_repo.session.commit()
+
     def create_cycle_count_sheet(
         self,
         cycle_count_id: str,
@@ -151,12 +185,13 @@ class CycleCountService:
     def start_cycle_count(
         self, cycle_count_id: str, assigned_to: Optional[str] = None
     ) -> CycleCountSheet:
-        """Assigns counter and transitions sheet to IN_PROGRESS."""
+        """Assigns counter and transitions sheet to IN_PROGRESS. Freezes locations being counted."""
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         if assigned_to:
             sheet.assign_counter(assigned_to)
         sheet.start_counting()
         self._repo.save(sheet)
+        self._set_locations_counting(sheet, is_counting=True)
         return sheet
 
     def record_counts(self, cycle_count_id: str, counts: Dict[str, int]) -> CycleCountSheet:
@@ -172,6 +207,7 @@ class CycleCountService:
         sheet.submit_counts()
         self._repo.save(sheet)
         if sheet.status == CycleCountStatus.APPROVED:
+            self._set_locations_counting(sheet, is_counting=False)
             self._apply_auto_inventory_adjustments(sheet)
         return sheet
 
@@ -182,6 +218,7 @@ class CycleCountService:
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.approve_by_supervisor(supervisor_id=supervisor_id, note=note)
         self._repo.save(sheet)
+        self._set_locations_counting(sheet, is_counting=False)
         self._apply_auto_inventory_adjustments(sheet)
         return sheet
 
@@ -192,6 +229,19 @@ class CycleCountService:
         sheet = self.get_cycle_count_sheet(cycle_count_id)
         sheet.reject_by_supervisor(supervisor_id=supervisor_id, reason=reason)
         self._repo.save(sheet)
+        self._set_locations_counting(sheet, is_counting=False)
+        return sheet
+
+    def cancel_cycle_count(
+        self, cycle_count_id: str, cancelled_by: Optional[str] = None, reason: Optional[str] = None
+    ) -> CycleCountSheet:
+        """Cancels cycle count and releases frozen locations."""
+        sheet = self.get_cycle_count_sheet(cycle_count_id)
+        sheet.cancel(reason=reason)
+        if cancelled_by:
+            sheet.approved_by = cancelled_by
+        self._repo.save(sheet)
+        self._set_locations_counting(sheet, is_counting=False)
         return sheet
 
     def generate_inventory_adjustments(

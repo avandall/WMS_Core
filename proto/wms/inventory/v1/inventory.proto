@@ -163,6 +163,7 @@ message ConfirmInventoryTransactionRequest {
   string user_id = 6;
   string idempotency_key = 7;
   int64 source_warehouse_id = 8;
+  string owner_id = 9;
 }
 
 message ConfirmInventoryTransactionResponse {

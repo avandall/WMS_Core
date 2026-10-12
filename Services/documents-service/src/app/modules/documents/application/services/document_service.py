@@ -148,6 +148,37 @@ class DocumentService:
         self._publish_document_uploaded(document, request_id)
         return document
 
+    def create_transfer_receipt_document(
+        self,
+        to_warehouse_id: int,
+        from_warehouse_id: int,
+        reference_doc_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str = "system",
+        note: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> Document:
+        """TASK-088: Auto-generates incoming ASN / Transfer Receipt document for destination warehouse."""
+        document = Document(
+            document_id=0,
+            doc_type=DocumentType.TRANSFER_RECEIPT,
+            from_warehouse_id=from_warehouse_id,
+            to_warehouse_id=to_warehouse_id,
+            items=self._validate_and_convert_items(items),
+            created_by=created_by,
+            note=note,
+            reference_doc_id=reference_doc_id,
+        )
+        document.status = DocumentStatus.PENDING_ARRIVAL
+        document.transaction_type = transaction_type or "TRANSFER_RECEIPT"
+        document.reason_code = reason_code
+        self.document_repo.save(document)
+        self._commit_if_needed()
+        self._publish_document_uploaded(document, request_id)
+        return document
+
     def create_purchase_return_document(
         self,
         from_warehouse_id: int,
@@ -742,9 +773,9 @@ class DocumentService:
     ) -> Document:
         """Confirms execution of actual picked/shipped quantity per item."""
         document = self.get_document(document_id)
-        if document.status != DocumentStatus.IN_PROGRESS:
+        if document.status not in (DocumentStatus.IN_PROGRESS, DocumentStatus.PENDING_ARRIVAL):
             raise InvalidDocumentStatusError(
-                f"Document must be IN_PROGRESS before confirming execution, current status: {document.status}"
+                f"Document must be IN_PROGRESS or PENDING_ARRIVAL before confirming execution, current status: {document.status}"
             )
 
         # Phase 12 & 13: Validate reason code for transaction types that require it
@@ -854,6 +885,158 @@ class DocumentService:
                 except Exception:
                     for item, _ in surplus_items_to_release:
                         item.reserved_qty = item.executed_qty
+
+        # TASK-088: In-transit ledger handling & automatic ASN generation
+        receipt_doc = None
+        if document.doc_type == DocumentType.TRANSFER:
+            # 1. Update Inventory Locations if inventory_repo is present
+            if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
+                in_transit_lpn = f"IN_TRANSIT_{document.from_warehouse_id}_{document.to_warehouse_id}"
+                for item in document.items:
+                    pos_id = getattr(item, "position_id", 1) or 1
+                    lot_num = getattr(item, "lot_number", "") or ""
+                    lpn_val = getattr(item, "lpn", "") or ""
+                    owner_val = getattr(item, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER"
+                    exec_qty = item.executed_qty if item.executed_qty is not None else item.quantity
+                    if exec_qty > 0:
+                        # Deduct from source warehouse
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=document.from_warehouse_id,
+                            position_id=pos_id,
+                            product_id=item.product_id,
+                            quantity_delta=-exec_qty,
+                            status="AVAILABLE",
+                            lot_number=lot_num,
+                            lpn=lpn_val,
+                            owner_id=owner_val,
+                        )
+                        # Credit into destination warehouse as IN_TRANSIT (TASK-098: use pos_id staging bin instead of 0)
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=document.to_warehouse_id,
+                            position_id=pos_id,
+                            product_id=item.product_id,
+                            quantity_delta=exec_qty,
+                            status="IN_TRANSIT",
+                            lot_number=lot_num,
+                            lpn=in_transit_lpn,
+                            owner_id=owner_val,
+                        )
+
+            # 2. Auto-generate TRANSFER_RECEIPT (ASN) document at to_warehouse_id
+            receipt_items = [
+                {
+                    "product_id": it.product_id,
+                    "quantity": it.executed_qty if it.executed_qty is not None else it.quantity,
+                    "unit_price": it.unit_price,
+                    "lot_number": getattr(it, "lot_number", "") or "",
+                    "position_id": getattr(it, "position_id", 1) or 1,
+                    "lpn": getattr(it, "lpn", "") or "",
+                    "owner_id": getattr(it, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER",
+                }
+                for it in document.items
+                if (it.executed_qty if it.executed_qty is not None else it.quantity) > 0
+            ]
+            receipt_doc = self.create_transfer_receipt_document(
+                to_warehouse_id=document.to_warehouse_id,
+                from_warehouse_id=document.from_warehouse_id,
+                reference_doc_id=document.document_id,
+                items=receipt_items,
+                created_by="system",
+                note=f"Auto-generated ASN for Transfer #{document.document_id}",
+                request_id=request_id,
+            )
+
+            # 3. Publish InterWarehouseTransferDispatched event
+            self.event_publisher.publish(
+                event_type="InterWarehouseTransferDispatched",
+                payload={
+                    "event_id": f"documents:{document_id}:transfer-dispatched",
+                    "request_id": request_id,
+                    "document_id": document_id,
+                    "from_warehouse_id": document.from_warehouse_id,
+                    "to_warehouse_id": document.to_warehouse_id,
+                    "receipt_document_id": receipt_doc.document_id,
+                    "items": [{"product_id": it.product_id, "quantity": it.executed_qty} for it in document.items],
+                },
+            )
+
+        elif document.doc_type == DocumentType.TRANSFER_RECEIPT:
+            # Completing transfer receipt converts stock from IN_TRANSIT to AVAILABLE at target bin
+            # TASK-098 / DOM-08: Eliminate position 0 and resolve short-shipments with TransitDiscrepancyModel
+            if self.inventory_repo and hasattr(self.inventory_repo, "adjust_location_quantity"):
+                in_transit_lpn = f"IN_TRANSIT_{document.from_warehouse_id}_{document.to_warehouse_id}"
+                for item in document.items:
+                    pos_id = getattr(item, "position_id", 1) or 1
+                    lot_num = getattr(item, "lot_number", "") or ""
+                    owner_val = getattr(item, "owner_id", "DEFAULT_OWNER") or "DEFAULT_OWNER"
+                    shipped_qty = item.quantity
+                    received_qty = item.executed_qty if item.executed_qty is not None else item.quantity
+
+                    # Deduct the entire shipped amount from IN_TRANSIT so no transit stock remains stranded
+                    if shipped_qty > 0:
+                        # Find the actual in_transit position in destination warehouse
+                        transit_pos_id = pos_id
+                        db_session = self.session or getattr(self.inventory_repo, "session", None)
+                        if db_session:
+                            from sqlalchemy import select
+                            from app.modules.inventory.infrastructure.models.inventory_location import InventoryLocationModel
+                            transit_row = db_session.execute(
+                                select(InventoryLocationModel).where(
+                                    InventoryLocationModel.warehouse_id == document.to_warehouse_id,
+                                    InventoryLocationModel.product_id == item.product_id,
+                                    InventoryLocationModel.status == "IN_TRANSIT",
+                                    InventoryLocationModel.lpn == in_transit_lpn,
+                                )
+                            ).scalars().first()
+                            if transit_row:
+                                transit_pos_id = transit_row.position_id
+
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=document.to_warehouse_id,
+                            position_id=transit_pos_id,
+                            product_id=item.product_id,
+                            quantity_delta=-shipped_qty,
+                            status="IN_TRANSIT",
+                            lot_number=lot_num,
+                            lpn=in_transit_lpn,
+                            owner_id=owner_val,
+                        )
+
+                    # Credit actual received quantity into target AVAILABLE location
+                    if received_qty > 0:
+                        self.inventory_repo.adjust_location_quantity(
+                            warehouse_id=document.to_warehouse_id,
+                            position_id=pos_id,
+                            product_id=item.product_id,
+                            quantity_delta=received_qty,
+                            status="AVAILABLE",
+                            lot_number=lot_num,
+                            owner_id=owner_val,
+                        )
+
+                    # Short-shipment / transit damage reconciliation
+                    if received_qty < shipped_qty:
+                        discrepancy_qty = shipped_qty - received_qty
+                        try:
+                            from app.modules.inventory.infrastructure.models.transit_discrepancy import TransitDiscrepancyModel
+                            db_session = self.session or getattr(self.inventory_repo, "session", None)
+                            if db_session:
+                                discrepancy_record = TransitDiscrepancyModel(
+                                    document_id=document.document_id,
+                                    product_id=item.product_id,
+                                    from_warehouse_id=document.from_warehouse_id,
+                                    to_warehouse_id=document.to_warehouse_id,
+                                    shipped_quantity=shipped_qty,
+                                    received_quantity=received_qty,
+                                    discrepancy_quantity=discrepancy_qty,
+                                    discrepancy_type="SHORT_SHIPMENT",
+                                    owner_id=owner_val,
+                                    status="LOGGED",
+                                    note=f"Short-shipment reconciled for Transfer Receipt #{document.document_id}",
+                                )
+                                db_session.add(discrepancy_record)
+                        except Exception:
+                            pass
 
         document.status = DocumentStatus.EXECUTED
 

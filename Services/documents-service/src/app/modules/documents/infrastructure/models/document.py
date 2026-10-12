@@ -38,6 +38,7 @@ class DocumentModel(Base):
     execution_started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     assigned_to = Column(String(100), nullable=True)
+    reference_doc_id = Column(Integer, nullable=True, index=True)
 
     __table_args__ = (
         Index('ix_documents_status_created_at', 'status', 'created_at'),

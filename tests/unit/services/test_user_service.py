@@ -5,14 +5,9 @@ Covers all UserService methods, validation, edge cases, and business logic
 
 import sys
 from pathlib import Path
-
-for mod in list(sys.modules.keys()):
-    if mod == "app" or mod.startswith("app."):
-        del sys.modules[mod]
-
 id_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "identity-service" / "src")
-sys.path = [p for p in sys.path if "/Services/" not in p]
-sys.path.insert(0, id_src)
+if id_src not in sys.path:
+    sys.path.insert(0, id_src)
 
 import pytest
 from unittest.mock import Mock, patch

@@ -50,6 +50,7 @@ class ExecutedInventoryStep:
     source_warehouse_id: int = 0
     is_outbound: bool = True
     idempotency_key: str = ""
+    owner_id: str = "DEFAULT_OWNER"
 
 
 def _extract_md(request: Request) -> list[tuple[str, str]] | None:
@@ -124,6 +125,8 @@ class ConfirmExecutionSaga:
         doc_type = (doc.doc_type or "").upper()
         tx_type = (doc.transaction_type or "").upper()
         current_status = (doc.status or "").upper()
+        raw_owner = getattr(doc, "owner_id", None)
+        doc_owner_id = str(raw_owner) if isinstance(raw_owner, str) and raw_owner else "DEFAULT_OWNER"
 
         # Determine target transaction type & validate reason code
         if doc_type == "TRANSFER":
@@ -223,6 +226,7 @@ class ConfirmExecutionSaga:
                             user_id=user_id_val,
                             idempotency_key=idempotency_key,
                             source_warehouse_id=src_wh_id,
+                            owner_id=doc_owner_id,
                         ),
                         timeout=GRPC_TIMEOUT_SLOW,
                         metadata=md,
@@ -244,6 +248,7 @@ class ConfirmExecutionSaga:
                             source_warehouse_id=src_wh_id,
                             is_outbound=item_is_outbound,
                             idempotency_key=idempotency_key,
+                            owner_id=doc_owner_id,
                         )
                     )
 
@@ -352,6 +357,7 @@ class ConfirmExecutionSaga:
                             user_id=comp_user_id,
                             idempotency_key=comp_key,
                             source_warehouse_id=0,
+                            owner_id=str(step.owner_id) if hasattr(step, "owner_id") and isinstance(step.owner_id, str) and step.owner_id else "DEFAULT_OWNER",
                         ),
                         timeout=GRPC_TIMEOUT_SLOW,
                         metadata=md,

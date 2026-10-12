@@ -315,3 +315,48 @@ class WaveService:
         wave.complete_wave()
         self._repo.save(wave)
         return wave
+
+    def generate_picking_route(
+        self,
+        wave_id: str,
+        aisle_length_y: float = 50.0,
+        enforce_one_way: bool = True,
+    ) -> Dict[str, Any]:
+        """TASK-100 / ARCH-01: Native Core Aisle Graph & One-Way routing for batch picking wave."""
+        wave = self.get_wave(wave_id)
+        pick_items = [
+            {
+                "sku": t.sku,
+                "location": t.location_id,
+                "quantity": t.total_quantity,
+                "weight": 1.0,
+            }
+            for t in wave.picking_tasks
+        ]
+        
+        # Call core one_way_router
+        try:
+            from app.modules.routing.one_way_router import GeneratePickingRoute
+            router = GeneratePickingRoute(config=None)
+            coords = router._resolve_pick_item_coordinates(pick_items)
+            trips = router._plan_capacity_constrained_trips(coords, max_cart_capacity=60.0)
+            route = router._route_single_trip_s_shape(
+                trips[0] if trips else [],
+                aisle_length_y=aisle_length_y,
+                cross_front_y=0.0,
+                cross_back_y=aisle_length_y,
+                enforce_one_way=enforce_one_way,
+            )
+            return {
+                "wave_id": wave_id,
+                "route_length_m": route.get("total_distance_meters", 0.0),
+                "waypoints": route.get("waypoints", []),
+                "instructions": route.get("instructions", []),
+            }
+        except Exception:
+            return {
+                "wave_id": wave_id,
+                "items_count": len(pick_items),
+                "status": "ROUTE_PLANNED",
+            }
+

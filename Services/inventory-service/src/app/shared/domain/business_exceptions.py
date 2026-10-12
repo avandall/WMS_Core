@@ -54,6 +54,10 @@ class InsufficientStockError(BusinessRuleViolationError):
     """Raised when there is not enough stock for the requested operation."""
 
 
+class LocationFrozenError(BusinessRuleViolationError):
+    """Raised when an operation targets an inventory location or position frozen for cycle counting."""
+
+
 # Specific Entity Errors
 class ProductNotFoundError(EntityNotFoundError):
     """Raised when a product cannot be found in the expected context."""
@@ -127,6 +131,7 @@ __all__ = [
     "BusinessRuleViolationError",
     "InvalidDocumentStatusError",
     "InsufficientStockError",
+    "LocationFrozenError",
     # Factory functions
     "create_validation_error",
     "create_business_rule_error",

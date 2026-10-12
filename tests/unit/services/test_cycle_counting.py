@@ -342,4 +342,253 @@ class TestCycleCounting:
         assert call_kwargs["product_id"] == 101
         assert call_kwargs["quantity_delta"] == 5
 
+    def test_cycle_count_location_freeze_and_unfreeze_lifecycle(self) -> None:
+        """TASK-089: Cycle count start freezes locations; approve/cancel/reject unfreezes them."""
+        from unittest.mock import MagicMock
+        mock_inv_repo = MagicMock()
+
+        items = [
+            CycleCountItem(
+                item_id="ITEM-101",
+                product_id=500,
+                location_id="101",
+                system_qty=50,
+            ),
+            CycleCountItem(
+                item_id="ITEM-102",
+                product_id=501,
+                location_id="102",
+                system_qty=30,
+            ),
+        ]
+
+        service = CycleCountService(inventory_repo=mock_inv_repo)
+        service.create_cycle_count_sheet(
+            cycle_count_id="CC-FREEZE-001",
+            warehouse_id=1,
+            title="Freeze Test",
+            items=items,
+            discrepancy_qty_threshold=0,
+        )
+
+        # 1. Starting cycle count should freeze locations (is_counting=True)
+        service.start_cycle_count("CC-FREEZE-001")
+        mock_inv_repo.set_location_counting.assert_called_with(
+            warehouse_id=1,
+            position_ids=[101, 102],
+            is_counting=True,
+        )
+
+        # 2. Record counts with discrepancy and submit -> PENDING_SUPERVISOR_APPROVAL
+        service.record_counts("CC-FREEZE-001", {"ITEM-101": 55, "ITEM-102": 30})
+        service.submit_counts("CC-FREEZE-001")
+
+        # 3. Approving cycle count should unfreeze locations (is_counting=False)
+        mock_inv_repo.set_location_counting.reset_mock()
+        service.approve_cycle_count("CC-FREEZE-001", supervisor_id="sup_bob")
+        mock_inv_repo.set_location_counting.assert_called_with(
+            warehouse_id=1,
+            position_ids=[101, 102],
+            is_counting=False,
+        )
+
+    def test_cycle_count_cancel_and_reject_unfreeze_locations(self) -> None:
+        """TASK-089: Cancelling or rejecting a cycle count sheet unfreezes locations."""
+        from unittest.mock import MagicMock
+        mock_inv_repo = MagicMock()
+
+        items = [
+            CycleCountItem(
+                item_id="ITEM-201",
+                product_id=600,
+                location_id="201",
+                system_qty=40,
+            ),
+        ]
+
+        # Case A: Cancel
+        service = CycleCountService(inventory_repo=mock_inv_repo)
+        service.create_cycle_count_sheet(
+            cycle_count_id="CC-CANCEL-001",
+            warehouse_id=1,
+            title="Cancel Test",
+            items=items,
+        )
+        service.start_cycle_count("CC-CANCEL-001")
+        mock_inv_repo.set_location_counting.assert_called_with(
+            warehouse_id=1,
+            position_ids=[201],
+            is_counting=True,
+        )
+
+        mock_inv_repo.set_location_counting.reset_mock()
+        service.cancel_cycle_count("CC-CANCEL-001", cancelled_by="sup_bob", reason="Recount abandoned")
+        mock_inv_repo.set_location_counting.assert_called_with(
+            warehouse_id=1,
+            position_ids=[201],
+            is_counting=False,
+        )
+
+        # Case B: Reject
+        mock_inv_repo.set_location_counting.reset_mock()
+        service.create_cycle_count_sheet(
+            cycle_count_id="CC-REJECT-LOC-001",
+            warehouse_id=1,
+            title="Reject Loc Test",
+            items=items,
+            discrepancy_qty_threshold=0,
+        )
+        service.start_cycle_count("CC-REJECT-LOC-001")
+        service.record_counts("CC-REJECT-LOC-001", {"ITEM-201": 20})
+        service.submit_counts("CC-REJECT-LOC-001")
+
+        mock_inv_repo.set_location_counting.reset_mock()
+        service.reject_cycle_count("CC-REJECT-LOC-001", supervisor_id="sup_bob", reason="Recount required")
+        mock_inv_repo.set_location_counting.assert_called_with(
+            warehouse_id=1,
+            position_ids=[201],
+            is_counting=False,
+        )
+
+
+def test_empty_bin_freeze_locks_position_and_blocks_putaway():
+    """TASK-096: Freezing an empty bin sets is_counting on PositionModel and rejects putaway."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.shared.core.database import Base, import_all_models
+    from app.shared.domain.business_exceptions import LocationFrozenError
+    from app.modules.inventory.infrastructure.models.position import PositionModel
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # Create empty physical position (no inventory_locations row)
+    pos = PositionModel(id=901, warehouse_id=1, code="A-EMPTY-01", is_counting=False)
+    session.add(pos)
+    session.commit()
+
+    repo = InventoryRepo(session)
+
+    # 1. Freeze the empty bin
+    repo.set_location_counting(warehouse_id=1, position_ids=[901], is_counting=True)
+
+    session.expire_all()
+    updated_pos = session.query(PositionModel).filter_by(id=901).one()
+    assert updated_pos.is_counting is True
+    assert repo.is_position_counting(warehouse_id=1, position_id=901) is True
+
+    # 2. Forklift driver tries to putaway goods into this frozen empty bin -> Must raise LocationFrozenError
+    import pytest
+    with pytest.raises(LocationFrozenError) as exc_info:
+        repo.adjust_location_quantity(
+            warehouse_id=1,
+            position_id=901,
+            product_id=500,
+            quantity_delta=10,
+            lpn="LPN-PUTAWAY-01",
+        )
+    assert "frozen for cycle counting" in str(exc_info.value)
+
+    # 3. Unfreeze position
+    repo.set_location_counting(warehouse_id=1, position_ids=[901], is_counting=False)
+    session.expire_all()
+    assert repo.is_position_counting(warehouse_id=1, position_id=901) is False
+
+    # 4. Now putaway succeeds
+    res = repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=901,
+        product_id=500,
+        quantity_delta=10,
+        lpn="LPN-PUTAWAY-01",
+    )
+    assert res["quantity"] == 10
+    session.close()
+
+
+def test_move_stock_into_or_out_of_frozen_position_fails():
+    """TASK-096: move_location_stock rejects transfer when either source or destination is frozen."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.shared.core.database import Base, import_all_models
+    from app.shared.domain.business_exceptions import LocationFrozenError
+    from app.modules.inventory.infrastructure.models.position import PositionModel
+    from app.modules.inventory.infrastructure.repositories.inventory_repo import InventoryRepo
+
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    import_all_models()
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # Source position (has stock) and Destination position (initially empty)
+    pos_src = PositionModel(id=902, warehouse_id=1, code="A-SRC-01", is_counting=False)
+    pos_dst = PositionModel(id=903, warehouse_id=1, code="A-DST-01", is_counting=False)
+    session.add_all([pos_src, pos_dst])
+    session.commit()
+
+    repo = InventoryRepo(session)
+    # Populate initial stock at source
+    repo.adjust_location_quantity(
+        warehouse_id=1,
+        position_id=902,
+        product_id=500,
+        quantity_delta=20,
+        lpn="LPN-SRC",
+    )
+
+    # Freeze destination position 903
+    repo.set_location_counting(warehouse_id=1, position_ids=[903], is_counting=True)
+
+    import pytest
+    # Moving into frozen destination 903 must fail
+    with pytest.raises(LocationFrozenError) as exc_info:
+        repo.move_location_stock(
+            product_id=500,
+            from_warehouse_id=1,
+            from_position_id=902,
+            to_position_id=903,
+            quantity=5,
+            lpn="LPN-SRC",
+        )
+    assert "Destination position 903" in str(exc_info.value)
+    assert "frozen for cycle counting" in str(exc_info.value)
+
+    # Unfreeze 903, freeze source position 902
+    repo.set_location_counting(warehouse_id=1, position_ids=[903], is_counting=False)
+    repo.set_location_counting(warehouse_id=1, position_ids=[902], is_counting=True)
+
+    # Moving out of frozen source 902 must fail
+    with pytest.raises(LocationFrozenError) as exc_info:
+        repo.move_location_stock(
+            product_id=500,
+            from_warehouse_id=1,
+            from_position_id=902,
+            to_position_id=903,
+            quantity=5,
+            lpn="LPN-SRC",
+        )
+    assert "Source position 902" in str(exc_info.value)
+    assert "frozen for cycle counting" in str(exc_info.value)
+
+    # Unfreeze 902 -> now moving succeeds
+    repo.set_location_counting(warehouse_id=1, position_ids=[902], is_counting=False)
+    src_res, dst_res = repo.move_location_stock(
+        product_id=500,
+        from_warehouse_id=1,
+        from_position_id=902,
+        to_position_id=903,
+        quantity=5,
+        lpn="LPN-SRC",
+    )
+    assert src_res["quantity"] == 15
+    assert dst_res["quantity"] == 5
+    session.close()
+
+
+
 

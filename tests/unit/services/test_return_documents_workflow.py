@@ -2,10 +2,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Clean up sys.modules to load documents-service app module cleanly
-for mod in list(sys.modules.keys()):
-    if mod == "app" or mod.startswith("app."):
-        del sys.modules[mod]
 
 doc_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "documents-service" / "src")
 if doc_src not in sys.path:
@@ -81,10 +77,6 @@ def test_purchase_return_workflow(document_service, mock_document_repo):
     assert doc.transaction_type == "PURCHASE_RETURN_SHIPMENT"
     assert DOC_TYPE_TO_TRANSACTION_TYPE[doc.doc_type] == TransactionType.PURCHASE_RETURN_SHIPMENT
 
-    # 3. Test inventory reduction logic on inventory-service side
-    for mod in list(sys.modules.keys()):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
 
     inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
     if inv_src not in sys.path:
@@ -149,10 +141,6 @@ def test_sales_return_quarantine_stock(document_service, mock_document_repo):
     assert doc.customer_id == 1001
     assert doc.status == DocumentStatus.DRAFT
 
-    # 3. Test inventory receiving creates QUARANTINED inventory item
-    for mod in list(sys.modules.keys()):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
 
     inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
     if inv_src not in sys.path:
@@ -193,10 +181,6 @@ def test_sales_return_quarantine_stock(document_service, mock_document_repo):
             lot_number="",
         )
 
-    # 4. QA Inspection on DocumentService
-    for mod in list(sys.modules.keys()):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
 
     doc_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "documents-service" / "src")
     if doc_src not in sys.path:

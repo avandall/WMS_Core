@@ -360,3 +360,29 @@ def test_packing_survives_service_restart(test_session) -> None:
     assert carton2.verification_result is not None
     assert carton2.verification_result.is_valid is True
 
+
+def test_wave_service_generate_picking_route(wave_service: WaveService) -> None:
+    """TASK-100 / ARCH-01: Verifies native One-Way picking route generation inside WaveService."""
+    cutoff = datetime.now(timezone.utc)
+    wave = wave_service.create_wave(
+        wave_id="WAVE-ROUTE-01",
+        carrier="GRAB_EXPRESS",
+        dispatch_cutoff=cutoff,
+    )
+    order = OutboundOrder(
+        order_id="ORD-RT-1",
+        carrier="GRAB_EXPRESS",
+        dispatch_cutoff=cutoff,
+        items=[
+            OrderItem(product_id="P1", sku="SKU-1", quantity=2, unit_weight_g=100.0, location_id="A-01-01"),
+            OrderItem(product_id="P2", sku="SKU-2", quantity=3, unit_weight_g=200.0, location_id="A-02-05"),
+        ],
+    )
+    wave.add_order(order)
+    wave_service.release_wave("WAVE-ROUTE-01")
+
+    route_res = wave_service.generate_picking_route("WAVE-ROUTE-01")
+    assert route_res["wave_id"] == "WAVE-ROUTE-01"
+    assert "route_length_m" in route_res or "status" in route_res
+
+

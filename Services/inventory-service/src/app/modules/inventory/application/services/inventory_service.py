@@ -95,6 +95,7 @@ class InventoryService:
         event_id: Optional[str] = None,
         reason: str = "manual_adjustment",
         transaction_type: Optional[str] = None,
+        owner_id: str = "DEFAULT_OWNER",
     ) -> bool:
         Sku(product_id)
         if quantity_delta == 0:
@@ -104,7 +105,9 @@ class InventoryService:
 
         target_warehouse_id = warehouse_id if warehouse_id is not None else 1
         WarehouseLocation(target_warehouse_id)
-        self.inventory_repo.adjust_warehouse_quantity(product_id, target_warehouse_id, quantity_delta)
+        self.inventory_repo.adjust_warehouse_quantity(
+            product_id, target_warehouse_id, quantity_delta, owner_id=owner_id
+        )
         self._record_movement(
             event_id=event_id,
             movement_type="InventoryAdjusted",
@@ -112,6 +115,7 @@ class InventoryService:
             payload={
                 "product_id": product_id,
                 "warehouse_id": target_warehouse_id,
+                "owner_id": owner_id,
                 "quantity_delta": quantity_delta,
                 "reason": reason,
             },
@@ -704,8 +708,10 @@ class InventoryService:
         position_id: int = 0,
         lpn: str = "",
         lot_number: str = "",
+        owner_id: str = "DEFAULT_OWNER",
     ) -> int:
         """Confirms an inventory transaction (either consuming a reservation or directly updating stock)."""
+        owner_clean = owner_id or "DEFAULT_OWNER"
         if quantity <= 0:
             raise InvalidQuantityError("Quantity must be positive")
 
@@ -745,6 +751,7 @@ class InventoryService:
                         quantity_delta=-quantity,
                         lpn=lpn,
                         lot_number=lot_number,
+                        owner_id=owner_clean,
                     )
                     self._write_transaction(
                         transaction_type="TRANSFER_ISSUE",
@@ -753,7 +760,7 @@ class InventoryService:
                         quantity=quantity,
                         document_id=document_id,
                         idempotency_key=f"{idempotency_key}:ledger" if idempotency_key else None,
-                        payload={"position_id": position_id, "lpn": lpn, "lot_number": lot_number},
+                        payload={"position_id": position_id, "lpn": lpn, "lot_number": lot_number, "owner_id": owner_clean},
                     )
                 else:
                     self.adjust_inventory(
@@ -763,6 +770,7 @@ class InventoryService:
                         event_id=idempotency_key,
                         reason=f"confirm_issue_{document_id or 'transfer'}",
                         transaction_type="TRANSFER_ISSUE",
+                        owner_id=owner_clean,
                     )
                 self.adjust_in_transit(
                     product_id=product_id,
@@ -798,6 +806,7 @@ class InventoryService:
                         quantity_delta=quantity,
                         lpn=lpn,
                         lot_number=lot_number,
+                        owner_id=owner_clean,
                     )
                     self._write_transaction(
                         transaction_type="TRANSFER_RECEIPT",
@@ -806,7 +815,7 @@ class InventoryService:
                         quantity=quantity,
                         document_id=document_id,
                         idempotency_key=f"{idempotency_key}:ledger" if idempotency_key else None,
-                        payload={"source_warehouse_id": source_warehouse_id, "position_id": position_id, "lpn": lpn, "lot_number": lot_number},
+                        payload={"source_warehouse_id": source_warehouse_id, "position_id": position_id, "lpn": lpn, "lot_number": lot_number, "owner_id": owner_clean},
                     )
                 else:
                     self.adjust_inventory(
@@ -816,6 +825,7 @@ class InventoryService:
                         event_id=idempotency_key,
                         reason=f"confirm_receipt_{document_id or 'transfer'}",
                         transaction_type="TRANSFER_RECEIPT",
+                        owner_id=owner_clean,
                     )
                 # Decrement in-transit stock at the source warehouse
                 src_wh = source_warehouse_id if source_warehouse_id > 0 else warehouse_id
@@ -854,6 +864,7 @@ class InventoryService:
                         lpn=lpn,
                         status="QUARANTINED",
                         lot_number=lot_number,
+                        owner_id=owner_clean,
                     )
                     self._write_transaction(
                         transaction_type="SALES_RETURN_RECEIPT",
@@ -862,7 +873,7 @@ class InventoryService:
                         quantity=quantity,
                         document_id=document_id,
                         idempotency_key=f"{idempotency_key}:ledger" if idempotency_key else None,
-                        payload={"position_id": position_id, "lpn": lpn, "lot_number": lot_number, "status": "QUARANTINED"},
+                        payload={"position_id": position_id, "lpn": lpn, "lot_number": lot_number, "status": "QUARANTINED", "owner_id": owner_clean},
                     )
                 else:
                     self.adjust_inventory(
@@ -872,6 +883,7 @@ class InventoryService:
                         event_id=idempotency_key,
                         reason=f"confirm_sales_return_{document_id or 'return'}",
                         transaction_type="SALES_RETURN_RECEIPT",
+                        owner_id=owner_clean,
                     )
             else:
                 # Direct physical quantity adjustment
@@ -894,6 +906,7 @@ class InventoryService:
                     event_id=idempotency_key,
                     reason=f"direct_transaction_{transaction_type}",
                     transaction_type=transaction_type,
+                    owner_id=owner_clean,
                 )
 
             txs = self.inventory_repo.list_transactions(
@@ -936,6 +949,7 @@ class InventoryService:
         lot_number: str = "",
         mfg_date: Optional[Any] = None,
         expiry_date: Optional[Any] = None,
+        owner_id: str = "DEFAULT_OWNER",
     ) -> dict:
         return self.inventory_repo.adjust_location_quantity(
             warehouse_id=warehouse_id,
@@ -948,6 +962,7 @@ class InventoryService:
             lot_number=lot_number,
             mfg_date=mfg_date,
             expiry_date=expiry_date,
+            owner_id=owner_id or "DEFAULT_OWNER",
         )
 
     def allocate_inventory_fefo(

@@ -1,7 +1,7 @@
-from __future__ import annotations
-
+import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
@@ -22,6 +22,31 @@ from api_gateway.middleware import (
     security_headers_middleware,
 )
 from api_gateway.observability import METRICS
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern ASGI lifespan context manager managing startup and graceful shutdown."""
+    # Startup logic
+    from api_gateway.ingest_buffer import ingest_buffer
+    from api_gateway.middleware import rate_limit_cleanup_background_loop
+
+    ingest_buffer.start()
+    rate_limit_task = asyncio.create_task(rate_limit_cleanup_background_loop())
+    try:
+        yield
+    finally:
+        # Graceful shutdown logic
+        rate_limit_task.cancel()
+        try:
+            await rate_limit_task
+        except asyncio.CancelledError:
+            pass
+
+        try:
+            await ingest_buffer.stop()
+        except Exception:
+            pass
 
 
 def _csv_env(name: str, default: str) -> list[str]:
@@ -70,18 +95,8 @@ def _find_portfolio_dir() -> Path:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="API Gateway", version="0.1.0")
+    app = FastAPI(title="API Gateway", version="0.1.0", lifespan=lifespan)
     dashboard_dir = _find_dashboard_dir()
-
-    @app.on_event("startup")
-    async def startup_event():
-        from api_gateway.ingest_buffer import ingest_buffer
-        ingest_buffer.start()
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        from api_gateway.ingest_buffer import ingest_buffer
-        await ingest_buffer.stop()
 
     @app.get("/")
     async def root() -> FileResponse:
@@ -284,3 +299,7 @@ def create_app() -> FastAPI:
                 return JSONResponse(status_code=502, content={"detail": str(exc)})
 
     return app
+
+
+app = create_app()
+

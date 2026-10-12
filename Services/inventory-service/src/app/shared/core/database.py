@@ -11,7 +11,22 @@ from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-db_url = settings.database_url or os.getenv("DATABASE_URL", "sqlite:///:memory:")
+
+def get_database_url() -> str:
+    """Resolve database URL with strict Twelve-Factor App precedence:
+    1. os.getenv("DATABASE_URL") (highest priority, enables isolated test overrides)
+    2. settings.database_url (configuration setting / .env fallback)
+    3. Default in-memory SQLite
+    """
+    env_url = os.getenv("DATABASE_URL")
+    if env_url and env_url.strip():
+        return env_url.strip()
+    if settings.database_url and str(settings.database_url).strip():
+        return str(settings.database_url).strip()
+    return "sqlite:///:memory:"
+
+
+db_url = get_database_url()
 engine_kwargs = {
     "future": True,
     "echo": settings.debug,
@@ -29,7 +44,19 @@ if "postgresql" in db_url:
             "options": "-c statement_timeout=30000",
         },
     })
-engine = create_engine(db_url, **engine_kwargs)
+elif "sqlite" in db_url:
+    from sqlalchemy.pool import StaticPool
+    engine_kwargs.update({
+        "poolclass": StaticPool,
+        "connect_args": {"check_same_thread": False},
+    })
+
+# Normalize async dialect schemes (e.g. sqlite+aiosqlite, postgresql+asyncpg) for sync create_engine
+sync_db_url = (
+    db_url.replace("sqlite+aiosqlite://", "sqlite://")
+    .replace("postgresql+asyncpg://", "postgresql://")
+)
+engine = create_engine(sync_db_url, **engine_kwargs)
 
 @event.listens_for(engine, "connect")
 def receive_connect(dbapi_conn, connection_record):

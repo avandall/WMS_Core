@@ -6,14 +6,9 @@ Validates that document_id filtering works at DB level, preventing O(N) memory o
 import sys
 from pathlib import Path
 
-# Purge any previously imported 'app' module to avoid cross-service namespace collisions
-for mod in list(sys.modules.keys()):
-    if mod == "app" or mod.startswith("app."):
-        del sys.modules[mod]
-
 inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
-sys.path = [p for p in sys.path if "/Services/" not in p]
-sys.path.insert(0, inv_src)
+if inv_src not in sys.path:
+    sys.path.insert(0, inv_src)
 
 import pytest
 from sqlalchemy import create_engine

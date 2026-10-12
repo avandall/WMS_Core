@@ -12,23 +12,50 @@ from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-engine = create_engine(
-    settings.database_url,
-    future=True,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=settings.db_pool_size,
-    max_overflow=settings.db_max_overflow,
-    pool_timeout=settings.db_pool_timeout,
-    pool_recycle=settings.db_pool_recycle,
-    poolclass=QueuePool,
-    connect_args={
-        "connect_timeout": 10,
-        "options": "-c statement_timeout=30000",
-    }
-    if "postgresql" in settings.database_url
-    else {},
+def get_database_url() -> str:
+    """Resolve database URL with strict Twelve-Factor App precedence:
+    1. os.getenv("DATABASE_URL") (highest priority, enables isolated test overrides)
+    2. settings.database_url (configuration setting / .env fallback)
+    3. Default in-memory SQLite
+    """
+    env_url = os.getenv("DATABASE_URL")
+    if env_url and env_url.strip():
+        return env_url.strip()
+    if settings.database_url and str(settings.database_url).strip():
+        return str(settings.database_url).strip()
+    return "sqlite:///:memory:"
+
+
+db_url = get_database_url()
+engine_kwargs = {
+    "future": True,
+    "echo": settings.debug,
+}
+if "postgresql" in db_url:
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+        "pool_recycle": settings.db_pool_recycle,
+        "poolclass": QueuePool,
+        "connect_args": {
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000",
+        },
+    })
+elif "sqlite" in db_url:
+    from sqlalchemy.pool import StaticPool
+    engine_kwargs.update({
+        "poolclass": StaticPool,
+        "connect_args": {"check_same_thread": False},
+    })
+
+sync_db_url = (
+    db_url.replace("sqlite+aiosqlite://", "sqlite://")
+    .replace("postgresql+asyncpg://", "postgresql://")
 )
+engine = create_engine(sync_db_url, **engine_kwargs)
 
 @event.listens_for(engine, "connect")
 def receive_connect(dbapi_conn, connection_record):

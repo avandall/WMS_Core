@@ -8,14 +8,9 @@ Acceptance Criteria:
 import sys
 from pathlib import Path
 
-# Purge any previously imported 'app' module to avoid cross-service namespace collisions
-for mod in list(sys.modules.keys()):
-    if mod == "app" or mod.startswith("app."):
-        del sys.modules[mod]
-
 inv_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "inventory-service" / "src")
-sys.path = [p for p in sys.path if "/Services/" not in p]
-sys.path.insert(0, inv_src)
+if inv_src not in sys.path:
+    sys.path.insert(0, inv_src)
 
 import pytest  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -183,13 +178,9 @@ class TestMultiTenantDocumentsAndReporting:
     """Test 3PL multi-tenant reporting & document filters."""
 
     def test_documents_and_reporting_isolation(self):
-        for mod in list(sys.modules.keys()):
-            if mod == "app" or mod.startswith("app."):
-                del sys.modules[mod]
-
         rep_src = str(Path(__file__).resolve().parent.parent.parent.parent / "Services" / "reporting-service" / "src")
-        sys.path = [p for p in sys.path if "/Services/" not in p]
-        sys.path.insert(0, rep_src)
+        if rep_src not in sys.path:
+            sys.path.insert(0, rep_src)
 
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
