@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 
 # C extensions
 *.so
@@ -160,15 +161,23 @@ yarn-error.log*
 lessons/
 
 # Local fine-tuning artifacts
-# training/fine_tuning/wms_checkpoints/
-training/fine_tuning/wms_final_model/
+training/
+
+# Vector DB local store
+vector_db/
+
+# Scratch & Temporary Audit Reports
+report.md
+double-check.md
+COMMIT_ANALYSIS.md
+*.scratch.*
+
+# Claude & Agent local configs
+.claude/
+.agents/
 
 # Pipeline runtime and Ralph artifacts
 pipeline/
+harness.sh
+CLAUDE.md
 
-# Agent Pipeline Run Logs & State
-pipeline/.ralph/
-pipeline/docs/runtime/session_*.jsonl
-pipeline/docs/runtime/CURRENT
-pipeline/docs/runtime/PREV
-pipeline/docs/runtime/runs/
