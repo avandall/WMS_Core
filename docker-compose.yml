@@ -71,7 +71,7 @@ services:
         UV_PACKAGE: api-gateway
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/api-gateway/src
       # gRPC upstream addresses
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
       CUSTOMER_GRPC_ADDR: "${CUSTOMER_GRPC_ADDR:-customer-service:50052}"
@@ -104,7 +104,6 @@ services:
     command: ["api-gateway"]
     volumes:
       - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -126,7 +125,7 @@ services:
     image: wms/api-gateway:dev
     environment:
       <<: *shared-env
-      PYTHONPATH: /app:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app
       API_GATEWAY_URL: "${API_GATEWAY_URL:-http://api-gateway:8000}"
       DASHBOARD_GATEWAY_TIMEOUT: "${DASHBOARD_GATEWAY_TIMEOUT:-185}"
       DASHBOARD_DEV_JWT_SECRET: "${DASHBOARD_DEV_JWT_SECRET:-replace-with-local-dev-secret}"
@@ -134,7 +133,6 @@ services:
     command: ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8080"]
     volumes:
       - ./dashboard:/app/dashboard:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     ports:
       - "8080:8080"
     depends_on:
@@ -151,7 +149,7 @@ services:
         UV_PACKAGE: identity-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/identity-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/identity-service/src
       DATABASE_URL: "${IDENTITY_DATABASE_URL}"
       INIT_DB_TABLES: "users"
       ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-60}"
@@ -160,7 +158,6 @@ services:
     command: ["identity-grpc"]
     volumes:
       - ./Services/identity-service/src:/app/Services/identity-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - identity-data:/data
     depends_on:
       - otel-collector
@@ -176,14 +173,13 @@ services:
         UV_PACKAGE: customer-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/customer-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/customer-service/src
       DATABASE_URL: "${CUSTOMER_DATABASE_URL}"
       INIT_DB_TABLES: "customers,customer_purchases"
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["customer-grpc"]
     volumes:
       - ./Services/customer-service/src:/app/Services/customer-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - customer-data:/data
     depends_on:
       - event-bus
@@ -200,14 +196,13 @@ services:
         UV_PACKAGE: product-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/product-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/product-service/src
       DATABASE_URL: "${PRODUCT_DATABASE_URL}"
       INIT_DB_TABLES: "products"
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["product-grpc"]
     volumes:
       - ./Services/product-service/src:/app/Services/product-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - product-data:/data
     depends_on:
       - event-bus
@@ -224,14 +219,13 @@ services:
         UV_PACKAGE: warehouse-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/warehouse-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/warehouse-service/src
       DATABASE_URL: "${WAREHOUSE_DATABASE_URL}"
       INIT_DB_TABLES: "warehouses,positions"
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["warehouse-grpc"]
     volumes:
       - ./Services/warehouse-service/src:/app/Services/warehouse-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - warehouse-data:/data
     depends_on:
       - event-bus
@@ -248,7 +242,7 @@ services:
         UV_PACKAGE: inventory-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/inventory-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/inventory-service/src
       DATABASE_URL: "${INVENTORY_DATABASE_URL}"
       INIT_DB_TABLES: "inventory,warehouse_inventory,inventory_movement_ledger"
       INVENTORY_MOVEMENT_CONSUMER_ENABLED: "${INVENTORY_MOVEMENT_CONSUMER_ENABLED:-1}"
@@ -258,7 +252,6 @@ services:
     command: ["inventory-grpc"]
     volumes:
       - ./Services/inventory-service/src:/app/Services/inventory-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - inventory-data:/data
     depends_on:
       - event-bus
@@ -276,13 +269,12 @@ services:
         UV_PACKAGE: documents-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/documents-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/documents-service/src
       DATABASE_URL: "${DOCUMENTS_DATABASE_URL}"
       INIT_DB_TABLES: "documents,document_items"
     command: ["documents-grpc"]
     volumes:
       - ./Services/documents-service/src:/app/Services/documents-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - documents-data:/data
     depends_on:
       - event-bus
@@ -299,7 +291,7 @@ services:
         UV_PACKAGE: audit-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/audit-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/audit-service/src
       DATABASE_URL: "${AUDIT_DATABASE_URL}"
       INIT_DB_TABLES: "audit_events"
       AUDIT_EVENT_CONSUMER_ENABLED: "${AUDIT_EVENT_CONSUMER_ENABLED:-1}"
@@ -315,7 +307,6 @@ services:
     command: ["audit-grpc"]
     volumes:
       - ./Services/audit-service/src:/app/Services/audit-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - audit-data:/data
     depends_on:
       - event-bus
@@ -332,7 +323,7 @@ services:
         UV_PACKAGE: reporting-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/reporting-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/reporting-service/src
       DATABASE_URL: "${REPORTING_DATABASE_URL}"
       INIT_DB_TABLES: "reporting_read_model_events,inventory_summary,document_summary,sales_summary,warehouse_activity_summary"
       REPORTING_READ_MODEL_CONSUMER_ENABLED: "${REPORTING_READ_MODEL_CONSUMER_ENABLED:-1}"
@@ -343,7 +334,6 @@ services:
     command: ["reporting-grpc"]
     volumes:
       - ./Services/reporting-service/src:/app/Services/reporting-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - reporting-data:/data
     depends_on:
       - event-bus
@@ -425,7 +415,6 @@ services:
     volumes:
       - ../WMS_AI_Services/src:/app/src
       - ../WMS_AI_Services/training:/app/training
-      - ./Libraries/shared-utils/src/shared_utils:/app/shared_utils
       - ai-hf-cache:/root/.cache/huggingface
     depends_on:
       - event-bus

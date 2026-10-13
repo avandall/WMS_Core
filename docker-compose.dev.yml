@@ -52,7 +52,7 @@ services:
         UV_PACKAGE: api-gateway
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/api-gateway/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/api-gateway/src
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
       CUSTOMER_GRPC_ADDR: "${CUSTOMER_GRPC_ADDR:-customer-service:50052}"
       PRODUCT_GRPC_ADDR: "${PRODUCT_GRPC_ADDR:-product-service:50053}"
@@ -77,7 +77,6 @@ services:
     command: ["api-gateway"]
     volumes:
       - ./Services/api-gateway/src:/app/Services/api-gateway/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -99,7 +98,7 @@ services:
         UV_PACKAGE: identity-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/identity-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/identity-service/src
       DATABASE_URL: "${IDENTITY_DATABASE_URL}"
       INIT_DB_TABLES: "users"
       ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-60}"
@@ -108,7 +107,6 @@ services:
     command: ["identity-grpc"]
     volumes:
       - ./Services/identity-service/src:/app/Services/identity-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - identity-data:/data
 
   # ---------------------------------------------------------------------------
@@ -122,14 +120,13 @@ services:
         UV_PACKAGE: customer-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/customer-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/customer-service/src
       DATABASE_URL: "${CUSTOMER_DATABASE_URL}"
       INIT_DB_TABLES: "customers,customer_purchases"
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["customer-grpc"]
     volumes:
       - ./Services/customer-service/src:/app/Services/customer-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - customer-data:/data
     depends_on:
       - event-bus
@@ -145,14 +142,13 @@ services:
         UV_PACKAGE: product-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/product-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/product-service/src
       DATABASE_URL: "${PRODUCT_DATABASE_URL}"
       INIT_DB_TABLES: "products"
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["product-grpc"]
     volumes:
       - ./Services/product-service/src:/app/Services/product-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - product-data:/data
     depends_on:
       - event-bus
@@ -168,14 +164,13 @@ services:
         UV_PACKAGE: warehouse-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/warehouse-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/warehouse-service/src
       DATABASE_URL: "${WAREHOUSE_DATABASE_URL}"
       INIT_DB_TABLES: "warehouses,positions"
       IDENTITY_GRPC_ADDR: "${IDENTITY_GRPC_ADDR:-identity-service:50051}"
     command: ["warehouse-grpc"]
     volumes:
       - ./Services/warehouse-service/src:/app/Services/warehouse-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - warehouse-data:/data
     depends_on:
       - event-bus
@@ -191,7 +186,7 @@ services:
         UV_PACKAGE: inventory-service
     environment:
       <<: *shared-env
-      PYTHONPATH: /app/Services/inventory-service/src:/app/Libraries/shared-utils/src
+      PYTHONPATH: /app/Services/inventory-service/src
       DATABASE_URL: "${INVENTORY_DATABASE_URL}"
       INIT_DB_TABLES: "inventory,warehouse_inventory,inventory_movement_ledger"
       INVENTORY_MOVEMENT_CONSUMER_ENABLED: "${INVENTORY_MOVEMENT_CONSUMER_ENABLED:-1}"
@@ -201,7 +196,6 @@ services:
     command: ["inventory-grpc"]
     volumes:
       - ./Services/inventory-service/src:/app/Services/inventory-service/src:ro
-      - ./Libraries/shared-utils/src:/app/Libraries/shared-utils/src:ro
       - inventory-data:/data
     depends_on:
       - event-bus

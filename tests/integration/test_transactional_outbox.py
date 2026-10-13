@@ -16,14 +16,8 @@ from sqlalchemy.orm import sessionmaker
 # Setup sys.path to resolve microservices and shared libraries
 project_root = Path(__file__).resolve().parent.parent.parent
 services_dir = project_root / "Services"
-libraries_dir = project_root / "Libraries"
-
-if libraries_dir.exists():
-    for lib_path in libraries_dir.glob("*/src"):
-        if str(lib_path) not in sys.path:
-            sys.path.insert(0, str(lib_path))
-
 if services_dir.exists():
+
     for service_path in services_dir.glob("*/src"):
         if str(service_path) not in sys.path:
             sys.path.insert(0, str(service_path))

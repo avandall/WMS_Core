@@ -38,6 +38,7 @@ dependencies = [
     "typing-extensions>=4.5.0",
     "mangum>=0.17.0",
     "requests>=2.32.0",
+    "shared-utils",
 ]
 
 [project.optional-dependencies]
@@ -63,7 +64,6 @@ package = false
 
 [tool.uv.workspace]
 members = [
-    "Libraries/shared-utils",
     "Services/api-gateway",
     "Services/audit-service",
     "Services/customer-service",
@@ -76,7 +76,8 @@ members = [
 ]
 
 [tool.uv.sources]
-shared-utils = { workspace = true }
+shared-utils = { git = "https://github.com/avandall/shared-utils.git", branch = "master" }
+
 
 [tool.ruff]
 ignore = ["E402", "F401", "F821", "F841"]
@@ -112,8 +113,8 @@ pythonpath = [
     "Services/audit-service/src",
     "Services/reporting-service/src",
     "Services/api-gateway/src",
-    "Libraries/shared-utils/src"
 ]
+
 
 
 

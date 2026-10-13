@@ -220,7 +220,10 @@ def _base_env() -> dict[str, str]:
 
 
 def _pythonpath(*src_dirs: Path) -> str:
-    return os.pathsep.join(str(path) for path in (*src_dirs, SHARED_SRC))
+    paths = list(src_dirs)
+    if SHARED_SRC.exists():
+        paths.append(SHARED_SRC)
+    return os.pathsep.join(str(path) for path in paths)
 
 
 def _service_env(service: ServiceSpec) -> dict[str, str]:
